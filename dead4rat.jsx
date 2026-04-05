@@ -47,6 +47,7 @@ function Dead4RatApp() {
     const [isRecording, setIsRecording] = React.useState(false);
     const [uiRefresh, setUiRefresh] = React.useState(0); // Trigger structural UI updates
     const [uiVisible, setUiVisible] = React.useState(true);
+    const [useMic, setUseMic] = React.useState(false);
 
     React.useEffect(() => {
         if (!canvasEngine) canvasEngine = new CanvasEngine('main-canvas');
@@ -78,9 +79,22 @@ function Dead4RatApp() {
         mediaManager.layers = [];
         setLayers([]);
         setSelectedLayerId(null);
+        setUseMic(false);
+        audioEngine.stop();
         
         // Force React to redraw the whole control panel structure
         setUiRefresh(r => r + 1);
+    };
+
+    const handleMicToggle = async (enabled) => {
+        setUseMic(enabled);
+        if (!started) return; 
+
+        if (enabled) {
+            await audioEngine.start();
+        } else {
+            audioEngine.stop();
+        }
     };
 
     const scrambleParams = () => {
@@ -114,12 +128,15 @@ function Dead4RatApp() {
         if (!videoElement) return;
 
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+                video: true, 
+                audio: useMic 
+            });
             videoElement.srcObject = stream;
             globalState.videoElement = videoElement;
         } catch (err) { console.error("Camera access denied", err); }
 
-        await audioEngine.start();
+        if (useMic) await audioEngine.start();
         setStarted(true);
 
         const renderLoop = () => {
@@ -286,6 +303,14 @@ function Dead4RatApp() {
                     FPS: {fps} | UI: REACT 18<br/>
                     Layers: {layers.length} | Source: {globalState.videoElement ? "CAM" : "OFFLINE"}
                 </div>
+
+                <div style={{margin: '5px 0', verticalAlign: 'middle'}}>
+                    <input type="checkbox" id="mic-toggle" checked={useMic} onChange={(e) => handleMicToggle(e.target.checked)} style={{verticalAlign: 'middle', cursor: 'pointer'}} />
+                    <label htmlFor="mic-toggle" style={{fontSize: '0.7rem', marginLeft: '5px', color: useMic ? '#00ff41' : '#ff003c', verticalAlign: 'middle', cursor: 'pointer'}}>
+                        [ {useMic ? "MIC ON" : "MIC OFF"} ]
+                    </label>
+                </div>
+                
                 {!started && <button className="brutalist-button" onClick={toggleStart}>BOOT SYSTEM</button>}
                 
                 {started && (

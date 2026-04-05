@@ -23,16 +23,18 @@ class AudioEngine {
         
         // Threshold control mapping
         this.threshold = 0.04;
+
+        this.stream = null;
     }
 
     async start() {
         if (this.isRunning) return;
 
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+            this.stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
             
             this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            const source = this.audioContext.createMediaStreamSource(stream);
+            const source = this.audioContext.createMediaStreamSource(this.stream);
             
             this.analyser = this.audioContext.createAnalyser();
             this.analyser.fftSize = 2048;
@@ -48,8 +50,27 @@ class AudioEngine {
             console.log("Audio Engine Started (Multi-Band)");
         } catch (err) {
             console.error("Microphone access denied or unavailable", err);
-            alert("Microphone access is required for audio reactivity.");
         }
+    }
+
+    stop() {
+        if (!this.isRunning) return;
+        this.isRunning = false;
+        if (this.stream) {
+            this.stream.getTracks().forEach(track => track.stop());
+            this.stream = null;
+        }
+        if (this.audioContext) {
+            this.audioContext.close();
+            this.audioContext = null;
+        }
+        // Reset output values to avoid frozen "audio jitter"
+        this.rms = 0;
+        this.spectralCentroid = 0;
+        this.bass = 0;
+        this.mid = 0;
+        this.high = 0;
+        console.log("Audio Engine Stopped");
     }
 
     update() {
