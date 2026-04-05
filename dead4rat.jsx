@@ -348,7 +348,7 @@ function Dead4RatApp() {
             )}
 
             {!uiVisible && (
-                <button className="brutalist-button" style={{position: 'absolute', top: '10px', right: '10px', zIndex: 100, padding: '5px 10px'}} onClick={() => setUiVisible(true)}>
+                <button className="brutalist-button show-ui-btn" onClick={() => setUiVisible(true)}>
                     DEAD4RAT
                 </button>
             )}

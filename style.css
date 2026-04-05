@@ -298,6 +298,14 @@ body, html {
     border-top: 2px solid white;
 }
 
+.show-ui-btn {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    z-index: 100;
+    padding: 10px 15px;
+}
+
 .marquee {
     display: inline-block;
     white-space: nowrap;
@@ -317,6 +325,15 @@ body, html {
 @media (max-width: 768px) {
     .terminal-footer {
         font-size: 10px;
-        padding: 2px 0;
+        padding: 5px 0;
+        bottom: 0;
+        z-index: 1000;
+    }
+
+    .show-ui-btn {
+        top: 60px; /* Clear the notch */
+        right: 15px;
+        padding: 8px 12px;
+        font-size: 10px;
     }
 }
