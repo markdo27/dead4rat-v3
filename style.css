@@ -208,3 +208,55 @@ body, html {
     transform: translate(-50%, -50%);
     text-align: center;
 }
+
+/* --- MOBILE RESPONSIVENESS --- */
+@media (max-width: 768px) {
+    /* Stack panels vertically, remove absolute lateral offsets */
+    .terminal-overlay {
+        top: 10px;
+        left: 10px;
+        width: calc(100vw - 50px);
+        font-size: 11px;
+        padding: 10px;
+    }
+
+    .control-panel {
+        top: 130px; /* Sits below the HUD */
+        left: 10px;
+        right: auto; /* override right alignment */
+        width: calc(100vw - 50px);
+        max-height: calc(100vh - 160px);
+        padding: 10px;
+    }
+
+    /* Shrink fonts to give sliders more space */
+    .param-row {
+        grid-template-columns: 80px 1fr 35px;
+        font-size: 10px;
+        gap: 5px;
+    }
+    
+    .panel-header {
+        font-size: 1.1rem;
+        padding: 3px 5px;
+    }
+
+    .brutalist-button {
+        font-size: 12px;
+        padding: 8px;
+    }
+
+    /* Keep thumbnails visible but compact */
+    .preset-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .preset-card img {
+        height: 60px;
+    }
+    
+    /* Make scrollbar thinner for more content room */
+    ::-webkit-scrollbar {
+        width: 6px;
+    }
+}
