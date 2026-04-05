@@ -59,19 +59,27 @@ function Dead4RatApp() {
     }, []);
 
     const resetSystem = () => {
+        // Full deep clone to restore initial settings
         globalState.glitchez = JSON.parse(JSON.stringify(initialEffectSettings));
+        
+        // Manual DOM sync for uncontrolled inputs
         Object.keys(globalState.glitchez).forEach(k => {
-            const el = document.getElementById(`toggle-${k}`);
-            if (el) el.checked = globalState.glitchez[k].enabled;
-            Object.keys(globalState.glitchez[k].params).forEach(pk => {
-                const sel = document.getElementById(`slider-${k}-${pk}`);
-                if (sel) sel.value = globalState.glitchez[k].params[pk].value;
+            const effect = globalState.glitchez[k];
+            const toggleEl = document.getElementById(`toggle-${k}`);
+            if (toggleEl) toggleEl.checked = effect.enabled;
+            
+            Object.keys(effect.params).forEach(pk => {
+                const sliderEl = document.getElementById(`slider-${k}-${pk}`);
+                if (sliderEl) sliderEl.value = effect.params[pk].value;
             });
         });
-        // Also clear any imported media layers
+
+        // Clear media and audio state
         mediaManager.layers = [];
         setLayers([]);
         setSelectedLayerId(null);
+        
+        // Force React to redraw the whole control panel structure
         setUiRefresh(r => r + 1);
     };
 
