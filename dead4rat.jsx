@@ -348,7 +348,7 @@ function Dead4RatApp() {
                         <button className={`brutalist-button ${isRecording ? 'active' : ''}`} onClick={recordToggle}>
                             {isRecording ? "STP_REC" : "STR_REC"}
                         </button>
-                        <button className="brutalist-button" style={{background: '#1a1a1a', color: '#fff'}} onClick={() => canvasEngine.exportPNG()}>EXPORT_SNAPSHOT</button>
+                        <button className="brutalist-button" style={{background: '#222', color: '#fff'}} onClick={() => canvasEngine.exportPNG()}>EXPORT_SNAPSHOT</button>
                         <button className="brutalist-button" style={{background: 'transparent', color: 'var(--text-secondary)', border: '1px solid #222', fontSize: '0.7rem'}} onClick={() => setUiVisible(false)}>COLLAPSE_UI</button>
                     </div>
                 )}
@@ -396,7 +396,7 @@ function Dead4RatApp() {
                                 <div className="param-row"><label>Y</label> <input type="range" min="0" max={window.innerHeight} value={selectedLayer.y} onChange={(e) => updateLayer(selectedLayer.id, 'y', parseInt(e.target.value))} /></div>
                                 <div className="param-row"><label>Scale</label> <input type="range" min="0.1" max="5" step="0.1" value={selectedLayer.scale} onChange={(e) => updateLayer(selectedLayer.id, 'scale', parseFloat(e.target.value))} /></div>
                                 <div className="param-row"><label>Rot</label> <input type="range" min="0" max="360" value={selectedLayer.rotation} onChange={(e) => updateLayer(selectedLayer.id, 'rotation', parseInt(e.target.value))} /></div>
-                                <button className="brutalist-button" style={{width: '100%', marginTop: '10px', fontSize: '0.7rem', padding: '5px', borderColor: '#ff003c', color: '#ff003c'}} onClick={() => {
+                                <button className="brutalist-button" style={{width: '100%', marginTop: '10px', fontSize: '0.75rem', border: '1px solid #333'}} onClick={() => {
                                     selectedLayer.x = window.innerWidth / 2;
                                     selectedLayer.y = window.innerHeight / 2;
                                     selectedLayer.scale = 1.0;
@@ -410,13 +410,13 @@ function Dead4RatApp() {
                     {/* PRESET LIBRARY PANEL */}
                     <div className="v3-panel">
                         <div className="section-header">DATA_STASH // PRESETS</div>
-                        <button className="brutalist-button" style={{width: '100%', marginBottom: '15px', color: 'var(--accent-yellow)', borderColor: 'var(--accent-yellow)'}} onClick={savePreset}>COMMIT CURRENT STATE</button>
+                        <button className="brutalist-button" style={{width: '100%', marginBottom: '15px'}} onClick={savePreset}>COMMIT CURRENT STATE</button>
                         <div className="preset-grid">
                             {presets.map(p => (
                                 <div key={p.id} className="preset-card" onClick={() => loadPreset(p)}>
                                     <img src={p.thumbnail} alt={p.name} />
                                     <div className="preset-name" style={{fontSize: '0.7rem'}}>{p.name.toUpperCase()}</div>
-                                    <button style={{position: 'absolute', top: 5, right: 5, padding: '2px 5px', background: 'var(--accent-red)', color: '#fff', border: 'none', fontSize: '9px', cursor: 'pointer', borderRadius: '2px'}} onClick={(e) => { e.stopPropagation(); presetManager.deletePreset(p.id); setPresets([...presetManager.presets]); }}>DELETE</button>
+                                    <button style={{position: 'absolute', top: 5, right: 5, padding: '4px 8px', background: 'var(--accent-red)', color: '#000', border: 'none', fontSize: '10px', fontWeight: 'bold', cursor: 'pointer', borderRadius: '2px'}} onClick={(e) => { e.stopPropagation(); presetManager.deletePreset(p.id); setPresets([...presetManager.presets]); }}>DELETE</button>
                                 </div>
                             ))}
                         </div>
@@ -425,9 +425,9 @@ function Dead4RatApp() {
                     {/* SETTINGS (Original) */}
                     <div className="section-header">CORE_KERNEL // OVERRIDES</div>
                     <div style={{display: 'flex', gap: '10px', marginBottom: '20px'}}>
-                        <button className="brutalist-button" style={{fontSize: '0.8rem', flex: 1, borderColor: 'var(--accent-blue)', color: 'var(--accent-blue)'}} onClick={scrambleEngines}>ENGINES</button>
-                        <button className="brutalist-button" style={{fontSize: '0.8rem', flex: 1, borderColor: 'var(--accent-yellow)', color: 'var(--accent-yellow)'}} onClick={scrambleParams}>PARAMS</button>
-                        <button className="brutalist-button" style={{fontSize: '0.8rem', flex: 1, color: 'var(--accent-red)', borderColor: 'var(--accent-red)'}} onClick={resetSystem}>RESET</button>
+                        <button className="brutalist-button" style={{fontSize: '0.8rem', flex: 1}} onClick={scrambleEngines}>ENGINES</button>
+                        <button className="brutalist-button" style={{fontSize: '0.8rem', flex: 1}} onClick={scrambleParams}>PARAMS</button>
+                        <button className="brutalist-button" style={{fontSize: '0.8rem', flex: 1, background: '#fff'}} onClick={resetSystem}>RESET</button>
                     </div>
                     
                     <div className="section-header">SUBSTRATE_DECAY // MODULES</div>
