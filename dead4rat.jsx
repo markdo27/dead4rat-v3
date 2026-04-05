@@ -139,9 +139,20 @@ function Dead4RatApp() {
         if (useMic) await audioEngine.start();
         setStarted(true);
 
-        const renderLoop = () => {
+        let lastTime = performance.now();
+        let frames = 0;
+
+        const renderLoop = (time) => {
             requestAnimationFrame(renderLoop);
             
+            // Calculate FPS
+            frames++;
+            if (time - lastTime >= 1000) {
+                setFps(Math.round((frames * 1000) / (time - lastTime)));
+                lastTime = time;
+                frames = 0;
+            }
+
             // Update audio data
             globalState.spectralCentroid = audioEngine.spectralCentroid * globalState.audioGain;
             globalState.bass = audioEngine.bass * globalState.audioGain;
@@ -155,7 +166,7 @@ function Dead4RatApp() {
             // WebGL Render
             canvasEngine.render(globalState);
         };
-        renderLoop();
+        requestAnimationFrame(renderLoop);
     };
 
     // --- Media Layer Actions ---
