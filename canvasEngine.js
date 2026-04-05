@@ -1,10 +1,11 @@
 class CanvasEngine {
     constructor(canvasId) {
         this.canvas = document.getElementById(canvasId);
-        // Using preserveDrawingBuffer: false because FBOs handle the persistence now.
-        // This is more performant and standard.
+        // FBOs handle the feedback persistence, but we still need preserveDrawingBuffer
+        // enabled so that asynchronous calls like canvas.toDataURL() (for PNG exports
+        // and Preset Thumbnails) can read the final rendered image.
         this.gl = this.canvas.getContext('webgl', { 
-            preserveDrawingBuffer: false,
+            preserveDrawingBuffer: true,
             alpha: false,
             antialias: false,
             premultipliedAlpha: false
