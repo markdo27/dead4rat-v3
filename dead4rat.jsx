@@ -424,12 +424,12 @@ function Dead4RatApp() {
                             <div className="glitch-item" key={key}>
                                 <div className="glitch-header">
                                     <span>{effect.name}</span>
-                                    <input type="checkbox" id={`toggle-${key}`} defaultChecked={effect.enabled} onChange={(e) => { globalState.glitchez[key].enabled = e.target.checked; setUiRefresh(r => r + 1); }} />
+                                    <input type="checkbox" id={`toggle-${key}`} checked={globalState.glitchez[key].enabled} onChange={(e) => { globalState.glitchez[key].enabled = e.target.checked; setUiRefresh(r => r + 1); }} />
                                 </div>
                                 {effect.enabled && Object.keys(effect.params).map(pk => (
                                     <div className="param-row" key={pk}>
                                         <label>{pk}</label>
-                                        <input type="range" min={effect.params[pk].min} max={effect.params[pk].max} step={effect.params[pk].step} defaultValue={effect.params[pk].value} onChange={(e) => globalState.glitchez[key].params[pk].value = parseFloat(e.target.value)} />
+                                        <input type="range" id={`slider-${key}-${pk}`} min={effect.params[pk].min} max={effect.params[pk].max} step={effect.params[pk].step} value={globalState.glitchez[key].params[pk].value} onChange={(e) => { globalState.glitchez[key].params[pk].value = parseFloat(e.target.value); setUiRefresh(r => r + 1); }} />
                                     </div>
                                 ))}
                             </div>
