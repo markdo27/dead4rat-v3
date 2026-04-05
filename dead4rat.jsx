@@ -310,7 +310,7 @@ function Dead4RatApp() {
             {/* TERMINAL OVERLAY */}
             {uiVisible && (
             <div className="brutalist-panel terminal-overlay scanlines">
-                <div className="panel-header">SYS_TRACK // ALPHA</div>
+                <div className="panel-header">DEAD4RAT Terminal</div>
                 
                 <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '0.9rem', marginBottom: '30px'}}>
                     <div style={{color: 'var(--text-secondary)'}}>APP_STATE</div>
