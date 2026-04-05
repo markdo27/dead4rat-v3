@@ -1,14 +1,19 @@
 :root {
-    --bg-color: #000000;
+    --bg-color: #050505;
     --text-color: #ffffff;
-    --accent-red: #ff003c;
-    --accent-green: #00ff41;
-    --accent-blue: #001eff;
-    --accent-yellow: #fffb00;
+    
+    /* Vibrant HSL Palette */
+    --accent-red: hsl(346, 100%, 50%);    /* Brilliant Cyber-Pink */
+    --accent-green: hsl(145, 100%, 50%);  /* High-energy Matrix Green */
+    --accent-yellow: hsl(54, 100%, 50%);  /* Technical Warning Yellow */
+    --accent-blue: hsl(190, 100%, 50%);   /* Electric Cyan */
+    
+    --panel-bg: hsla(0, 0%, 5%, 0.85);    /* Glassy Charcoal */
+    --panel-border: 2px solid rgba(255, 255, 255, 0.2);
+    
     --font-mono: 'Share Tech Mono', monospace;
     --font-sans: 'Inter', sans-serif;
     --border-thick: 4px solid #ffffff;
-    --border-thin: 1px solid #555555;
 }
 
 body, html {
@@ -16,9 +21,9 @@ body, html {
     padding: 0;
     width: 100vw;
     height: 100vh;
-    background-color: var(--bg-color);
+    background-color: #000;
     color: var(--text-color);
-    font-family: var(--font-mono);
+    font-family: var(--font-sans); 
     overflow: hidden;
     user-select: none;
 }
@@ -44,58 +49,64 @@ body, html {
 .brutalist-panel {
     pointer-events: auto;
     position: absolute;
-    background: rgba(0, 0, 0, 0.85); /* Slight transparency for seeing "the substrate" */
-    border: var(--border-thick);
-    box-shadow: 8px 8px 0px var(--accent-red);
-    padding: 15px;
+    background: var(--panel-bg);
+    backdrop-filter: blur(12px);
+    border: var(--panel-border);
+    box-shadow: 10px 10px 0px rgba(0, 0, 0, 0.5);
+    padding: 24px;
     display: flex;
     flex-direction: column;
     z-index: 10;
+    transition: transform 0.2s ease-out, box-shadow 0.2s ease-out;
+}
+
+.brutalist-panel:hover {
+    box-shadow: 14px 14px 0px rgba(0, 0, 0, 0.4);
 }
 
 .terminal-overlay {
-    top: 20px;
-    left: 20px;
-    width: 300px;
-    font-size: 14px;
-    line-height: 1.4;
-    text-transform: uppercase;
+    top: 30px;
+    left: 30px;
+    width: 320px;
+    border-left: 6px solid var(--accent-green);
+    font-size: 13px;
+    line-height: 1.5;
 }
 
 .control-panel {
-    top: 20px;
-    right: 20px;
-    width: 350px;
+    top: 30px;
+    right: 30px;
+    width: 400px;
     max-height: 90vh;
     overflow-y: auto;
+    border-right: 6px solid var(--accent-red);
 }
 
-/* Scrollbar Brutalism */
+/* Scrollbar Refinement */
 ::-webkit-scrollbar {
-    width: 12px;
+    width: 6px;
 }
 ::-webkit-scrollbar-track {
-    background: var(--bg-color);
-    border-left: var(--border-thin);
+    background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-    background: var(--text-color);
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 10px;
 }
 ::-webkit-scrollbar-thumb:hover {
     background: var(--accent-red);
 }
 
 .panel-header {
-    font-family: var(--font-sans);
     font-weight: 900;
-    font-size: 1.5rem;
+    font-size: 1.8rem;
     text-transform: uppercase;
-    letter-spacing: -1px;
-    color: var(--bg-color);
-    background-color: var(--text-color);
-    padding: 5px 10px;
-    margin-bottom: 15px;
-    display: inline-block;
+    letter-spacing: -1.5px;
+    color: var(--text-color);
+    margin-bottom: 24px;
+    padding-bottom: 8px;
+    border-bottom: 4px solid var(--text-color);
+    line-height: 1;
 }
 
 .glitch-item {
@@ -145,54 +156,62 @@ body, html {
 
 .param-row {
     display: grid;
-    grid-template-columns: 100px 1fr 40px;
+    grid-template-columns: 110px 1fr 45px;
     align-items: center;
-    gap: 10px;
-    font-size: 0.85rem;
-    margin-top: 5px;
+    gap: 12px;
+    font-size: 0.8rem;
+    margin-top: 10px;
+    color: rgba(255, 255, 255, 0.6);
 }
 
 .brutalist-slider {
     appearance: none;
     width: 100%;
-    height: 6px;
-    background: #333;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.1);
     outline: none;
+    border-radius: 2px;
 }
 .brutalist-slider::-webkit-slider-thumb {
     appearance: none;
-    width: 15px;
-    height: 20px;
-    background: var(--text-color);
+    width: 14px;
+    height: 14px;
+    background: #fff;
     cursor: ew-resize;
-    border: none;
+    border-radius: 50%;
+    border: 2px solid var(--accent-red);
+    box-shadow: 0 0 8px rgba(255, 0, 60, 0.4);
 }
 .brutalist-slider::-webkit-slider-thumb:hover {
+    border-color: #fff;
     background: var(--accent-red);
+    transform: scale(1.2);
 }
 
 .brutalist-button {
     pointer-events: auto;
     font-family: var(--font-sans);
-    font-weight: 900;
+    font-weight: 800;
     text-transform: uppercase;
-    font-size: 1.5rem;
-    padding: 15px 30px;
-    background: var(--bg-color);
-    color: var(--accent-red);
-    border: var(--border-thick);
-    border-color: var(--accent-red);
+    font-size: 0.95rem;
+    padding: 10px 20px;
+    background: transparent;
+    color: var(--text-color);
+    border: 2px solid var(--text-color);
     cursor: pointer;
-    box-shadow: 4px 4px 0px var(--text-color);
-    transition: all 0.1s;
+    transition: all 0.2s cubic-bezier(0.23, 1, 0.32, 1);
+    letter-spacing: 1px;
 }
+
 .brutalist-button:hover {
-    transform: translate(-3px, -3px);
-    box-shadow: 8px 8px 0px var(--text-color);
+    background: var(--text-color);
+    color: #000;
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(255, 255, 255, 0.2);
 }
+
 .brutalist-button:active {
-    transform: translate(2px, 2px);
-    box-shadow: 2px 2px 0px var(--text-color);
+    transform: translateY(1px);
 }
 
 /* Colors for Terminal overlay */
@@ -211,72 +230,58 @@ body, html {
 
 /* --- MOBILE RESPONSIVENESS --- */
 @media (max-width: 768px) {
-    /* Stack panels vertically, remove absolute lateral offsets */
     .terminal-overlay {
-        top: 5px;
-        left: 5px;
-        width: calc(100vw - 30px);
-        font-size: 10px;
-        padding: 5px 10px;
-    }
-
-    .terminal-stats {
-        font-size: 9px;
-        margin-bottom: 2px;
+        top: 10px;
+        left: 10px;
+        width: calc(100vw - 35px);
+        font-size: 11px;
+        padding: 12px;
+        border-left-width: 4px;
     }
 
     .control-panel {
-        top: 110px; /* Pulled up closer to the HUD */
-        left: 5px;
+        top: 130px; 
+        left: 10px;
         right: auto;
-        width: calc(100vw - 30px);
-        max-height: calc(100vh - 120px);
-        padding: 8px;
+        width: calc(100vw - 35px);
+        max-height: calc(100vh - 145px);
+        padding: 15px;
+        border-right-width: 4px;
     }
 
-    /* Shrink fonts to give sliders more space */
     .param-row {
-        grid-template-columns: 80px 1fr 35px;
+        grid-template-columns: 85px 1fr 40px;
         font-size: 10px;
-        gap: 5px;
+        gap: 8px;
     }
     
     .panel-header {
-        font-size: 1.1rem;
-        padding: 3px 5px;
+        font-size: 1.3rem;
+        margin-bottom: 15px;
     }
 
     .brutalist-button {
-        font-size: 10px;
-        padding: 5px 8px;
+        font-size: 0.85rem;
+        padding: 8px 12px;
     }
 
     .section-header {
-        font-size: 0.8rem;
-        margin-top: 10px;
-        margin-bottom: 5px;
+        font-size: 0.75rem;
+        margin-top: 15px;
     }
 
-    .glitch-item {
-        padding: 5px 0;
-    }
-
-    .v3-panel {
-        margin-bottom: 10px;
-    }
-
-    /* Keep thumbnails visible but compact */
     .preset-grid {
         grid-template-columns: 1fr 1fr;
+        gap: 8px;
     }
 
     .preset-card img {
-        height: 60px;
+        height: 70px;
     }
     
-    /* Make scrollbar thinner for more content room */
-    ::-webkit-scrollbar {
-        width: 6px;
+    .show-ui-btn {
+        top: 20px;
+        right: 15px;
     }
 }
 

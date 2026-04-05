@@ -292,12 +292,14 @@ function Dead4RatApp() {
     };
 
     const loadPreset = (p) => {
+        // Visual feedback for load
+        const flash = document.createElement('div');
+        flash.style.position = 'fixed'; flash.style.inset = 0; flash.style.background = '#fff'; flash.style.zIndex = 9999; flash.style.pointerEvents = 'none';
+        document.body.appendChild(flash);
+        setTimeout(() => { flash.style.transition = 'opacity 0.5s'; flash.style.opacity = 0; setTimeout(() => flash.remove(), 500); }, 50);
+
         globalState.glitchez = JSON.parse(JSON.stringify(p.settings));
-        // Force update checkbox UI (since they're uncontrolled or defaultChecked)
-        Object.keys(globalState.glitchez).forEach(k => {
-            const el = document.getElementById(`toggle-${k}`);
-            if (el) el.checked = globalState.glitchez[k].enabled;
-        });
+        // Force update UI
         setUiRefresh(r => r + 1);
     };
 
@@ -307,12 +309,15 @@ function Dead4RatApp() {
         <React.Fragment>
             {/* TERMINAL OVERLAY */}
             {uiVisible && (
-            <div className="brutalist-panel terminal-overlay">
-                <div className="yellow-text">** DEAD4RAT V3 **</div>
-                <div className="red-text">System: FBO PING-PONG ACTIVE</div>
-                <div className="terminal-stats">
-                    FPS: {fps} | UI: REACT 18<br/>
-                    Layers: {layers.length} | Source: {globalState.videoElement ? "CAM" : "OFFLINE"}
+            <div className="brutalist-panel terminal-overlay scanlines">
+                <div style={{fontFamily: 'var(--font-mono)', fontSize: '1.2rem', marginBottom: '10px', letterSpacing: '2px', color: 'var(--accent-green)'}}>
+                    [ DEAD4RAT_SYS_V3 ]
+                </div>
+                
+                <div className="terminal-stats" style={{fontFamily: 'var(--font-mono)', background: 'rgba(0,255,65,0.1)', padding: '10px', borderLeft: '2px solid var(--accent-green)'}}>
+                    <div style={{color: 'var(--accent-green)', opacity: 0.8}}>STATUS: STABLE_BOOT</div>
+                    FPS: <span className="green-text">{fps}</span> | CORE: REACT_18<br/>
+                    LAYERS: {layers.length} | SRC: {globalState.videoElement ? "UVC_CAM" : "NULL"}
                 </div>
 
                 <div style={{margin: '5px 0', verticalAlign: 'middle'}}>
@@ -322,15 +327,19 @@ function Dead4RatApp() {
                     </label>
                 </div>
                 
-                {!started && <button className="brutalist-button" onClick={toggleStart}>BOOT SYSTEM</button>}
+                {!started && (
+                    <button className="brutalist-button" style={{marginTop: '15px', width: '100%', borderColor: 'var(--accent-green)', color: 'var(--accent-green)', fontSize: '1.2rem'}} onClick={toggleStart}>
+                        RUN SYSTEM.exe
+                    </button>
+                )}
                 
                 {started && (
-                    <div style={{marginTop: '10px', display: 'flex', gap: '5px'}}>
-                        <button className={`brutalist-button btn-record ${isRecording ? 'active' : ''}`} style={{flex: 1, fontSize: '0.6rem', padding: '5px'}} onClick={recordToggle}>
-                            {isRecording ? "STOP" : "REC"}
+                    <div style={{marginTop: '15px', display: 'flex', gap: '8px'}}>
+                        <button className={`brutalist-button ${isRecording ? 'active' : ''}`} style={{flex: 1, fontSize: '0.7rem', borderColor: isRecording ? 'var(--accent-red)' : ''}} onClick={recordToggle}>
+                            {isRecording ? "RECORDING" : "RECORD"}
                         </button>
-                        <button className="brutalist-button" style={{flex: 1, fontSize: '0.6rem', padding: '5px'}} onClick={() => canvasEngine.exportPNG()}>PNG</button>
-                        <button className="brutalist-button" style={{flex: 1, fontSize: '0.6rem', padding: '5px', borderColor: '#555', color: '#aaa'}} onClick={() => setUiVisible(false)}>HIDE</button>
+                        <button className="brutalist-button" style={{flex: 1, fontSize: '0.7rem'}} onClick={() => canvasEngine.exportPNG()}>EXPORT_PNG</button>
+                        <button className="brutalist-button" style={{flex: 1, fontSize: '0.7rem', opacity: 0.5}} onClick={() => setUiVisible(false)}>MINIMIZE</button>
                     </div>
                 )}
             </div>
@@ -340,17 +349,17 @@ function Dead4RatApp() {
                 <div className="brutalist-panel control-panel">
                     {/* MEDIA LAYERS PANEL */}
                     <div className="v3-panel">
-                        <div className="section-header">MEDIA LAYERS</div>
-                        <div style={{display: 'flex', gap: '5px', marginBottom: '10px'}}>
-                            <button className="brutalist-button" style={{fontSize: '0.6rem'}} onClick={addImage}>+IMG</button>
-                            <button className="brutalist-button" style={{fontSize: '0.6rem'}} onClick={addText}>+TXT</button>
-                            <button className="brutalist-button" style={{fontSize: '0.6rem'}} onClick={addSTL}>+STL</button>
+                        <div className="section-header">COMM_LINK // MEDIA</div>
+                        <div style={{display: 'flex', gap: '8px', marginBottom: '15px'}}>
+                            <button className="brutalist-button" style={{flex: 1, fontSize: '0.75rem'}} onClick={addImage}>+ IMAGE</button>
+                            <button className="brutalist-button" style={{flex: 1, fontSize: '0.75rem'}} onClick={addText}>+ TEXT</button>
+                            <button className="brutalist-button" style={{flex: 1, fontSize: '0.75rem'}} onClick={addSTL}>+ 3D_STL</button>
                         </div>
-                        <div className="layer-list">
+                        <div className="layer-list" style={{background: 'rgba(255,255,255,0.03)', borderRadius: '4px', overflow: 'hidden'}}>
                             {layers.map(l => (
-                                <div key={l.id} className={`layer-item ${selectedLayerId === l.id ? 'selected' : ''}`} onClick={() => setSelectedLayerId(l.id)}>
-                                    <span>{l.name}</span>
-                                    <button onClick={(e) => { e.stopPropagation(); mediaManager.removeLayer(l.id); setLayers([...mediaManager.layers]); }}>[X]</button>
+                                <div key={l.id} className={`layer-item ${selectedLayerId === l.id ? 'selected' : ''}`} style={{display: 'flex', justifyContent: 'space-between', padding: '8px 12px', borderBottom: '1px solid rgba(255,255,255,0.05)', cursor: 'pointer'}} onClick={() => setSelectedLayerId(l.id)}>
+                                    <span style={{fontSize: '0.8rem', fontFamily: 'var(--font-mono)'}}>{l.name.toUpperCase()}</span>
+                                    <button style={{background: 'transparent', border: 'none', color: 'var(--accent-red)', cursor: 'pointer', fontSize: '0.8rem'}} onClick={(e) => { e.stopPropagation(); mediaManager.removeLayer(l.id); setLayers([...mediaManager.layers]); }}>[REMOVE]</button>
                                 </div>
                             ))}
                         </div>
@@ -390,46 +399,41 @@ function Dead4RatApp() {
 
                     {/* PRESET LIBRARY PANEL */}
                     <div className="v3-panel">
-                        <div className="section-header">PRESET LIBRARY</div>
-                        <button className="brutalist-button" style={{width: '100%', marginBottom: '10px', fontSize: '0.8rem', padding: '10px'}} onClick={savePreset}>SAVE CURRENT STATE</button>
+                        <div className="section-header">DATA_STASH // PRESETS</div>
+                        <button className="brutalist-button" style={{width: '100%', marginBottom: '15px', color: 'var(--accent-yellow)', borderColor: 'var(--accent-yellow)'}} onClick={savePreset}>COMMIT CURRENT STATE</button>
                         <div className="preset-grid">
                             {presets.map(p => (
                                 <div key={p.id} className="preset-card" onClick={() => loadPreset(p)}>
                                     <img src={p.thumbnail} alt={p.name} />
-                                    <div className="preset-name">{p.name}</div>
-                                    <button style={{position: 'absolute', top: 0, right: 0, padding: '2px', background: 'red', fontSize: '10px'}} onClick={(e) => { e.stopPropagation(); presetManager.deletePreset(p.id); setPresets([...presetManager.presets]); }}>X</button>
+                                    <div className="preset-name" style={{fontSize: '0.7rem'}}>{p.name.toUpperCase()}</div>
+                                    <button style={{position: 'absolute', top: 5, right: 5, padding: '2px 5px', background: 'var(--accent-red)', color: '#fff', border: 'none', fontSize: '9px', cursor: 'pointer', borderRadius: '2px'}} onClick={(e) => { e.stopPropagation(); presetManager.deletePreset(p.id); setPresets([...presetManager.presets]); }}>DELETE</button>
                                 </div>
                             ))}
                         </div>
                     </div>
 
                     {/* SETTINGS (Original) */}
-                    <div className="section-header">SYSTEM OVERRIDES</div>
-                    <div className="glitch-item" style={{display: 'flex', gap: '10px', paddingBottom: '15px'}}>
-                        <button className="brutalist-button" style={{fontSize: '0.8rem', padding: '10px', flex: 1}} onClick={scrambleEngines}>
-                            ENGINES
-                        </button>
-                        <button className="brutalist-button" style={{fontSize: '0.8rem', padding: '10px', flex: 1, borderColor: '#fffb00', color: '#fffb00'}} onClick={scrambleParams}>
-                            PARAMS
-                        </button>
-                        <button className="brutalist-button" style={{fontSize: '0.8rem', padding: '10px', flex: 1, color: '#ff003c', borderColor: '#ff003c'}} onClick={resetSystem}>
-                            RESET
-                        </button>
+                    <div className="section-header">CORE_KERNEL // OVERRIDES</div>
+                    <div style={{display: 'flex', gap: '10px', marginBottom: '20px'}}>
+                        <button className="brutalist-button" style={{fontSize: '0.8rem', flex: 1, borderColor: 'var(--accent-blue)', color: 'var(--accent-blue)'}} onClick={scrambleEngines}>ENGINES</button>
+                        <button className="brutalist-button" style={{fontSize: '0.8rem', flex: 1, borderColor: 'var(--accent-yellow)', color: 'var(--accent-yellow)'}} onClick={scrambleParams}>PARAMS</button>
+                        <button className="brutalist-button" style={{fontSize: '0.8rem', flex: 1, color: 'var(--accent-red)', borderColor: 'var(--accent-red)'}} onClick={resetSystem}>RESET</button>
                     </div>
                     
-                    <div className="section-header">SUBSTRATE DECAY</div>
+                    <div className="section-header">SUBSTRATE_DECAY // MODULES</div>
                     {Object.keys(globalState.glitchez).map(key => {
                         const effect = globalState.glitchez[key];
                         return (
-                            <div className="glitch-item" key={key}>
-                                <div className="glitch-header">
-                                    <span>{effect.name}</span>
-                                    <input type="checkbox" id={`toggle-${key}`} checked={globalState.glitchez[key].enabled} onChange={(e) => { globalState.glitchez[key].enabled = e.target.checked; setUiRefresh(r => r + 1); }} />
+                            <div className="glitch-item" key={key} style={{background: 'rgba(255,255,255,0.02)', padding: '15px', borderRadius: '4px', marginBottom: '10px', border: '1px solid rgba(255,255,255,0.05)'}}>
+                                <div className="glitch-header" style={{marginBottom: effect.enabled ? '15px' : '0'}}>
+                                    <span style={{fontFamily: 'var(--font-mono)', fontSize: '0.9rem', color: effect.enabled ? 'var(--accent-green)' : 'rgba(255,255,255,0.4)'}}>{effect.name.toUpperCase()}</span>
+                                    <input type="checkbox" className="brutalist-toggle" checked={globalState.glitchez[key].enabled} onChange={(e) => { globalState.glitchez[key].enabled = e.target.checked; setUiRefresh(r => r + 1); }} />
                                 </div>
                                 {effect.enabled && Object.keys(effect.params).map(pk => (
                                     <div className="param-row" key={pk}>
-                                        <label>{pk}</label>
-                                        <input type="range" id={`slider-${key}-${pk}`} min={effect.params[pk].min} max={effect.params[pk].max} step={effect.params[pk].step} value={globalState.glitchez[key].params[pk].value} onChange={(e) => { globalState.glitchez[key].params[pk].value = parseFloat(e.target.value); setUiRefresh(r => r + 1); }} />
+                                        <label style={{fontFamily: 'var(--font-mono)', fontSize: '0.7rem'}}>{pk.toUpperCase()}</label>
+                                        <input type="range" className="brutalist-slider" min={effect.params[pk].min} max={effect.params[pk].max} step={effect.params[pk].step} value={globalState.glitchez[key].params[pk].value} onChange={(e) => { globalState.glitchez[key].params[pk].value = parseFloat(e.target.value); setUiRefresh(r => r + 1); }} />
+                                        <span style={{fontFamily: 'var(--font-mono)', fontSize: '0.7rem', textAlign: 'right', color: 'var(--accent-green)'}}>{globalState.glitchez[key].params[pk].value.toFixed(2)}</span>
                                     </div>
                                 ))}
                             </div>
