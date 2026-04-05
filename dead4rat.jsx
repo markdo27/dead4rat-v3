@@ -316,6 +316,13 @@ function Dead4RatApp() {
                                 <div className="param-row"><label>Y</label> <input type="range" min="0" max={window.innerHeight} value={selectedLayer.y} onChange={(e) => updateLayer(selectedLayer.id, 'y', parseInt(e.target.value))} /></div>
                                 <div className="param-row"><label>Scale</label> <input type="range" min="0.1" max="5" step="0.1" value={selectedLayer.scale} onChange={(e) => updateLayer(selectedLayer.id, 'scale', parseFloat(e.target.value))} /></div>
                                 <div className="param-row"><label>Rot</label> <input type="range" min="0" max="360" value={selectedLayer.rotation} onChange={(e) => updateLayer(selectedLayer.id, 'rotation', parseInt(e.target.value))} /></div>
+                                <button className="brutalist-button" style={{width: '100%', marginTop: '10px', fontSize: '0.7rem', padding: '5px', borderColor: '#ff003c', color: '#ff003c'}} onClick={() => {
+                                    selectedLayer.x = window.innerWidth / 2;
+                                    selectedLayer.y = window.innerHeight / 2;
+                                    selectedLayer.scale = 1.0;
+                                    selectedLayer.rotation = 0;
+                                    setLayers([...mediaManager.layers]);
+                                }}>RESET PARAMETERS</button>
                             </div>
                         )}
                     </div>
