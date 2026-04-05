@@ -347,7 +347,7 @@ function Dead4RatApp() {
                     {/* PRESET LIBRARY PANEL */}
                     <div className="v3-panel">
                         <div className="section-header">PRESET LIBRARY</div>
-                        <button className="brutalist-button" style={{width: '100%', marginBottom: '10px'}} onClick={savePreset}>SAVE CURRENT STATE</button>
+                        <button className="brutalist-button" style={{width: '100%', marginBottom: '10px', fontSize: '0.8rem', padding: '10px'}} onClick={savePreset}>SAVE CURRENT STATE</button>
                         <div className="preset-grid">
                             {presets.map(p => (
                                 <div key={p.id} className="preset-card" onClick={() => loadPreset(p)}>
@@ -363,15 +363,15 @@ function Dead4RatApp() {
                     <div className="section-header">SYSTEM OVERRIDES</div>
                     <div className="glitch-item" style={{display: 'flex', gap: '10px', paddingBottom: '15px'}}>
                         <button className="brutalist-button" style={{fontSize: '0.8rem', padding: '10px', flex: 1}} onClick={scrambleEngines}>
-                            SCRAMBLE ENGINES
+                            ENGINES
                         </button>
                         <button className="brutalist-button" style={{fontSize: '0.8rem', padding: '10px', flex: 1, borderColor: '#fffb00', color: '#fffb00'}} onClick={scrambleParams}>
-                            SCRAMBLE PARAMS
+                            PARAMS
+                        </button>
+                        <button className="brutalist-button" style={{fontSize: '0.8rem', padding: '10px', flex: 1, color: '#ff003c', borderColor: '#ff003c'}} onClick={resetSystem}>
+                            RESET
                         </button>
                     </div>
-                    <button className="brutalist-button" style={{width: '100%', marginBottom: '15px', color: '#ff003c', borderColor: '#ff003c'}} onClick={resetSystem}>
-                        SYSTEM RESET (RESTORE BOOT STATE)
-                    </button>
                     
                     <div className="section-header">SUBSTRATE DECAY</div>
                     {Object.keys(globalState.glitchez).map(key => {
