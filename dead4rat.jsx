@@ -58,6 +58,23 @@ function Dead4RatApp() {
         }
     }, []);
 
+    const resetSystem = () => {
+        globalState.glitchez = JSON.parse(JSON.stringify(initialEffectSettings));
+        Object.keys(globalState.glitchez).forEach(k => {
+            const el = document.getElementById(`toggle-${k}`);
+            if (el) el.checked = globalState.glitchez[k].enabled;
+            Object.keys(globalState.glitchez[k].params).forEach(pk => {
+                const sel = document.getElementById(`slider-${k}-${pk}`);
+                if (sel) sel.value = globalState.glitchez[k].params[pk].value;
+            });
+        });
+        // Also clear any imported media layers
+        mediaManager.layers = [];
+        setLayers([]);
+        setSelectedLayerId(null);
+        setUiRefresh(r => r + 1);
+    };
+
     const scrambleParams = () => {
         Object.keys(globalState.glitchez).forEach(key => {
             const effect = globalState.glitchez[key];
@@ -352,6 +369,9 @@ function Dead4RatApp() {
                             SCRAMBLE PARAMS
                         </button>
                     </div>
+                    <button className="brutalist-button" style={{width: '100%', marginBottom: '15px', color: '#ff003c', borderColor: '#ff003c'}} onClick={resetSystem}>
+                        SYSTEM RESET (RESTORE BOOT STATE)
+                    </button>
                     
                     <div className="section-header">SUBSTRATE DECAY</div>
                     {Object.keys(globalState.glitchez).map(key => {
