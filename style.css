@@ -1,0 +1,210 @@
+:root {
+    --bg-color: #000000;
+    --text-color: #ffffff;
+    --accent-red: #ff003c;
+    --accent-green: #00ff41;
+    --accent-blue: #001eff;
+    --accent-yellow: #fffb00;
+    --font-mono: 'Share Tech Mono', monospace;
+    --font-sans: 'Inter', sans-serif;
+    --border-thick: 4px solid #ffffff;
+    --border-thin: 1px solid #555555;
+}
+
+body, html {
+    margin: 0;
+    padding: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    font-family: var(--font-mono);
+    overflow: hidden;
+    user-select: none;
+}
+
+/* Fullscreen WebGL Output Layer */
+#main-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+}
+
+/* Base App React Overlay */
+#root {
+    width: 100%;
+    height: 100%;
+    pointer-events: none; /* Let clicks pass through to canvas if needed */
+}
+
+/* All interactive Brutalist UI panels need pointer events re-enabled */
+.brutalist-panel {
+    pointer-events: auto;
+    position: absolute;
+    background: rgba(0, 0, 0, 0.85); /* Slight transparency for seeing "the substrate" */
+    border: var(--border-thick);
+    box-shadow: 8px 8px 0px var(--accent-red);
+    padding: 15px;
+    display: flex;
+    flex-direction: column;
+    z-index: 10;
+}
+
+.terminal-overlay {
+    top: 20px;
+    left: 20px;
+    width: 300px;
+    font-size: 14px;
+    line-height: 1.4;
+    text-transform: uppercase;
+}
+
+.control-panel {
+    top: 20px;
+    right: 20px;
+    width: 350px;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+/* Scrollbar Brutalism */
+::-webkit-scrollbar {
+    width: 12px;
+}
+::-webkit-scrollbar-track {
+    background: var(--bg-color);
+    border-left: var(--border-thin);
+}
+::-webkit-scrollbar-thumb {
+    background: var(--text-color);
+}
+::-webkit-scrollbar-thumb:hover {
+    background: var(--accent-red);
+}
+
+.panel-header {
+    font-family: var(--font-sans);
+    font-weight: 900;
+    font-size: 1.5rem;
+    text-transform: uppercase;
+    letter-spacing: -1px;
+    color: var(--bg-color);
+    background-color: var(--text-color);
+    padding: 5px 10px;
+    margin-bottom: 15px;
+    display: inline-block;
+}
+
+.glitch-item {
+    border-bottom: var(--border-thin);
+    padding: 10px 0;
+    margin-bottom: 5px;
+}
+
+.glitch-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    font-weight: bold;
+    color: var(--accent-yellow);
+}
+
+.brutalist-toggle {
+    appearance: none;
+    width: 40px;
+    height: 20px;
+    background: var(--bg-color);
+    border: 2px solid var(--text-color);
+    cursor: pointer;
+    position: relative;
+    transition: all 0.1s;
+}
+
+.brutalist-toggle:checked {
+    background: var(--accent-green);
+    border-color: var(--accent-green);
+}
+
+.brutalist-toggle::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 12px;
+    height: 12px;
+    background: var(--text-color);
+}
+.brutalist-toggle:checked::after {
+    left: calc(100% - 14px);
+    background: var(--bg-color);
+}
+
+.param-row {
+    display: grid;
+    grid-template-columns: 100px 1fr 40px;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.85rem;
+    margin-top: 5px;
+}
+
+.brutalist-slider {
+    appearance: none;
+    width: 100%;
+    height: 6px;
+    background: #333;
+    outline: none;
+}
+.brutalist-slider::-webkit-slider-thumb {
+    appearance: none;
+    width: 15px;
+    height: 20px;
+    background: var(--text-color);
+    cursor: ew-resize;
+    border: none;
+}
+.brutalist-slider::-webkit-slider-thumb:hover {
+    background: var(--accent-red);
+}
+
+.brutalist-button {
+    pointer-events: auto;
+    font-family: var(--font-sans);
+    font-weight: 900;
+    text-transform: uppercase;
+    font-size: 1.5rem;
+    padding: 15px 30px;
+    background: var(--bg-color);
+    color: var(--accent-red);
+    border: var(--border-thick);
+    border-color: var(--accent-red);
+    cursor: pointer;
+    box-shadow: 4px 4px 0px var(--text-color);
+    transition: all 0.1s;
+}
+.brutalist-button:hover {
+    transform: translate(-3px, -3px);
+    box-shadow: 8px 8px 0px var(--text-color);
+}
+.brutalist-button:active {
+    transform: translate(2px, 2px);
+    box-shadow: 2px 2px 0px var(--text-color);
+}
+
+/* Colors for Terminal overlay */
+.red-text { color: var(--accent-red); }
+.green-text { color: var(--accent-green); }
+.yellow-text { color: var(--accent-yellow); }
+.cyan-text { color: #00ffff; }
+
+.kill-screen {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+}

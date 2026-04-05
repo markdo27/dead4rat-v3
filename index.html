@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DEAD4RAT - TERMINAL DECAY</title>
+    <!-- Brutalist Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Inter:wght@400;700;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css?v=2">
+    
+    <!-- Standalone React via CDN for lack of Node environment -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <!-- Babel for in-browser JSX compilation -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body>
+    
+    <!-- React Root Mount Point -->
+    <div id="root"></div>
+
+    <!-- Hidden Video Source for Texture -->
+    <video id="webcam-feed" autoplay playsinline style="display: none;"></video>
+    
+    <!-- 3D Engines & Loaders (for STL support) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/STLLoader.js"></script>
+    
+    <!-- Core VJ Engines -->
+    <script src="audioEngine.js?v=3"></script>
+    <script src="canvasEngine.js?v=3"></script>
+    <script src="mediaManager.js?v=3"></script>
+    <script src="presetManager.js?v=3"></script>
+    <script src="midiController.js?v=3"></script>
+    
+    <!-- UI Orchestrator -->
+    <script type="text/babel" src="dead4rat.jsx?v=3"></script>
+</body>
+</html>
