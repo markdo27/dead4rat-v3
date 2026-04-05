@@ -45,6 +45,7 @@ function Dead4RatApp() {
     const [selectedLayerId, setSelectedLayerId] = React.useState(null);
     const [presets, setPresets] = React.useState([]);
     const [isRecording, setIsRecording] = React.useState(false);
+    const [uiRefresh, setUiRefresh] = React.useState(0); // Trigger structural UI updates
 
     React.useEffect(() => {
         if (!canvasEngine) canvasEngine = new CanvasEngine('main-canvas');
@@ -79,6 +80,7 @@ function Dead4RatApp() {
             const el = document.getElementById(`toggle-${key}`);
             if (el) el.checked = globalState.glitchez[key].enabled;
         });
+        setUiRefresh(r => r + 1);
     };
 
     const toggleStart = async () => {
@@ -236,6 +238,7 @@ function Dead4RatApp() {
             const el = document.getElementById(`toggle-${k}`);
             if (el) el.checked = globalState.glitchez[k].enabled;
         });
+        setUiRefresh(r => r + 1);
     };
 
     const selectedLayer = mediaManager?.layers.find(l => l.id === selectedLayerId);
@@ -326,7 +329,7 @@ function Dead4RatApp() {
                             <div className="glitch-item" key={key}>
                                 <div className="glitch-header">
                                     <span>{effect.name}</span>
-                                    <input type="checkbox" id={`toggle-${key}`} defaultChecked={effect.enabled} onChange={(e) => globalState.glitchez[key].enabled = e.target.checked} />
+                                    <input type="checkbox" id={`toggle-${key}`} defaultChecked={effect.enabled} onChange={(e) => { globalState.glitchez[key].enabled = e.target.checked; setUiRefresh(r => r + 1); }} />
                                 </div>
                                 {effect.enabled && Object.keys(effect.params).map(pk => (
                                     <div className="param-row" key={pk}>
