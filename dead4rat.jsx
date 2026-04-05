@@ -46,6 +46,7 @@ function Dead4RatApp() {
     const [presets, setPresets] = React.useState([]);
     const [isRecording, setIsRecording] = React.useState(false);
     const [uiRefresh, setUiRefresh] = React.useState(0); // Trigger structural UI updates
+    const [uiVisible, setUiVisible] = React.useState(true);
 
     React.useEffect(() => {
         if (!canvasEngine) canvasEngine = new CanvasEngine('main-canvas');
@@ -246,6 +247,7 @@ function Dead4RatApp() {
     return (
         <React.Fragment>
             {/* TERMINAL OVERLAY */}
+            {uiVisible && (
             <div className="brutalist-panel terminal-overlay">
                 <div className="yellow-text">** DEAD4RAT V3 **</div>
                 <div className="red-text">System: FBO PING-PONG ACTIVE</div>
@@ -263,9 +265,14 @@ function Dead4RatApp() {
                         <button className="brutalist-button" style={{marginLeft: '5px'}} onClick={() => canvasEngine.exportPNG()}>PNG EXP</button>
                     </div>
                 )}
+                
+                <button className="brutalist-button" style={{marginTop: '10px', width: '100%', borderColor: '#555', color: '#aaa'}} onClick={() => setUiVisible(false)}>
+                    HIDE UI [X]
+                </button>
             </div>
+            )}
 
-            {started && (
+            {uiVisible && started && (
                 <div className="brutalist-panel control-panel">
                     {/* MEDIA LAYERS PANEL */}
                     <div className="v3-panel">
@@ -342,6 +349,13 @@ function Dead4RatApp() {
                     })}
                 </div>
             )}
+
+            {!uiVisible && (
+                <button className="brutalist-button" style={{position: 'absolute', top: '10px', right: '10px', zIndex: 100, padding: '5px 10px'}} onClick={() => setUiVisible(true)}>
+                    👁 SHOW UI
+                </button>
+            )}
+
             <canvas id="main-canvas"></canvas>
         </React.Fragment>
     );
