@@ -310,36 +310,46 @@ function Dead4RatApp() {
             {/* TERMINAL OVERLAY */}
             {uiVisible && (
             <div className="brutalist-panel terminal-overlay scanlines">
-                <div style={{fontFamily: 'var(--font-mono)', fontSize: '1.2rem', marginBottom: '10px', letterSpacing: '2px', color: 'var(--accent-green)'}}>
-                    [ DEAD4RAT_SYS_V3 ]
-                </div>
+                <div className="panel-header">SYS_TRACK // ALPHA</div>
                 
-                <div className="terminal-stats" style={{fontFamily: 'var(--font-mono)', background: 'rgba(0,255,65,0.1)', padding: '10px', borderLeft: '2px solid var(--accent-green)'}}>
-                    <div style={{color: 'var(--accent-green)', opacity: 0.8}}>STATUS: STABLE_BOOT</div>
-                    FPS: <span className="green-text">{fps}</span> | CORE: REACT_18<br/>
-                    LAYERS: {layers.length} | SRC: {globalState.videoElement ? "UVC_CAM" : "NULL"}
+                <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '0.9rem', marginBottom: '30px'}}>
+                    <div style={{color: 'var(--text-secondary)'}}>APP_STATE</div>
+                    <div style={{textAlign: 'right', color: 'var(--accent-red)'}}>STABLE_BOOT</div>
+                    
+                    <div style={{color: 'var(--text-secondary)'}}>FRAMERATE</div>
+                    <div style={{textAlign: 'right'}}>{fps}_FPS</div>
+                    
+                    <div style={{color: 'var(--text-secondary)'}}>SYST_LOAD</div>
+                    <div style={{textAlign: 'right'}}>{layers.length}_LYR</div>
                 </div>
 
-                <div style={{margin: '5px 0', verticalAlign: 'middle'}}>
-                    <input type="checkbox" id="mic-toggle" checked={useMic} onChange={(e) => handleMicToggle(e.target.checked)} style={{verticalAlign: 'middle', cursor: 'pointer'}} />
-                    <label htmlFor="mic-toggle" style={{fontSize: '0.7rem', marginLeft: '5px', color: useMic ? '#00ff41' : '#ff003c', verticalAlign: 'middle', cursor: 'pointer'}}>
-                        [ {useMic ? "MIC ON" : "MIC OFF"} ]
+                <div className="hud-divider"></div>
+
+                <div style={{margin: '20px 0', verticalAlign: 'middle', display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                    <span style={{fontSize: '0.8rem', color: 'var(--text-secondary)'}}>AUDIO_REACTIVE</span>
+                    <label className="brutalist-toggle-label" style={{display: 'flex', alignItems: 'center', cursor: 'pointer'}}>
+                        <input type="checkbox" className="brutalist-toggle" checked={useMic} onChange={(e) => handleMicToggle(e.target.checked)} />
+                        <span style={{fontSize: '0.8rem', marginLeft: '10px', color: useMic ? 'var(--accent-red)' : 'var(--text-secondary)'}}>
+                            {useMic ? "ONLINE" : "OFFLINE"}
+                        </span>
                     </label>
                 </div>
+
+                <div className="hud-divider"></div>
                 
                 {!started && (
-                    <button className="brutalist-button" style={{marginTop: '15px', width: '100%', borderColor: 'var(--accent-green)', color: 'var(--accent-green)', fontSize: '1.2rem'}} onClick={toggleStart}>
-                        RUN SYSTEM.exe
+                    <button className="brutalist-button" style={{marginTop: '30px', width: '100%', fontSize: '1.2rem'}} onClick={toggleStart}>
+                        BOOT_KERNEL
                     </button>
                 )}
                 
                 {started && (
-                    <div style={{marginTop: '15px', display: 'flex', gap: '8px'}}>
-                        <button className={`brutalist-button ${isRecording ? 'active' : ''}`} style={{flex: 1, fontSize: '0.7rem', borderColor: isRecording ? 'var(--accent-red)' : ''}} onClick={recordToggle}>
-                            {isRecording ? "RECORDING" : "RECORD"}
+                    <div style={{marginTop: '30px', display: 'flex', flexDirection: 'column', gap: '12px'}}>
+                        <button className={`brutalist-button ${isRecording ? 'active' : ''}`} onClick={recordToggle}>
+                            {isRecording ? "STP_REC" : "STR_REC"}
                         </button>
-                        <button className="brutalist-button" style={{flex: 1, fontSize: '0.7rem'}} onClick={() => canvasEngine.exportPNG()}>EXPORT_PNG</button>
-                        <button className="brutalist-button" style={{flex: 1, fontSize: '0.7rem', opacity: 0.5}} onClick={() => setUiVisible(false)}>MINIMIZE</button>
+                        <button className="brutalist-button" style={{background: '#1a1a1a', color: '#fff'}} onClick={() => canvasEngine.exportPNG()}>EXPORT_SNAPSHOT</button>
+                        <button className="brutalist-button" style={{background: 'transparent', color: 'var(--text-secondary)', border: '1px solid #222', fontSize: '0.7rem'}} onClick={() => setUiVisible(false)}>COLLAPSE_UI</button>
                     </div>
                 )}
             </div>
@@ -355,11 +365,11 @@ function Dead4RatApp() {
                             <button className="brutalist-button" style={{flex: 1, fontSize: '0.75rem'}} onClick={addText}>+ TEXT</button>
                             <button className="brutalist-button" style={{flex: 1, fontSize: '0.75rem'}} onClick={addSTL}>+ 3D_STL</button>
                         </div>
-                        <div className="layer-list" style={{background: 'rgba(255,255,255,0.03)', borderRadius: '4px', overflow: 'hidden'}}>
+                        <div className="layer-list" style={{background: '#0a0a0a', border: '1px solid #1a1a1a', borderRadius: '4px', overflow: 'hidden'}}>
                             {layers.map(l => (
-                                <div key={l.id} className={`layer-item ${selectedLayerId === l.id ? 'selected' : ''}`} style={{display: 'flex', justifyContent: 'space-between', padding: '8px 12px', borderBottom: '1px solid rgba(255,255,255,0.05)', cursor: 'pointer'}} onClick={() => setSelectedLayerId(l.id)}>
-                                    <span style={{fontSize: '0.8rem', fontFamily: 'var(--font-mono)'}}>{l.name.toUpperCase()}</span>
-                                    <button style={{background: 'transparent', border: 'none', color: 'var(--accent-red)', cursor: 'pointer', fontSize: '0.8rem'}} onClick={(e) => { e.stopPropagation(); mediaManager.removeLayer(l.id); setLayers([...mediaManager.layers]); }}>[REMOVE]</button>
+                                <div key={l.id} className={`layer-item ${selectedLayerId === l.id ? 'selected' : ''}`} style={{display: 'flex', justifyContent: 'space-between', padding: '10px 15px', borderBottom: '1px solid #1a1a1a', cursor: 'pointer'}} onClick={() => setSelectedLayerId(l.id)}>
+                                    <span style={{fontSize: '0.8rem', color: selectedLayerId === l.id ? 'var(--accent-red)' : '#fff'}}>{l.name.toUpperCase()}</span>
+                                    <button style={{background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.7rem'}} onClick={(e) => { e.stopPropagation(); mediaManager.removeLayer(l.id); setLayers([...mediaManager.layers]); }}>[REM]</button>
                                 </div>
                             ))}
                         </div>
@@ -424,16 +434,16 @@ function Dead4RatApp() {
                     {Object.keys(globalState.glitchez).map(key => {
                         const effect = globalState.glitchez[key];
                         return (
-                            <div className="glitch-item" key={key} style={{background: 'rgba(255,255,255,0.02)', padding: '15px', borderRadius: '4px', marginBottom: '10px', border: '1px solid rgba(255,255,255,0.05)'}}>
-                                <div className="glitch-header" style={{marginBottom: effect.enabled ? '15px' : '0'}}>
-                                    <span style={{fontFamily: 'var(--font-mono)', fontSize: '0.9rem', color: effect.enabled ? 'var(--accent-green)' : 'rgba(255,255,255,0.4)'}}>{effect.name.toUpperCase()}</span>
+                            <div className="glitch-item" key={key}>
+                                <div className="glitch-header">
+                                    <span style={{color: effect.enabled ? 'var(--accent-red)' : 'var(--text-secondary)'}}>{effect.name.toUpperCase()}</span>
                                     <input type="checkbox" className="brutalist-toggle" checked={globalState.glitchez[key].enabled} onChange={(e) => { globalState.glitchez[key].enabled = e.target.checked; setUiRefresh(r => r + 1); }} />
                                 </div>
                                 {effect.enabled && Object.keys(effect.params).map(pk => (
                                     <div className="param-row" key={pk}>
-                                        <label style={{fontFamily: 'var(--font-mono)', fontSize: '0.7rem'}}>{pk.toUpperCase()}</label>
+                                        <label>{pk.toUpperCase()}</label>
                                         <input type="range" className="brutalist-slider" min={effect.params[pk].min} max={effect.params[pk].max} step={effect.params[pk].step} value={globalState.glitchez[key].params[pk].value} onChange={(e) => { globalState.glitchez[key].params[pk].value = parseFloat(e.target.value); setUiRefresh(r => r + 1); }} />
-                                        <span style={{fontFamily: 'var(--font-mono)', fontSize: '0.7rem', textAlign: 'right', color: 'var(--accent-green)'}}>{globalState.glitchez[key].params[pk].value.toFixed(2)}</span>
+                                        <span style={{textAlign: 'right', color: '#fff'}}>{globalState.glitchez[key].params[pk].value.toFixed(2)}</span>
                                     </div>
                                 ))}
                             </div>
