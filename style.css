@@ -279,3 +279,44 @@ body, html {
         width: 6px;
     }
 }
+
+/* --- FOOTER MARQUEE --- */
+.terminal-footer {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    background: var(--accent-red);
+    color: white;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: bold;
+    padding: 4px 0;
+    overflow: hidden;
+    z-index: 5;
+    pointer-events: none;
+    border-top: 2px solid white;
+}
+
+.marquee {
+    display: inline-block;
+    white-space: nowrap;
+    animation: marquee-scroll 20s linear infinite;
+    padding-left: 100%;
+}
+
+.marquee span {
+    display: inline-block;
+}
+
+@keyframes marquee-scroll {
+    from { transform: translateX(0); }
+    to { transform: translateX(-100%); }
+}
+
+@media (max-width: 768px) {
+    .terminal-footer {
+        font-size: 10px;
+        padding: 2px 0;
+    }
+}

@@ -353,6 +353,13 @@ function Dead4RatApp() {
                 </button>
             )}
 
+            {/* MARQUEE FOOTER */}
+            <div className="terminal-footer">
+                <div className="marquee">
+                    <span>DEAD4RAT@2026 BY MRKD | DEAD4RAT@2026 BY MRKD | DEAD4RAT@2026 BY MRKD | DEAD4RAT@2026 BY MRKD</span>
+                </div>
+            </div>
+
             <canvas id="main-canvas"></canvas>
         </React.Fragment>
     );
