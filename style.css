@@ -213,20 +213,25 @@ body, html {
 @media (max-width: 768px) {
     /* Stack panels vertically, remove absolute lateral offsets */
     .terminal-overlay {
-        top: 10px;
-        left: 10px;
-        width: calc(100vw - 50px);
-        font-size: 11px;
-        padding: 10px;
+        top: 5px;
+        left: 5px;
+        width: calc(100vw - 30px);
+        font-size: 10px;
+        padding: 5px 10px;
+    }
+
+    .terminal-stats {
+        font-size: 9px;
+        margin-bottom: 2px;
     }
 
     .control-panel {
-        top: 130px; /* Sits below the HUD */
-        left: 10px;
-        right: auto; /* override right alignment */
-        width: calc(100vw - 50px);
-        max-height: calc(100vh - 160px);
-        padding: 10px;
+        top: 110px; /* Pulled up closer to the HUD */
+        left: 5px;
+        right: auto;
+        width: calc(100vw - 30px);
+        max-height: calc(100vh - 120px);
+        padding: 8px;
     }
 
     /* Shrink fonts to give sliders more space */
@@ -242,8 +247,22 @@ body, html {
     }
 
     .brutalist-button {
-        font-size: 12px;
-        padding: 8px;
+        font-size: 10px;
+        padding: 5px 8px;
+    }
+
+    .section-header {
+        font-size: 0.8rem;
+        margin-top: 10px;
+        margin-bottom: 5px;
+    }
+
+    .glitch-item {
+        padding: 5px 0;
+    }
+
+    .v3-panel {
+        margin-bottom: 10px;
     }
 
     /* Keep thumbnails visible but compact */
