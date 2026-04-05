@@ -258,17 +258,14 @@ function Dead4RatApp() {
                 {!started && <button className="brutalist-button" onClick={toggleStart}>BOOT SYSTEM</button>}
                 
                 {started && (
-                    <div style={{marginTop: '10px'}}>
-                        <button className={`brutalist-button btn-record ${isRecording ? 'active' : ''}`} onClick={recordToggle}>
-                            {isRecording ? "● STOP REC" : "○ START REC"}
+                    <div style={{marginTop: '10px', display: 'flex', gap: '5px'}}>
+                        <button className={`brutalist-button btn-record ${isRecording ? 'active' : ''}`} style={{flex: 1, fontSize: '0.6rem', padding: '5px'}} onClick={recordToggle}>
+                            {isRecording ? "STOP" : "REC"}
                         </button>
-                        <button className="brutalist-button" style={{marginLeft: '5px'}} onClick={() => canvasEngine.exportPNG()}>PNG EXP</button>
+                        <button className="brutalist-button" style={{flex: 1, fontSize: '0.6rem', padding: '5px'}} onClick={() => canvasEngine.exportPNG()}>PNG</button>
+                        <button className="brutalist-button" style={{flex: 1, fontSize: '0.6rem', padding: '5px', borderColor: '#555', color: '#aaa'}} onClick={() => setUiVisible(false)}>HIDE</button>
                     </div>
                 )}
-                
-                <button className="brutalist-button" style={{marginTop: '10px', width: '100%', borderColor: '#555', color: '#aaa'}} onClick={() => setUiVisible(false)}>
-                    HIDE UI [X]
-                </button>
             </div>
             )}
 
