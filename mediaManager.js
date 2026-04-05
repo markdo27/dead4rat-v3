@@ -69,7 +69,7 @@ class MediaManager {
                 ctx.drawImage(layer.img, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
             } else if (layer.type === 'text') {
                 ctx.fillStyle = layer.color || '#ffffff';
-                ctx.font = `${layer.fontSize || 100}px Outfit, sans-serif`;
+                ctx.font = `${layer.fontSize || 100}px '${layer.fontFamily || 'Share Tech Mono'}', sans-serif`;
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 ctx.fillText(layer.text || 'HELLO', 0, 0);

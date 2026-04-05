@@ -143,7 +143,13 @@ function Dead4RatApp() {
     };
 
     const addText = () => {
-        const layer = mediaManager.addLayer('text', { text: 'TERMINAL DECAY', fontSize: 80, width: 400, height: 100 });
+        const layer = mediaManager.addLayer('text', { 
+            text: 'TERMINAL DECAY', 
+            fontSize: 80, 
+            width: 400, 
+            height: 100,
+            fontFamily: 'Share Tech Mono'
+        });
         setLayers([...mediaManager.layers]);
         setSelectedLayerId(layer.id);
     };
@@ -290,7 +296,21 @@ function Dead4RatApp() {
                         {selectedLayer && (
                             <div className="layer-controls">
                                 {selectedLayer.type === 'text' && (
-                                    <input className="v3-input" value={selectedLayer.text} onChange={(e) => updateLayer(selectedLayer.id, 'text', e.target.value)} />
+                                    <React.Fragment>
+                                        <input className="v3-input" value={selectedLayer.text} onChange={(e) => updateLayer(selectedLayer.id, 'text', e.target.value)} />
+                                        <div className="param-row">
+                                            <label>Font</label>
+                                            <select className="v3-input" style={{background: '#000', color: '#fff', border: '1px solid #fff'}} value={selectedLayer.fontFamily || 'Share Tech Mono'} onChange={(e) => updateLayer(selectedLayer.id, 'fontFamily', e.target.value)}>
+                                                <option value="Share Tech Mono">Share Tech Mono</option>
+                                                <option value="Rubik Glitch">Rubik Glitch</option>
+                                                <option value="VT323">VT323</option>
+                                                <option value="Space Mono">Space Mono</option>
+                                                <option value="Bungee">Bungee</option>
+                                                <option value="Roboto Mono">Roboto Mono</option>
+                                                <option value="Inter">Inter</option>
+                                            </select>
+                                        </div>
+                                    </React.Fragment>
                                 )}
                                 <div className="param-row"><label>X</label> <input type="range" min="0" max={window.innerWidth} value={selectedLayer.x} onChange={(e) => updateLayer(selectedLayer.id, 'x', parseInt(e.target.value))} /></div>
                                 <div className="param-row"><label>Y</label> <input type="range" min="0" max={window.innerHeight} value={selectedLayer.y} onChange={(e) => updateLayer(selectedLayer.id, 'y', parseInt(e.target.value))} /></div>
