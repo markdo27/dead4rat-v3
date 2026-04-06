@@ -299,6 +299,21 @@ body, html {
 
 .brutalist-button:active {
     transform: none;
+}
+
+/* ═══════════════════════════════════════════
+   3D INTERACTION HINT
+   ═══════════════════════════════════════════ */
+
+body:has(#win-command .section-header:contains("3D_ENGINE")) #main-canvas {
+    cursor: grab;
+}
+
+body:has(#win-command .section-header:contains("3D_ENGINE")):active #main-canvas {
+    cursor: grabbing;
+}
+
+.brutalist-button:active {
     background: var(--text-bright);
     color: #000;
 }
