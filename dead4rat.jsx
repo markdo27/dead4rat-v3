@@ -317,9 +317,6 @@ function Dead4RatApp() {
     const [audioGain, setAudioGain] = React.useState(1.0);
     const [audioFile, setAudioFile] = React.useState(null);
 
-    // Mouse tracking for 3D rotation
-    const mouseRef = React.useRef({ isDown: false, lastX: 0, lastY: 0 });
-
     // Live band values for effect card glow (updated from render loop)
     const liveAudio = React.useRef({ bass: 0, mid: 0, high: 0 });
 
@@ -483,89 +480,6 @@ function Dead4RatApp() {
         setLayers([...mediaManager.layers]);
         setSelectedLayerId(layer.id);
     };
-
-    const addSTL = () => {
-        const input = document.createElement('input');
-        input.type = 'file'; input.accept = '.stl';
-        input.onchange = (e) => {
-            const file = e.target.files[0];
-            const reader = new FileReader();
-            reader.onload = (re) => {
-                const size = 512;
-                const canvas = document.createElement('canvas');
-                canvas.width = size; canvas.height = size;
-                const renderer = new THREE.WebGLRenderer({ canvas, alpha: true });
-                renderer.setSize(size, size);
-                const scene = new THREE.Scene();
-                const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
-                camera.position.z = 5;
-                const light = new THREE.DirectionalLight(0xffffff, 1);
-                light.position.set(1,1,1); scene.add(light);
-                scene.add(new THREE.AmbientLight(0x404040));
-                const loader = new THREE.STLLoader();
-                const geometry = loader.parse(re.target.result);
-                const material = new THREE.MeshPhongMaterial({ color: 0x00ff41, wireframe: true });
-                const mesh = new THREE.Mesh(geometry, material);
-                geometry.computeBoundingBox();
-                const center = new THREE.Vector3();
-                geometry.boundingBox.getCenter(center);
-                mesh.position.sub(center);
-                scene.add(mesh);
-                const layer = mediaManager.addLayer('3d', {
-                    renderCanvas: canvas, width: 400, height: 400,
-                    mesh: mesh, // Store mesh for manual rotation
-                    autoRotate: true, // Default to auto
-                    update: () => {
-                        if (layer.autoRotate) {
-                            mesh.rotation.y += 0.01;
-                            mesh.rotation.x += 0.005;
-                        }
-                        renderer.render(scene, camera);
-                    }
-                });
-                const tick = () => { if (mediaManager.layers.find(l => l.id === layer.id)) { layer.update(); requestAnimationFrame(tick); } };
-                tick();
-                setLayers([...mediaManager.layers]);
-                setSelectedLayerId(layer.id);
-            };
-            reader.readAsArrayBuffer(file);
-        };
-        input.click();
-    };
-
-    // ── Mouse Handlers for 3D Rotation ──────────────────────────────────
-    React.useEffect(() => {
-        const handleDown = (e) => {
-            if (e.target.closest('.sticker')) return; // Don't rotate when interacting with UI
-            mouseRef.current.isDown = true;
-            mouseRef.current.lastX = e.clientX;
-            mouseRef.current.lastY = e.clientY;
-        };
-        const handleMove = (e) => {
-            if (!mouseRef.current.isDown || !selectedLayer || selectedLayer.type !== '3d') return;
-            const dx = e.clientX - mouseRef.current.lastX;
-            const dy = e.clientY - mouseRef.current.lastY;
-            
-            // Update rotation on the mesh directly
-            if (selectedLayer.mesh) {
-                selectedLayer.mesh.rotation.y += dx * 0.01;
-                selectedLayer.mesh.rotation.x += dy * 0.01;
-            }
-            
-            mouseRef.current.lastX = e.clientX;
-            mouseRef.current.lastY = e.clientY;
-        };
-        const handleUp = () => mouseRef.current.isDown = false;
-
-        window.addEventListener('mousedown', handleDown);
-        window.addEventListener('mousemove', handleMove);
-        window.addEventListener('mouseup', handleUp);
-        return () => {
-            window.removeEventListener('mousedown', handleDown);
-            window.removeEventListener('mousemove', handleMove);
-            window.removeEventListener('mouseup', handleUp);
-        };
-    }, [selectedLayer]);
 
     const updateLayer = (id, key, val) => {
         const l = mediaManager.layers.find(l => l.id === id);
@@ -791,7 +705,6 @@ function Dead4RatApp() {
                     <div style={{display: 'flex', gap: '4px', marginBottom: '8px'}}>
                         <button className="brutalist-button" style={{flex: 1, fontSize: '0.6rem', padding: '6px 4px'}} onClick={addImage}>+ IMAGE</button>
                         <button className="brutalist-button" style={{flex: 1, fontSize: '0.6rem', padding: '6px 4px'}} onClick={addText}>+ TEXT</button>
-                        <button className="brutalist-button" style={{flex: 1, fontSize: '0.6rem', padding: '6px 4px'}} onClick={addSTL}>+ 3D_STL</button>
                     </div>
                     {layers.length > 0 && (
                         <div className="layer-list" style={{marginBottom: '8px'}}>
@@ -828,41 +741,11 @@ function Dead4RatApp() {
                             <div className="param-row"><label>X</label> <input type="range" min="0" max={window.innerWidth} value={selectedLayer.x} onChange={(e) => updateLayer(selectedLayer.id, 'x', parseInt(e.target.value))} /></div>
                             <div className="param-row"><label>Y</label> <input type="range" min="0" max={window.innerHeight} value={selectedLayer.y} onChange={(e) => updateLayer(selectedLayer.id, 'y', parseInt(e.target.value))} /></div>
                             <div className="param-row"><label>Scale</label> <input type="range" min="0.1" max="5" step="0.1" value={selectedLayer.scale} onChange={(e) => updateLayer(selectedLayer.id, 'scale', parseFloat(e.target.value))} /></div>
-                            <div className="param-row"><label>Rot</label> <input type="range" min="0" max="360" value={selectedLayer.rotation} onChange={(e) => updateLayer(selectedLayer.id, 'rotation', parseInt(e.target.value))} /></div>
-                            
-                            {/* Specific 3D controls */}
-                            {selectedLayer.type === '3d' && (
-                                <div style={{marginTop: '10px', padding: '10px', border: '1px solid var(--border-dim)', background: 'rgba(255,85,0,0.05)'}}>
-                                    <div className="section-header" style={{fontSize: '0.6rem', marginBottom: '8px'}}>3D_ENGINE // OVERRIDES</div>
-                                    <div style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px'}}>
-                                        <span style={{fontSize: '0.6rem', color: 'var(--text-dim)'}}>AUTO_ROTATE</span>
-                                        <input
-                                            type="checkbox"
-                                            className="brutalist-toggle"
-                                            checked={selectedLayer.autoRotate}
-                                            onChange={(e) => updateLayer(selectedLayer.id, 'autoRotate', e.target.checked)}
-                                        />
-                                    </div>
-                                    <button className="brutalist-button" style={{width: '100%', fontSize: '0.6rem', padding: '6px'}} onClick={() => {
-                                        if (selectedLayer.mesh) {
-                                            selectedLayer.mesh.rotation.set(0, 0, 0);
-                                            setUiRefresh(r => r + 1);
-                                        }
-                                    }}>RESET_ROTATION</button>
-                                    <div style={{marginTop: '6px', fontSize: '0.5rem', color: 'var(--text-muted)', textAlign: 'center'}}>
-                                        DRAG MOUSE ON CANVAS TO MANIPULATE
-                                    </div>
-                                </div>
-                            )}
-
                             <button className="brutalist-button secondary" style={{width: '100%', marginTop: '6px', fontSize: '0.6rem'}} onClick={() => {
                                 selectedLayer.x = window.innerWidth / 2;
                                 selectedLayer.y = window.innerHeight / 2;
                                 selectedLayer.scale = 1.0;
                                 selectedLayer.rotation = 0;
-                                if (selectedLayer.type === '3d' && selectedLayer.mesh) {
-                                    selectedLayer.mesh.rotation.set(0, 0, 0);
-                                }
                                 setLayers([...mediaManager.layers]);
                             }}>RESET ALL PARAMETERS</button>
                         </div>
