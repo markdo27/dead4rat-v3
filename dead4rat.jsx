@@ -53,6 +53,9 @@ const AUDIO_BAND_MAP = {
     stroboscope:     'BASS',
 };
 
+// Frozen factory defaults — never mutated
+const FACTORY_DEFAULTS = JSON.parse(JSON.stringify(initialEffectSettings));
+
 // Global Mutation State (bypasses React for 60fps)
 const globalState = {
     timeSpeed: 1.0,
@@ -62,7 +65,7 @@ const globalState = {
     spectralCentroid: 0.0,
     bass: 0.0, mid: 0.0, high: 0.0,
     transient: false,
-    glitchez: initialEffectSettings,
+    glitchez: JSON.parse(JSON.stringify(FACTORY_DEFAULTS)),
     videoElement: null,
     compositeSource: null
 };
@@ -382,7 +385,7 @@ function Dead4RatApp() {
 
     const resetSystem = () => {
         // Deep clone defaults to restore all effects
-        globalState.glitchez = JSON.parse(JSON.stringify(initialEffectSettings));
+        globalState.glitchez = JSON.parse(JSON.stringify(FACTORY_DEFAULTS));
         // Clear any active LFO state
         Object.keys(globalState.glitchez).forEach(k => {
             const effect = globalState.glitchez[k];
