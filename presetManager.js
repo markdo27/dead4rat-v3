@@ -40,4 +40,3 @@ class PresetManager {
         return thumbCanvas.toDataURL('image/jpeg', 0.7);
     }
 }
- Broadway
