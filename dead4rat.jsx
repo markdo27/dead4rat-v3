@@ -16,7 +16,13 @@ const initialEffectSettings = {
     kaleidoscope:    { name: "Kaleidoscope",     enabled: false, audioReactive: false, params: { segments: { value: 6, min: 2, max: 12, step: 1 }, rotation: { value: 0, min: -180, max: 180, step: 1 }, zoom: { value: 1.0, min: 0.2, max: 3.0, step: 0.01 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
     barrelDistortion:{ name: "Barrel / Fisheye", enabled: false, audioReactive: false, params: { amount: { value: 0.5, min: -2, max: 2, step: 0.01 }, centerX: { value: 0.5, min: 0, max: 1, step: 0.01 }, centerY: { value: 0.5, min: 0, max: 1, step: 0.01 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
     pixelSort:       { name: "Pixel Sort",       enabled: false, audioReactive: false, params: { threshold: { value: 0.5, min: 0, max: 1, step: 0.01 }, direction: { value: 0, min: 0, max: 1, step: 1 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
-    posterize:       { name: "Posterize",        enabled: false, audioReactive: false, params: { levels: { value: 8, min: 2, max: 32, step: 1 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } }
+    posterize:       { name: "Posterize",        enabled: false, audioReactive: false, params: { levels: { value: 8, min: 2, max: 32, step: 1 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
+    glitchSlicer:    { name: "Glitch Slicer",    enabled: false, audioReactive: false, params: { slices: { value: 8, min: 2, max: 32, step: 1 }, offset: { value: 30, min: 0, max: 200, step: 1 }, speed: { value: 5, min: 1, max: 30, step: 1 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
+    vortexWarp:      { name: "Vortex Warp",      enabled: false, audioReactive: false, params: { strength: { value: 2, min: -10, max: 10, step: 0.1 }, radius: { value: 0.5, min: 0.05, max: 1, step: 0.01 }, centerX: { value: 0.5, min: 0, max: 1, step: 0.01 }, centerY: { value: 0.5, min: 0, max: 1, step: 0.01 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
+    ditherMatrix:    { name: "Dither Matrix",    enabled: false, audioReactive: false, params: { scale: { value: 4, min: 2, max: 32, step: 1 }, contrast: { value: 1, min: 0, max: 2, step: 0.01 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
+    thermalVision:   { name: "Thermal Vision",   enabled: false, audioReactive: false, params: { intensity: { value: 1, min: 0, max: 1, step: 0.01 }, bias: { value: 0, min: -0.5, max: 0.5, step: 0.01 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
+    mirrorTile:      { name: "Mirror Tile",      enabled: false, audioReactive: false, params: { tilesX: { value: 2, min: 1, max: 8, step: 1 }, tilesY: { value: 2, min: 1, max: 8, step: 1 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
+    stroboscope:     { name: "Stroboscope",      enabled: false, audioReactive: false, params: { rate: { value: 4, min: 1, max: 30, step: 1 }, hold: { value: 0.5, min: 0, max: 1, step: 0.01 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } }
 };
 
 // Which band modulates each effect (for display + glow feedback)
@@ -39,6 +45,12 @@ const AUDIO_BAND_MAP = {
     barrelDistortion:'BASS',
     pixelSort:       'HIGH',
     posterize:       'BASS',
+    glitchSlicer:    'BASS',
+    vortexWarp:      'MID',
+    ditherMatrix:    'MID',
+    thermalVision:   'HIGH',
+    mirrorTile:      'MID',
+    stroboscope:     'BASS',
 };
 
 // Global Mutation State (bypasses React for 60fps)

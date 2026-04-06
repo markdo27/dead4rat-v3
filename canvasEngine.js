@@ -117,6 +117,14 @@ class CanvasEngine {
             uniform float u_pixSort; uniform float u_pixSortThresh; uniform float u_pixSortDir; uniform float u_pixSortBlend;
             uniform float u_poster; uniform float u_posterLevels; uniform float u_posterBlend;
 
+            // New Effects
+            uniform float u_slicer; uniform float u_slicerSlices; uniform float u_slicerOffset; uniform float u_slicerSpeed; uniform float u_slicerBlend;
+            uniform float u_vortex; uniform float u_vortexStr; uniform float u_vortexRad; uniform float u_vortexCX; uniform float u_vortexCY; uniform float u_vortexBlend;
+            uniform float u_mirrorT; uniform float u_mirrorTX; uniform float u_mirrorTY; uniform float u_mirrorBlend;
+            uniform float u_strobe; uniform float u_strobeRate; uniform float u_strobeHold; uniform float u_strobeBlend;
+            uniform float u_dither; uniform float u_ditherScale; uniform float u_ditherContrast; uniform float u_ditherBlend;
+            uniform float u_thermal; uniform float u_thermalInt; uniform float u_thermalBias; uniform float u_thermalBlend;
+
             // --- Utility Functions ---
             float rand(vec2 co) {
                 return fract(sin(dot(co.xy, vec2(12.9898, 78.233))) * 43758.5453);
@@ -212,6 +220,41 @@ class CanvasEngine {
                     uv = center + diff * distort;
                 }
 
+                // Glitch Slicer (horizontal strip displacement)
+                if (u_slicer > 0.5) {
+                    float sliceCount = max(2.0, floor(u_slicerSlices));
+                    float sliceIndex = floor(uv.y * sliceCount);
+                    float sliceRand = rand(vec2(sliceIndex, floor(u_time * u_slicerSpeed)));
+                    float shouldOffset = step(0.4, sliceRand);
+                    float offsetAmt = (sliceRand - 0.5) * 2.0 * u_slicerOffset / u_resolution.x;
+                    uv.x += offsetAmt * shouldOffset;
+                }
+
+                // Vortex Warp (spiral/twirl distortion)
+                if (u_vortex > 0.5) {
+                    vec2 center = vec2(u_vortexCX, u_vortexCY);
+                    vec2 d = uv - center;
+                    float r = length(d);
+                    float maxR = max(0.01, u_vortexRad);
+                    float falloff = 1.0 - smoothstep(0.0, maxR, r);
+                    float angle = u_vortexStr * falloff * falloff;
+                    float sa = sin(angle); float ca = cos(angle);
+                    uv = vec2(d.x * ca - d.y * sa, d.x * sa + d.y * ca) + center;
+                }
+
+                // Mirror Tile (grid-based mirror repetition)
+                if (u_mirrorT > 0.5) {
+                    float tx = max(1.0, floor(u_mirrorTX));
+                    float ty = max(1.0, floor(u_mirrorTY));
+                    vec2 cell = vec2(uv.x * tx, uv.y * ty);
+                    vec2 cellIndex = floor(cell);
+                    vec2 cellFrac = fract(cell);
+                    // Mirror on odd cells
+                    if (mod(cellIndex.x, 2.0) > 0.5) cellFrac.x = 1.0 - cellFrac.x;
+                    if (mod(cellIndex.y, 2.0) > 0.5) cellFrac.y = 1.0 - cellFrac.y;
+                    uv = cellFrac;
+                }
+
                 // Data Moshing (pixelation + temporal I-frame ghost)
                 if (u_block > 0.5) {
                     float pixelsX = u_resolution.x / max(1.0, u_blockSize);
@@ -301,6 +344,16 @@ class CanvasEngine {
                     }
                 }
 
+                // Stroboscope (temporal flash/freeze)
+                if (u_strobe > 0.5) {
+                    float phase = fract(u_time * u_strobeRate);
+                    if (phase > u_strobeHold) {
+                        // Show frozen feedback frame
+                        vec3 frozenCol = texture2D(u_feedbackTex, uv).rgb;
+                        baseColor.rgb = applyBlend(baseColor.rgb, frozenCol, u_strobeBlend);
+                    }
+                }
+
                 // Substrate Melt (gravity drip feedback)
                 if (u_melt > 0.5) {
                     float luma = dot(baseColor.rgb, vec3(0.299, 0.587, 0.114));
@@ -379,6 +432,38 @@ class CanvasEngine {
                     float levels = max(2.0, floor(u_posterLevels));
                     vec3 eCol = floor(baseColor.rgb * levels) / (levels - 1.0);
                     baseColor.rgb = applyBlend(baseColor.rgb, eCol, u_posterBlend);
+                }
+
+                // Dither Matrix (ordered dithering / halftone)
+                if (u_dither > 0.5) {
+                    float gridSize = max(2.0, floor(u_ditherScale));
+                    vec2 pixelPos = floor(uv * u_resolution / gridSize);
+                    float ditherVal = rand(mod(pixelPos, vec2(8.0))) * u_ditherContrast;
+                    float luma = dot(baseColor.rgb, vec3(0.299, 0.587, 0.114));
+                    float threshold = step(ditherVal, luma);
+                    vec3 eCol = baseColor.rgb * threshold;
+                    baseColor.rgb = applyBlend(baseColor.rgb, eCol, u_ditherBlend);
+                }
+
+                // Thermal Vision (false-color thermal mapping)
+                if (u_thermal > 0.5) {
+                    float luma = dot(baseColor.rgb, vec3(0.299, 0.587, 0.114));
+                    luma = clamp(luma + u_thermalBias, 0.0, 1.0);
+                    // Thermal gradient: black -> blue -> magenta -> red -> yellow -> white
+                    vec3 thermalCol;
+                    if (luma < 0.2) {
+                        thermalCol = mix(vec3(0.0), vec3(0.0, 0.0, 0.8), luma * 5.0);
+                    } else if (luma < 0.4) {
+                        thermalCol = mix(vec3(0.0, 0.0, 0.8), vec3(0.8, 0.0, 0.6), (luma - 0.2) * 5.0);
+                    } else if (luma < 0.6) {
+                        thermalCol = mix(vec3(0.8, 0.0, 0.6), vec3(1.0, 0.2, 0.0), (luma - 0.4) * 5.0);
+                    } else if (luma < 0.8) {
+                        thermalCol = mix(vec3(1.0, 0.2, 0.0), vec3(1.0, 1.0, 0.0), (luma - 0.6) * 5.0);
+                    } else {
+                        thermalCol = mix(vec3(1.0, 1.0, 0.0), vec3(1.0, 1.0, 1.0), (luma - 0.8) * 5.0);
+                    }
+                    vec3 eCol = mix(baseColor.rgb, thermalCol, u_thermalInt);
+                    baseColor.rgb = applyBlend(baseColor.rgb, eCol, u_thermalBlend);
                 }
 
                 // =============================================================
@@ -582,6 +667,18 @@ class CanvasEngine {
         this.locPixSort = loc("u_pixSort"); this.locPixSortThresh = loc("u_pixSortThresh"); this.locPixSortDir = loc("u_pixSortDir"); this.locPixSortBlend = loc("u_pixSortBlend");
         // Posterize
         this.locPoster = loc("u_poster"); this.locPosterLevels = loc("u_posterLevels"); this.locPosterBlend = loc("u_posterBlend");
+        // Glitch Slicer
+        this.locSlicer = loc("u_slicer"); this.locSlicerSlices = loc("u_slicerSlices"); this.locSlicerOffset = loc("u_slicerOffset"); this.locSlicerSpeed = loc("u_slicerSpeed"); this.locSlicerBlend = loc("u_slicerBlend");
+        // Vortex Warp
+        this.locVortex = loc("u_vortex"); this.locVortexStr = loc("u_vortexStr"); this.locVortexRad = loc("u_vortexRad"); this.locVortexCX = loc("u_vortexCX"); this.locVortexCY = loc("u_vortexCY"); this.locVortexBlend = loc("u_vortexBlend");
+        // Mirror Tile
+        this.locMirrorT = loc("u_mirrorT"); this.locMirrorTX = loc("u_mirrorTX"); this.locMirrorTY = loc("u_mirrorTY"); this.locMirrorBlend = loc("u_mirrorBlend");
+        // Stroboscope
+        this.locStrobe = loc("u_strobe"); this.locStrobeRate = loc("u_strobeRate"); this.locStrobeHold = loc("u_strobeHold"); this.locStrobeBlend = loc("u_strobeBlend");
+        // Dither Matrix
+        this.locDither = loc("u_dither"); this.locDitherScale = loc("u_ditherScale"); this.locDitherContrast = loc("u_ditherContrast"); this.locDitherBlend = loc("u_ditherBlend");
+        // Thermal Vision
+        this.locThermal = loc("u_thermal"); this.locThermalInt = loc("u_thermalInt"); this.locThermalBias = loc("u_thermalBias"); this.locThermalBlend = loc("u_thermalBlend");
     }
 
     initTextures() {
@@ -764,6 +861,40 @@ class CanvasEngine {
         this.gl.uniform1f(this.locPoster, g.posterize.enabled ? 1.0 : 0.0);
         this.gl.uniform1f(this.locPosterLevels, g.posterize.params.levels.value * (g.posterize.audioReactive ? Math.max(0.3, 1.0 - bass * 0.7) : 1.0));
         this.gl.uniform1f(this.locPosterBlend, g.posterize.params.blendMode.value);
+
+        // --- New Effects ---
+        this.gl.uniform1f(this.locSlicer, g.glitchSlicer.enabled ? 1.0 : 0.0);
+        this.gl.uniform1f(this.locSlicerSlices, g.glitchSlicer.params.slices.value);
+        this.gl.uniform1f(this.locSlicerOffset, g.glitchSlicer.params.offset.value * aBass(g.glitchSlicer, 6.0));
+        this.gl.uniform1f(this.locSlicerSpeed, g.glitchSlicer.params.speed.value);
+        this.gl.uniform1f(this.locSlicerBlend, g.glitchSlicer.params.blendMode.value);
+
+        this.gl.uniform1f(this.locVortex, g.vortexWarp.enabled ? 1.0 : 0.0);
+        this.gl.uniform1f(this.locVortexStr, g.vortexWarp.params.strength.value * aMid(g.vortexWarp, 4.0));
+        this.gl.uniform1f(this.locVortexRad, g.vortexWarp.params.radius.value);
+        this.gl.uniform1f(this.locVortexCX, g.vortexWarp.params.centerX.value);
+        this.gl.uniform1f(this.locVortexCY, g.vortexWarp.params.centerY.value);
+        this.gl.uniform1f(this.locVortexBlend, g.vortexWarp.params.blendMode.value);
+
+        this.gl.uniform1f(this.locMirrorT, g.mirrorTile.enabled ? 1.0 : 0.0);
+        this.gl.uniform1f(this.locMirrorTX, g.mirrorTile.params.tilesX.value * aMid(g.mirrorTile, 2.0));
+        this.gl.uniform1f(this.locMirrorTY, g.mirrorTile.params.tilesY.value);
+        this.gl.uniform1f(this.locMirrorBlend, g.mirrorTile.params.blendMode.value);
+
+        this.gl.uniform1f(this.locStrobe, g.stroboscope.enabled ? 1.0 : 0.0);
+        this.gl.uniform1f(this.locStrobeRate, g.stroboscope.params.rate.value * aBass(g.stroboscope, 3.0));
+        this.gl.uniform1f(this.locStrobeHold, g.stroboscope.params.hold.value);
+        this.gl.uniform1f(this.locStrobeBlend, g.stroboscope.params.blendMode.value);
+
+        this.gl.uniform1f(this.locDither, g.ditherMatrix.enabled ? 1.0 : 0.0);
+        this.gl.uniform1f(this.locDitherScale, g.ditherMatrix.params.scale.value * aMid(g.ditherMatrix, 3.0));
+        this.gl.uniform1f(this.locDitherContrast, g.ditherMatrix.params.contrast.value);
+        this.gl.uniform1f(this.locDitherBlend, g.ditherMatrix.params.blendMode.value);
+
+        this.gl.uniform1f(this.locThermal, g.thermalVision.enabled ? 1.0 : 0.0);
+        this.gl.uniform1f(this.locThermalInt, g.thermalVision.params.intensity.value * aHigh(g.thermalVision, 2.0));
+        this.gl.uniform1f(this.locThermalBias, g.thermalVision.params.bias.value);
+        this.gl.uniform1f(this.locThermalBlend, g.thermalVision.params.blendMode.value);
 
         // Draw main quad to FBO
         gl.bindBuffer(gl.ARRAY_BUFFER, this.positionBuffer);
