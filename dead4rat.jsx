@@ -369,6 +369,7 @@ function Dead4RatApp() {
             await audioEngine.start();
             setUseMic(true);
         }
+        setUiRefresh(r => r + 1);
     };
 
     const handleFileSource = async (file) => {
@@ -377,6 +378,7 @@ function Dead4RatApp() {
         if (started) {
             await audioEngine.startFromFile(file);
         }
+        setUiRefresh(r => r + 1);
     };
 
     const scrambleParams = () => {
@@ -419,6 +421,7 @@ function Dead4RatApp() {
         }
 
         setStarted(true);
+        setUiRefresh(r => r + 1);
 
         let lastTime = performance.now();
         let frames = 0;
