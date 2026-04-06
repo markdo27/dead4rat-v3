@@ -96,6 +96,10 @@ class CanvasEngine {
             uniform float u_high;
             uniform float u_transient;
 
+            // Masking
+            uniform sampler2D u_maskTex;
+            uniform float u_maskEnabled;
+
             // --- Effect Enable/Param Uniforms ---
             uniform float u_rgbShift; uniform float u_rgbShiftAmt; uniform float u_rgbAngle; uniform float u_rgbBlend;
             uniform float u_scanLines; uniform float u_scanDen; uniform float u_scanOpac; uniform float u_scanBlend;
@@ -559,6 +563,16 @@ class CanvasEngine {
                     baseColor.rgb = applyBlend(baseColor.rgb, eCol, u_noiseBlend);
                 }
 
+                // =============================================================
+                // STAGE 6: ML PERSON MASK (Background Removal)
+                // =============================================================
+                if (u_maskEnabled > 0.5) {
+                    // Sample the BW mask canvas. Using original v_uv maps correctly to screen space.
+                    vec4 maskColor = texture2D(u_maskTex, v_uv);
+                    // Multiply base color by mask r channel (white=person, black=bg)
+                    baseColor.rgb = baseColor.rgb * maskColor.r;
+                }
+
                 gl_FragColor = vec4(clamp(baseColor.rgb, 0.0, 1.0), 1.0);
             }
         `;
@@ -626,6 +640,7 @@ class CanvasEngine {
         this.locHigh = loc("u_high");
         this.locTransient = loc("u_transient");
         this.uResolution = loc("u_resolution");
+        this.locMaskEnabled = loc("u_maskEnabled");
 
         // RGB Shift
         this.locRgb = loc("u_rgbShift"); this.locRgbAmt = loc("u_rgbShiftAmt"); this.locRgbAngle = loc("u_rgbAngle"); this.locRgbBlend = loc("u_rgbBlend");
@@ -696,6 +711,7 @@ class CanvasEngine {
         gl.useProgram(this.program);
         gl.uniform1i(gl.getUniformLocation(this.program, "u_videoTex"), 0);
         gl.uniform1i(gl.getUniformLocation(this.program, "u_feedbackTex"), 1);
+        gl.uniform1i(gl.getUniformLocation(this.program, "u_maskTex"), 2);
     }
 
     initBuffers() {
@@ -734,6 +750,25 @@ class CanvasEngine {
         gl.activeTexture(gl.TEXTURE1);
         gl.bindTexture(gl.TEXTURE_2D, this.feedbackSource.tex);
 
+        // --- Step 2.5: Bind Mask Source to TEXTURE2 ---
+        gl.activeTexture(gl.TEXTURE2);
+        gl.bindTexture(gl.TEXTURE_2D, this.videoTex); // default fallback
+        
+        // Ensure state contains mask
+        if (state.maskCanvas) {
+            // Need a separate texture for mask? Yes.
+            if (!this.maskTex) {
+                this.maskTex = gl.createTexture();
+                gl.bindTexture(gl.TEXTURE_2D, this.maskTex);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+            }
+            gl.bindTexture(gl.TEXTURE_2D, this.maskTex);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, state.maskCanvas);
+        }
+
         // --- Step 3: Draw to FBO ---
         gl.bindFramebuffer(gl.FRAMEBUFFER, this.renderTarget.fbo);
         gl.viewport(0, 0, this.canvas.width, this.canvas.height);
@@ -747,6 +782,7 @@ class CanvasEngine {
         this.gl.uniform1f(this.locHigh, state.high || 0);
         this.gl.uniform1f(this.locTransient, state.transient ? 1.0 : 0.0);
         this.gl.uniform2f(this.uResolution, this.canvas.width, this.canvas.height);
+        this.gl.uniform1f(this.locMaskEnabled, state.isolatePerson ? 1.0 : 0.0);
 
         const g = state.glitchez;
         const bass = state.bass || 0;

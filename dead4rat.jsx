@@ -65,6 +65,7 @@ const globalState = {
     spectralCentroid: 0.0,
     bass: 0.0, mid: 0.0, high: 0.0,
     transient: false,
+    isolatePerson: false,
     glitchez: JSON.parse(JSON.stringify(FACTORY_DEFAULTS)),
     videoElement: null,
     compositeSource: null
@@ -74,6 +75,7 @@ let audioEngine = null;
 let canvasEngine = null;
 let mediaManager = null;
 let presetManager = null;
+let maskEngine = null;
 
 // ═══════════════════════════════════════════
 // DRAGGABLE TERMINAL WINDOW
@@ -360,6 +362,8 @@ function Dead4RatApp() {
     const [audioFile, setAudioFile] = React.useState(null);
     const [lfoSpeed, setLfoSpeed] = React.useState(1.0);
     const [lfoDepth, setLfoDepth] = React.useState(0.5);
+    const [isolatePerson, setIsolatePerson] = React.useState(false);
+    const [maskLoading, setMaskLoading] = React.useState(false);
 
     // Live band values for effect card glow (updated from render loop)
     const liveAudio = React.useRef({ bass: 0, mid: 0, high: 0 });
@@ -377,6 +381,7 @@ function Dead4RatApp() {
         if (!canvasEngine) canvasEngine = new CanvasEngine('main-canvas');
         if (!audioEngine) audioEngine = new AudioEngine();
         if (!mediaManager) mediaManager = new MediaManager(window.innerWidth, window.innerHeight);
+        if (!maskEngine) maskEngine = new MaskEngine(640, 480);
         if (!presetManager) {
             presetManager = new PresetManager();
             setPresets(presetManager.presets);
@@ -446,6 +451,18 @@ function Dead4RatApp() {
         setUiRefresh(r => r + 1);
     };
 
+    const handleIsolateToggle = async () => {
+        const nextState = !isolatePerson;
+        setIsolatePerson(nextState);
+        globalState.isolatePerson = nextState;
+        if (nextState && maskEngine && !maskEngine.initialized) {
+            setMaskLoading(true);
+            await maskEngine.init();
+            setMaskLoading(false);
+        }
+        if (maskEngine) maskEngine.enabled = nextState;
+    };
+
     const toggleStart = async () => {
         const videoElement = document.getElementById('webcam-feed');
         if (!videoElement) return;
@@ -512,6 +529,13 @@ function Dead4RatApp() {
                     p.value = Math.min(p.max, Math.max(p.min, base + offset));
                 });
             });
+
+            if (globalState.isolatePerson && maskEngine && maskEngine.isReady) {
+                maskEngine.process(globalState.videoElement);
+                globalState.maskCanvas = maskEngine.getMask();
+            } else {
+                globalState.maskCanvas = null;
+            }
 
             globalState.compositeSource = mediaManager.composite(globalState.videoElement);
             canvasEngine.render(globalState);
@@ -810,6 +834,18 @@ function Dead4RatApp() {
                         <button className="brutalist-button" style={{fontSize: '0.65rem', flex: 1}} onClick={scrambleEngines}>ENGINES</button>
                         <button className="brutalist-button" style={{fontSize: '0.65rem', flex: 1}} onClick={scrambleParams}>PARAMS</button>
                         <button className="brutalist-button primary" style={{fontSize: '0.65rem', flex: 1}} onClick={resetSystem}>RESET</button>
+                    </div>
+
+                    <div className="section-header">SYST_DIAG // OVERLAYS</div>
+                    <div style={{display: 'flex', gap: '4px', marginBottom: '12px'}}>
+                        <button 
+                            className={`brutalist-button ${isolatePerson ? 'primary' : ''}`} 
+                            style={{fontSize: '0.65rem', flex: 1}} 
+                            onClick={handleIsolateToggle}
+                            disabled={maskLoading}
+                        >
+                            {maskLoading ? 'LOADING ML...' : (isolatePerson ? 'ISOLATE: ON' : 'ISOLATE PERSON')}
+                        </button>
                     </div>
 
                     <div className="hud-divider" />

@@ -13,6 +13,13 @@
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <!-- Babel for in-browser JSX compilation -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Midi Support -->
+    <script src="https://cdn.jsdelivr.net/npm/webmidi@3.1.6/dist/iife/webmidi.iife.js"></script>
+
+    <!-- MediaPipe ML Models -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js" crossorigin="anonymous"></script>
+
+    <!-- Core VJ Engines -->
 </head>
 <body>
     
@@ -24,12 +31,13 @@
     
     <!-- Core VJ Engines -->
     <script src="audioEngine.js?v=4"></script>
-    <script src="canvasEngine.js?v=4"></script>
+    <script src="maskEngine.js?v=1"></script>
+    <script src="canvasEngine.js?v=5"></script>
     <script src="mediaManager.js?v=3"></script>
     <script src="presetManager.js?v=4"></script>
     <script src="midiController.js?v=3"></script>
     
     <!-- UI Orchestrator -->
-    <script type="text/babel" src="dead4rat.jsx?v=8"></script>
+    <script type="text/babel" src="dead4rat.jsx?v=9"></script>
 </body>
 </html>
