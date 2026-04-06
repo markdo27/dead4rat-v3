@@ -57,6 +57,8 @@ const AUDIO_BAND_MAP = {
 const globalState = {
     timeSpeed: 1.0,
     audioGain: 1.0,
+    lfoSpeed: 1.0,
+    lfoDepth: 0.5,
     spectralCentroid: 0.0,
     bass: 0.0, mid: 0.0, high: 0.0,
     transient: false,
@@ -141,7 +143,7 @@ TerminalWindow._globalZ = 10;
 // SIGNAL MONITOR — Live spectrum + band meters
 // ═══════════════════════════════════════════
 
-function SignalMonitor({ audioEngine, audioGain, onGainChange, audioFile, onFileChange, onMicToggle, useMic }) {
+function SignalMonitor({ audioEngine, audioGain, onGainChange, audioFile, onFileChange, onMicToggle, useMic, lfoSpeed, onLfoSpeedChange, lfoDepth, onLfoDepthChange }) {
     const canvasRef = React.useRef(null);
     const animRef = React.useRef(null);
     const [bass, setBass] = React.useState(0);
@@ -285,6 +287,31 @@ function SignalMonitor({ audioEngine, audioGain, onGainChange, audioFile, onFile
 
             <div className="hud-divider" />
 
+            {/* LFO Global Controls */}
+            <div style={{fontSize: '0.6rem', color: 'var(--text-dim)', marginBottom: '6px'}}>LFO AUTOMATION</div>
+            <div className="signal-control-row">
+                <span className="status-label">SPEED</span>
+                <input type="range" className="brutalist-slider" min="1" max="100" step="1"
+                    value={Math.round(lfoSpeed * 10)}
+                    onChange={(e) => onLfoSpeedChange(parseFloat(e.target.value) / 10.0)}
+                />
+                <span style={{fontSize: '0.6rem', color: 'var(--text-bright)', width: '36px', textAlign: 'right'}}>
+                    {lfoSpeed.toFixed(1)}Hz
+                </span>
+            </div>
+            <div className="signal-control-row">
+                <span className="status-label">DEPTH</span>
+                <input type="range" className="brutalist-slider" min="0" max="100" step="1"
+                    value={Math.round(lfoDepth * 100)}
+                    onChange={(e) => onLfoDepthChange(parseFloat(e.target.value) / 100.0)}
+                />
+                <span style={{fontSize: '0.6rem', color: 'var(--text-bright)', width: '32px', textAlign: 'right'}}>
+                    {Math.round(lfoDepth * 100)}%
+                </span>
+            </div>
+
+            <div className="hud-divider" />
+
             {/* Source selection */}
             <div style={{fontSize: '0.6rem', color: 'var(--text-dim)', marginBottom: '6px'}}>AUDIO SOURCE</div>
             <div style={{display: 'flex', gap: '4px'}}>
@@ -328,6 +355,8 @@ function Dead4RatApp() {
     const [useMic, setUseMic] = React.useState(false);
     const [audioGain, setAudioGain] = React.useState(1.0);
     const [audioFile, setAudioFile] = React.useState(null);
+    const [lfoSpeed, setLfoSpeed] = React.useState(1.0);
+    const [lfoDepth, setLfoDepth] = React.useState(0.5);
 
     // Live band values for effect card glow (updated from render loop)
     const liveAudio = React.useRef({ bass: 0, mid: 0, high: 0 });
@@ -458,6 +487,31 @@ function Dead4RatApp() {
             liveAudio.current.mid  = globalState.mid;
             liveAudio.current.high = globalState.high;
 
+            // ── LFO Automation Pass ──────────────────────────────────
+            const now = performance.now() * 0.001;
+            const spd = globalState.lfoSpeed;
+            const dep = globalState.lfoDepth;
+            Object.keys(globalState.glitchez).forEach(ek => {
+                const eff = globalState.glitchez[ek];
+                Object.keys(eff.params).forEach(pk => {
+                    const p = eff.params[pk];
+                    if (!p.lfo) return;
+                    const base = (p._lfoBase !== undefined) ? p._lfoBase : p.value;
+                    const range = p.max - p.min;
+                    let mod = 0;
+                    const t = now * spd;
+                    switch (p.lfo) {
+                        case 'sin': mod = Math.sin(t * Math.PI * 2) * 0.5 + 0.5; break;
+                        case 'tri': mod = Math.abs(((t % 1) * 2) - 1); break;
+                        case 'saw': mod = t % 1; break;
+                        case 'rnd': mod = (Math.sin(t * 127.1) * 43758.5453) % 1; mod = Math.abs(mod); break;
+                    }
+                    // Swing around base: base ± (depth * range/2)
+                    const offset = (mod - 0.5) * dep * range;
+                    p.value = Math.min(p.max, Math.max(p.min, base + offset));
+                });
+            });
+
             globalState.compositeSource = mediaManager.composite(globalState.videoElement);
             canvasEngine.render(globalState);
         };
@@ -468,6 +522,14 @@ function Dead4RatApp() {
     React.useEffect(() => {
         globalState.audioGain = audioGain;
     }, [audioGain]);
+
+    React.useEffect(() => {
+        globalState.lfoSpeed = lfoSpeed;
+    }, [lfoSpeed]);
+
+    React.useEffect(() => {
+        globalState.lfoDepth = lfoDepth;
+    }, [lfoDepth]);
 
     // ── Media layers ──────────────────────────────────────────────────────
     const addImage = () => {
@@ -578,19 +640,51 @@ function Dead4RatApp() {
                     </span>
                 </div>
                 {/* Params (only when enabled) */}
-                {effect.enabled && Object.keys(effect.params).map(pk => (
-                    <div className="param-row" key={pk}>
-                        <label>{pk.toUpperCase()}</label>
-                        <input type="range" className="brutalist-slider"
-                            min={effect.params[pk].min} max={effect.params[pk].max}
-                            step={effect.params[pk].step} value={globalState.glitchez[key].params[pk].value}
-                            onChange={(e) => { globalState.glitchez[key].params[pk].value = parseFloat(e.target.value); setUiRefresh(r => r + 1); }}
-                        />
-                        <span style={{textAlign: 'right', color: 'var(--text-bright)', fontSize: '0.65rem'}}>
-                            {globalState.glitchez[key].params[pk].value.toFixed(2)}
-                        </span>
-                    </div>
-                ))}
+                {effect.enabled && Object.keys(effect.params).map(pk => {
+                    const param = globalState.glitchez[key].params[pk];
+                    const waves = [null, 'sin', 'tri', 'saw', 'rnd'];
+                    const waveLabels = { sin: '∿', tri: '△', saw: '⧸', rnd: '?' };
+                    const cycleWave = () => {
+                        const curIdx = waves.indexOf(param.lfo || null);
+                        const nextIdx = (curIdx + 1) % waves.length;
+                        const nextWave = waves[nextIdx];
+                        if (nextWave) {
+                            param._lfoBase = param.value;
+                            param.lfo = nextWave;
+                        } else {
+                            if (param._lfoBase !== undefined) param.value = param._lfoBase;
+                            delete param._lfoBase;
+                            param.lfo = null;
+                        }
+                        setUiRefresh(r => r + 1);
+                    };
+                    return (
+                        <div className="param-row" key={pk}>
+                            <label>{pk.toUpperCase()}</label>
+                            <input type="range" className="brutalist-slider"
+                                min={param.min} max={param.max}
+                                step={param.step}
+                                value={param._lfoBase !== undefined ? param._lfoBase : param.value}
+                                onChange={(e) => {
+                                    const v = parseFloat(e.target.value);
+                                    if (param.lfo) { param._lfoBase = v; }
+                                    else { param.value = v; }
+                                    setUiRefresh(r => r + 1);
+                                }}
+                            />
+                            <button
+                                className={`lfo-btn ${param.lfo ? 'active' : ''}`}
+                                onClick={cycleWave}
+                                title={param.lfo ? `LFO: ${param.lfo.toUpperCase()}` : 'LFO Off'}
+                            >
+                                {param.lfo ? waveLabels[param.lfo] : '~'}
+                            </button>
+                            <span style={{textAlign: 'right', color: 'var(--text-bright)', fontSize: '0.65rem', width: '36px'}}>
+                                {param.value.toFixed(2)}
+                            </span>
+                        </div>
+                    );
+                })}
                 {/* Audio modulation info bar — shown when audioReactive is on */}
                 {effect.audioReactive && (
                     <div className="audio-info-bar">
@@ -689,6 +783,10 @@ function Dead4RatApp() {
                         onFileChange={handleFileSource}
                         onMicToggle={handleMicToggle}
                         useMic={useMic}
+                        lfoSpeed={lfoSpeed}
+                        onLfoSpeedChange={setLfoSpeed}
+                        lfoDepth={lfoDepth}
+                        onLfoDepthChange={setLfoDepth}
                     />
                 </TerminalWindow>
             )}

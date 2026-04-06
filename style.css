@@ -481,6 +481,48 @@ input[type="range"]::-webkit-slider-thumb:hover {
 }
 
 /* ═══════════════════════════════════════════
+   LFO BUTTON — per-parameter wave toggle
+   ═══════════════════════════════════════════ */
+
+.lfo-btn {
+    pointer-events: auto;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    font-weight: 800;
+    width: 22px;
+    height: 20px;
+    padding: 0;
+    background: transparent;
+    color: var(--text-muted);
+    border: 1px solid var(--border-dim);
+    cursor: pointer;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.1s ease;
+    line-height: 1;
+}
+
+.lfo-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.lfo-btn.active {
+    color: #00FF88;
+    border-color: #00FF88;
+    background: rgba(0, 255, 136, 0.08);
+    box-shadow: 0 0 6px rgba(0, 255, 136, 0.3);
+    animation: lfo-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes lfo-pulse {
+    0%, 100% { box-shadow: 0 0 4px rgba(0, 255, 136, 0.2); }
+    50% { box-shadow: 0 0 10px rgba(0, 255, 136, 0.5); }
+}
+
+/* ═══════════════════════════════════════════
    V3 INPUTS
    ═══════════════════════════════════════════ */
 
