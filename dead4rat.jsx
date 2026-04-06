@@ -1,25 +1,47 @@
 const initialEffectSettings = {
-    rgbShift: { name: "RGB Shift", enabled: false, audioReactive: false, params: { amount: { value: 5, min: 0, max: 50, step: 1 }, angle: { value: 0, min: 0, max: 360, step: 1 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
-    scanLines: { name: "Scan Lines", enabled: true, audioReactive: false, params: { density: { value: 0.7, min: 0, max: 1, step: 0.01 }, opacity: { value: 0.1, min: 0, max: 1, step: 0.01 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
-    noise: { name: "Signal Noise", enabled: false, audioReactive: false, params: { amount: { value: 0.1, min: 0, max: 1, step: 0.01 }, chromatic: { value: 0, min: 0, max: 1, step: 1 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
-    colorDistortion: { name: "LUT Corrupt (Hue)", enabled: false, audioReactive: false, params: { hue: { value: 0, min: 0, max: 360, step: 1 }, saturation: { value: 1, min: 0, max: 5, step: 0.1 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
-    blockiness: { name: "Data Moshing", enabled: false, audioReactive: false, params: { size: { value: 4, min: 1, max: 32, step: 1 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
-    chromaGlitch: { name: "Chroma Shift", enabled: false, audioReactive: false, params: { shiftAmount: { value: 10, min: 0, max: 100, step: 1 }, bleedIntensity: { value: 0.3, min: 0, max: 1, step: 0.01 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
-    vhsJitter: { name: "VHS Jitter", enabled: false, audioReactive: false, params: { vertical: { value: 1, min: 0, max: 10, step: 0.1 }, horizontal: { value: 1, min: 0, max: 10, step: 0.1 }, tear: { value: 0.3, min: 0, max: 1, step: 0.01 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
-    videoFeedback: { name: "FeedbackPro Loop", enabled: false, audioReactive: false, params: { amount: { value: 0.8, min: 0, max: 0.99, step: 0.01 }, zoom: { value: 1.005, min: 0.8, max: 1.5, step: 0.001 }, rotation: { value: 0.0, min: -5, max: 5, step: 0.1 }, moveX: { value: 0.0, min: -0.1, max: 0.1, step: 0.001 }, moveY: { value: 0.0, min: -0.1, max: 0.1, step: 0.001 }, hueShift: { value: 2.0, min: 0.0, max: 50.0, step: 0.1 }, lumaThresh: { value: 1.0, min: 0.0, max: 1.0, step: 0.01 }, mirror: { value: 0, min: 0, max: 1, step: 1 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
-    acidMelt: { name: "Substrate Melt", enabled: false, audioReactive: false, params: { amount: { value: 0.9, min: 0, max: 0.99, step: 0.01 }, gravity: { value: 0.01, min: -0.05, max: 0.05, step: 0.001 }, turbulence: { value: 0.05, min: 0, max: 0.5, step: 0.01 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
-    chromaDelay: { name: "Chroma Ghost", enabled: false, audioReactive: false, params: { amount: { value: 0.8, min: 0, max: 0.99, step: 0.01 }, scaleR: { value: 1.01, min: 0.8, max: 1.2, step: 0.001 }, scaleG: { value: 1.0, min: 0.8, max: 1.2, step: 0.001 }, scaleB: { value: 0.99, min: 0.8, max: 1.2, step: 0.001 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
-    edgeDetection: { name: "Edge Detection", enabled: false, audioReactive: false, params: { threshold: { value: 50, min: 1, max: 255, step: 1 }, invert: { value: 0, min: 0, max: 1, step: 1 }, colorMode: { value: 0, min: 0, max: 1, step: 1 }, glow: { value: 0.3, min: 0, max: 1, step: 0.01 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
-    colorize: { name: "Screen Colorize", enabled: false, audioReactive: false, params: { hue: { value: 200, min: 0, max: 360, step: 1 }, strength: { value: 0.5, min: 0, max: 1, step: 0.01 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
-    dataPointCloud: { name: "Bag of Grains", enabled: false, audioReactive: false, params: { density: { value: 0.2, min: 0.01, max: 1, step: 0.01 }, size: { value: 1, min: 1, max: 10, step: 1 }, depth: { value: 0.5, min: 0, max: 1, step: 0.01 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
-    motionDetection: { name: "Motion Slit", enabled: false, audioReactive: false, params: { threshold: { value: 25, min: 1, max: 255, step: 1 }, decay: { value: 0.95, min: 0.8, max: 0.99, step: 0.01 }, tint: { value: 0.5, min: 0, max: 1, step: 0.01 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
-    kaleidoscope: { name: "Kaleidoscope", enabled: false, audioReactive: false, params: { segments: { value: 6, min: 2, max: 12, step: 1 }, rotation: { value: 0, min: -180, max: 180, step: 1 }, zoom: { value: 1.0, min: 0.2, max: 3.0, step: 0.01 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
-    barrelDistortion: { name: "Barrel / Fisheye", enabled: false, audioReactive: false, params: { amount: { value: 0.5, min: -2, max: 2, step: 0.01 }, centerX: { value: 0.5, min: 0, max: 1, step: 0.01 }, centerY: { value: 0.5, min: 0, max: 1, step: 0.01 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
-    pixelSort: { name: "Pixel Sort", enabled: false, audioReactive: false, params: { threshold: { value: 0.5, min: 0, max: 1, step: 0.01 }, direction: { value: 0, min: 0, max: 1, step: 1 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
-    posterize: { name: "Posterize", enabled: false, audioReactive: false, params: { levels: { value: 8, min: 2, max: 32, step: 1 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } }
+    rgbShift:        { name: "RGB Shift",        enabled: false, audioReactive: false, params: { amount: { value: 5,    min: 0,    max: 50,   step: 1    }, angle:      { value: 0,    min: 0,    max: 360,  step: 1    }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
+    scanLines:       { name: "Scan Lines",       enabled: true,  audioReactive: false, params: { density: { value: 0.7, min: 0,    max: 1,    step: 0.01 }, opacity:    { value: 0.1, min: 0,    max: 1,    step: 0.01 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
+    noise:           { name: "Signal Noise",     enabled: false, audioReactive: false, params: { amount:  { value: 0.1, min: 0,    max: 1,    step: 0.01 }, chromatic:  { value: 0,   min: 0,    max: 1,    step: 1    }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
+    colorDistortion: { name: "LUT Corrupt",      enabled: false, audioReactive: false, params: { hue:     { value: 0,   min: 0,    max: 360,  step: 1    }, saturation: { value: 1,   min: 0,    max: 5,    step: 0.1  }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
+    blockiness:      { name: "Data Moshing",     enabled: false, audioReactive: false, params: { size:    { value: 4,   min: 1,    max: 32,   step: 1    }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
+    chromaGlitch:    { name: "Chroma Shift",     enabled: false, audioReactive: false, params: { shiftAmount: { value: 10, min: 0, max: 100, step: 1 }, bleedIntensity: { value: 0.3, min: 0, max: 1, step: 0.01 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
+    vhsJitter:       { name: "VHS Jitter",       enabled: false, audioReactive: false, params: { vertical: { value: 1, min: 0, max: 10, step: 0.1 }, horizontal: { value: 1, min: 0, max: 10, step: 0.1 }, tear: { value: 0.3, min: 0, max: 1, step: 0.01 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
+    videoFeedback:   { name: "FeedbackPro Loop", enabled: false, audioReactive: false, params: { amount: { value: 0.8, min: 0, max: 0.99, step: 0.01 }, zoom: { value: 1.005, min: 0.8, max: 1.5, step: 0.001 }, rotation: { value: 0.0, min: -5, max: 5, step: 0.1 }, moveX: { value: 0.0, min: -0.1, max: 0.1, step: 0.001 }, moveY: { value: 0.0, min: -0.1, max: 0.1, step: 0.001 }, hueShift: { value: 2.0, min: 0.0, max: 50.0, step: 0.1 }, lumaThresh: { value: 1.0, min: 0.0, max: 1.0, step: 0.01 }, mirror: { value: 0, min: 0, max: 1, step: 1 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
+    acidMelt:        { name: "Substrate Melt",   enabled: false, audioReactive: false, params: { amount: { value: 0.9, min: 0, max: 0.99, step: 0.01 }, gravity: { value: 0.01, min: -0.05, max: 0.05, step: 0.001 }, turbulence: { value: 0.05, min: 0, max: 0.5, step: 0.01 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
+    chromaDelay:     { name: "Chroma Ghost",     enabled: false, audioReactive: false, params: { amount: { value: 0.8, min: 0, max: 0.99, step: 0.01 }, scaleR: { value: 1.01, min: 0.8, max: 1.2, step: 0.001 }, scaleG: { value: 1.0, min: 0.8, max: 1.2, step: 0.001 }, scaleB: { value: 0.99, min: 0.8, max: 1.2, step: 0.001 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
+    edgeDetection:   { name: "Edge Detection",   enabled: false, audioReactive: false, params: { threshold: { value: 50, min: 1, max: 255, step: 1 }, invert: { value: 0, min: 0, max: 1, step: 1 }, colorMode: { value: 0, min: 0, max: 1, step: 1 }, glow: { value: 0.3, min: 0, max: 1, step: 0.01 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
+    colorize:        { name: "Screen Colorize",  enabled: false, audioReactive: false, params: { hue: { value: 200, min: 0, max: 360, step: 1 }, strength: { value: 0.5, min: 0, max: 1, step: 0.01 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
+    dataPointCloud:  { name: "Bag of Grains",    enabled: false, audioReactive: false, params: { density: { value: 0.2, min: 0.01, max: 1, step: 0.01 }, size: { value: 1, min: 1, max: 10, step: 1 }, depth: { value: 0.5, min: 0, max: 1, step: 0.01 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
+    motionDetection: { name: "Motion Slit",      enabled: false, audioReactive: false, params: { threshold: { value: 25, min: 1, max: 255, step: 1 }, decay: { value: 0.95, min: 0.8, max: 0.99, step: 0.01 }, tint: { value: 0.5, min: 0, max: 1, step: 0.01 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
+    kaleidoscope:    { name: "Kaleidoscope",     enabled: false, audioReactive: false, params: { segments: { value: 6, min: 2, max: 12, step: 1 }, rotation: { value: 0, min: -180, max: 180, step: 1 }, zoom: { value: 1.0, min: 0.2, max: 3.0, step: 0.01 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
+    barrelDistortion:{ name: "Barrel / Fisheye", enabled: false, audioReactive: false, params: { amount: { value: 0.5, min: -2, max: 2, step: 0.01 }, centerX: { value: 0.5, min: 0, max: 1, step: 0.01 }, centerY: { value: 0.5, min: 0, max: 1, step: 0.01 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
+    pixelSort:       { name: "Pixel Sort",       enabled: false, audioReactive: false, params: { threshold: { value: 0.5, min: 0, max: 1, step: 0.01 }, direction: { value: 0, min: 0, max: 1, step: 1 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
+    posterize:       { name: "Posterize",        enabled: false, audioReactive: false, params: { levels: { value: 8, min: 2, max: 32, step: 1 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } }
 };
 
-// Global Mutation State
+// Which band modulates each effect (for display + glow feedback)
+const AUDIO_BAND_MAP = {
+    rgbShift:        'HIGH',
+    scanLines:       'MID',
+    noise:           'MID',
+    colorDistortion: 'MID',
+    blockiness:      'BASS',
+    chromaGlitch:    'HIGH',
+    vhsJitter:       'BASS',
+    videoFeedback:   'BASS',
+    acidMelt:        'BASS',
+    chromaDelay:     'HIGH',
+    edgeDetection:   'HIGH',
+    colorize:        'MID',
+    dataPointCloud:  'MID',
+    motionDetection: 'BASS',
+    kaleidoscope:    'MID',
+    barrelDistortion:'BASS',
+    pixelSort:       'HIGH',
+    posterize:       'BASS',
+};
+
+// Global Mutation State (bypasses React for 60fps)
 const globalState = {
     timeSpeed: 1.0,
     audioGain: 1.0,
@@ -35,10 +57,9 @@ let audioEngine = null;
 let canvasEngine = null;
 let mediaManager = null;
 let presetManager = null;
-let midiController = null;
 
 // ═══════════════════════════════════════════
-// DRAGGABLE TERMINAL WINDOW COMPONENT
+// DRAGGABLE TERMINAL WINDOW
 // ═══════════════════════════════════════════
 
 function TerminalWindow({ id, title, tag, initialX, initialY, width, children, maxHeight, onClose, minimized }) {
@@ -75,11 +96,7 @@ function TerminalWindow({ id, title, tag, initialX, initialY, width, children, m
 
     if (minimized) {
         return (
-            <div
-                className="minimized-indicator"
-                style={{ left: pos.x + 'px', top: pos.y + 'px' }}
-                onClick={onClose}
-            >
+            <div className="minimized-indicator" style={{ left: pos.x + 'px', top: pos.y + 'px' }} onClick={onClose}>
                 {title}
             </div>
         );
@@ -106,16 +123,189 @@ function TerminalWindow({ id, title, tag, initialX, initialY, width, children, m
         </div>
     );
 }
-
 TerminalWindow._globalZ = 10;
 
+// ═══════════════════════════════════════════
+// SIGNAL MONITOR — Live spectrum + band meters
+// ═══════════════════════════════════════════
+
+function SignalMonitor({ audioEngine, audioGain, onGainChange, audioFile, onFileChange, onMicToggle, useMic }) {
+    const canvasRef = React.useRef(null);
+    const animRef = React.useRef(null);
+    const [bass, setBass] = React.useState(0);
+    const [mid, setMid] = React.useState(0);
+    const [high, setHigh] = React.useState(0);
+    const [transient, setTransient] = React.useState(false);
+
+    React.useEffect(() => {
+        let frameId;
+        const draw = () => {
+            frameId = requestAnimationFrame(draw);
+            const canvas = canvasRef.current;
+            if (!canvas || !audioEngine) return;
+            const ctx = canvas.getContext('2d');
+            const W = canvas.width;
+            const H = canvas.height;
+
+            // Get fresh data
+            const data = audioEngine.getFrequencyData();
+            if (!data || data.length === 0) {
+                ctx.fillStyle = '#050505';
+                ctx.fillRect(0, 0, W, H);
+                return;
+            }
+
+            // Background
+            ctx.fillStyle = '#050505';
+            ctx.fillRect(0, 0, W, H);
+
+            // Draw spectrum bars (use first 256 bins for clarity)
+            const binCount = Math.min(data.length, 256);
+            const barW = W / binCount;
+            for (let i = 0; i < binCount; i++) {
+                const v = data[i] / 255.0;
+                const barH = v * H;
+                // Color by band: bass=orange, mid=yellow, high=white
+                let hue;
+                if (i < 8) hue = '#FF5500';
+                else if (i < 60) hue = '#FF8800';
+                else hue = `rgba(255,${Math.floor(200 + v * 55)},${Math.floor(v * 80)},${0.7 + v * 0.3})`;
+                ctx.fillStyle = hue;
+                ctx.fillRect(i * barW, H - barH, Math.max(1, barW - 0.5), barH);
+            }
+
+            // Grid lines
+            ctx.strokeStyle = 'rgba(255,85,0,0.08)';
+            ctx.lineWidth = 0.5;
+            for (let y = 0; y < H; y += H / 4) {
+                ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+            }
+
+            // Update band values for meters (directly from engine, not waiting for React setState)
+            setBass(audioEngine.bass);
+            setMid(audioEngine.mid);
+            setHigh(audioEngine.high);
+            setTransient(audioEngine.transientDetected);
+        };
+        draw();
+        return () => cancelAnimationFrame(frameId);
+    }, [audioEngine]);
+
+    const BandMeter = ({ label, value, color }) => (
+        <div style={{display: 'flex', alignItems: 'center', gap: '6px', marginTop: '5px'}}>
+            <span style={{fontSize: '0.6rem', color: 'var(--text-dim)', width: '30px'}}>{label}</span>
+            <div className="band-meter-track">
+                <div className="band-meter-fill" style={{ width: `${Math.min(100, value * 100 * 4)}%`, background: color }} />
+            </div>
+            <span style={{fontSize: '0.55rem', color, width: '32px', textAlign: 'right', fontVariantNumeric: 'tabular-nums'}}>
+                {(value * 100).toFixed(0)}%
+            </span>
+        </div>
+    );
+
+    const handleFileInput = () => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'audio/*';
+        input.onchange = (e) => {
+            const file = e.target.files[0];
+            if (file && onFileChange) onFileChange(file);
+        };
+        input.click();
+    };
+
+    return (
+        <div>
+            {/* Spectrum Visualizer */}
+            <canvas
+                ref={canvasRef}
+                width={272}
+                height={60}
+                className="signal-canvas"
+            />
+
+            {/* Beat flash */}
+            <div style={{display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px', marginBottom: '4px'}}>
+                <div className={`transient-dot ${transient ? 'active' : ''}`} />
+                <span style={{fontSize: '0.6rem', color: transient ? 'var(--accent)' : 'var(--text-muted)'}}>
+                    {transient ? 'TRANSIENT DETECTED' : 'MONITORING...'}
+                </span>
+            </div>
+
+            {/* Band Meters */}
+            <BandMeter label="BASS" value={bass} color="#FF5500" />
+            <BandMeter label="MID"  value={mid}  color="#FF9900" />
+            <BandMeter label="HIGH" value={high} color="#FFDD00" />
+
+            <div className="hud-divider" style={{marginTop: '10px'}} />
+
+            {/* Controls */}
+            <div className="signal-control-row">
+                <span className="status-label">GAIN</span>
+                <input type="range" className="brutalist-slider" min="0" max="300" step="1"
+                    value={Math.round(audioGain * 100)}
+                    onChange={(e) => onGainChange(parseFloat(e.target.value) / 100.0)}
+                />
+                <span style={{fontSize: '0.6rem', color: 'var(--text-bright)', width: '32px', textAlign: 'right'}}>
+                    {Math.round(audioGain * 100)}%
+                </span>
+            </div>
+            <div className="signal-control-row">
+                <span className="status-label">THRESH</span>
+                <input type="range" className="brutalist-slider" min="0" max="30" step="1"
+                    value={Math.round((audioEngine?.threshold || 0.04) * 100)}
+                    onChange={(e) => { if (audioEngine) audioEngine.threshold = parseFloat(e.target.value) / 100.0; }}
+                />
+                <span style={{fontSize: '0.6rem', color: 'var(--text-bright)', width: '32px', textAlign: 'right'}}>
+                    {Math.round((audioEngine?.threshold || 0.04) * 100)}%
+                </span>
+            </div>
+            <div className="signal-control-row">
+                <span className="status-label">SMOOTH</span>
+                <input type="range" className="brutalist-slider" min="0" max="99" step="1"
+                    value={Math.round((audioEngine?.smoothing || 0.7) * 100)}
+                    onChange={(e) => { if (audioEngine) audioEngine.smoothing = parseFloat(e.target.value) / 100.0; }}
+                />
+                <span style={{fontSize: '0.6rem', color: 'var(--text-bright)', width: '32px', textAlign: 'right'}}>
+                    {Math.round((audioEngine?.smoothing || 0.7) * 100)}%
+                </span>
+            </div>
+
+            <div className="hud-divider" />
+
+            {/* Source selection */}
+            <div style={{fontSize: '0.6rem', color: 'var(--text-dim)', marginBottom: '6px'}}>AUDIO SOURCE</div>
+            <div style={{display: 'flex', gap: '4px'}}>
+                <button
+                    className={`brutalist-button ${useMic ? 'primary' : ''}`}
+                    style={{flex: 1, fontSize: '0.6rem', padding: '5px 4px'}}
+                    onClick={() => onMicToggle(true)}
+                >
+                    🎙 MIC
+                </button>
+                <button
+                    className={`brutalist-button ${audioFile ? 'primary' : ''}`}
+                    style={{flex: 1, fontSize: '0.6rem', padding: '5px 4px'}}
+                    onClick={handleFileInput}
+                >
+                    🎵 FILE
+                </button>
+            </div>
+            {audioFile && (
+                <div style={{marginTop: '5px', fontSize: '0.55rem', color: 'var(--accent)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>
+                    ▶ {audioFile.name}
+                </div>
+            )}
+        </div>
+    );
+}
 
 // ═══════════════════════════════════════════
 // MAIN APP
 // ═══════════════════════════════════════════
 
 function Dead4RatApp() {
-    const [fps, setFps] = React.useState("0.0");
+    const [fps, setFps] = React.useState('0.0');
     const [started, setStarted] = React.useState(false);
     const [layers, setLayers] = React.useState([]);
     const [selectedLayerId, setSelectedLayerId] = React.useState(null);
@@ -124,12 +314,17 @@ function Dead4RatApp() {
     const [uiRefresh, setUiRefresh] = React.useState(0);
     const [uiVisible, setUiVisible] = React.useState(true);
     const [useMic, setUseMic] = React.useState(false);
+    const [audioGain, setAudioGain] = React.useState(1.0);
+    const [audioFile, setAudioFile] = React.useState(null);
 
-    // Panel visibility states (for [×] minimize)
+    // Live band values for effect card glow (updated from render loop)
+    const liveAudio = React.useRef({ bass: 0, mid: 0, high: 0 });
+
     const [panels, setPanels] = React.useState({
         terminal: true,
         command: true,
-        effects: true
+        effects: true,
+        signal: true,
     });
 
     const togglePanel = (key) => setPanels(p => ({...p, [key]: !p[key]}));
@@ -159,15 +354,29 @@ function Dead4RatApp() {
         setLayers([]);
         setSelectedLayerId(null);
         setUseMic(false);
+        setAudioFile(null);
+        setAudioGain(1.0);
         audioEngine.stop();
         setUiRefresh(r => r + 1);
     };
 
-    const handleMicToggle = async (enabled) => {
-        setUseMic(enabled);
+    const handleMicToggle = async (enable) => {
+        setUseMic(enable);
         if (!started) return;
-        if (enabled) await audioEngine.start();
-        else audioEngine.stop();
+        audioEngine.stop();
+        setAudioFile(null);
+        if (enable) {
+            await audioEngine.start();
+            setUseMic(true);
+        }
+    };
+
+    const handleFileSource = async (file) => {
+        setAudioFile(file);
+        setUseMic(false);
+        if (started) {
+            await audioEngine.startFromFile(file);
+        }
     };
 
     const scrambleParams = () => {
@@ -197,11 +406,18 @@ function Dead4RatApp() {
         const videoElement = document.getElementById('webcam-feed');
         if (!videoElement) return;
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: useMic });
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
             videoElement.srcObject = stream;
             globalState.videoElement = videoElement;
-        } catch (err) { console.error("Camera access denied", err); }
-        if (useMic) await audioEngine.start();
+        } catch (err) { console.error('Camera access denied', err); }
+
+        // Start audio source if selected
+        if (useMic) {
+            await audioEngine.start();
+        } else if (audioFile) {
+            await audioEngine.startFromFile(audioFile);
+        }
+
         setStarted(true);
 
         let lastTime = performance.now();
@@ -214,18 +430,31 @@ function Dead4RatApp() {
                 lastTime = time;
                 frames = 0;
             }
-            globalState.spectralCentroid = audioEngine.spectralCentroid * globalState.audioGain;
-            globalState.bass = audioEngine.bass * globalState.audioGain;
-            globalState.mid = audioEngine.mid * globalState.audioGain;
-            globalState.high = audioEngine.high * globalState.audioGain;
+            // Sync audio → globalState
+            const gain = globalState.audioGain;
+            globalState.spectralCentroid = audioEngine.spectralCentroid * gain;
+            globalState.bass = audioEngine.bass * gain;
+            globalState.mid  = audioEngine.mid * gain;
+            globalState.high = audioEngine.high * gain;
             globalState.transient = audioEngine.transientDetected;
+
+            // Also store in ref for effect card glow (avoids React re-render cost)
+            liveAudio.current.bass = globalState.bass;
+            liveAudio.current.mid  = globalState.mid;
+            liveAudio.current.high = globalState.high;
+
             globalState.compositeSource = mediaManager.composite(globalState.videoElement);
             canvasEngine.render(globalState);
         };
         requestAnimationFrame(renderLoop);
     };
 
-    // --- Media ---
+    // ── keep globalState.audioGain in sync with React state ──────────────
+    React.useEffect(() => {
+        globalState.audioGain = audioGain;
+    }, [audioGain]);
+
+    // ── Media layers ──────────────────────────────────────────────────────
     const addImage = () => {
         const input = document.createElement('input');
         input.type = 'file'; input.accept = 'image/*';
@@ -267,10 +496,8 @@ function Dead4RatApp() {
                 const scene = new THREE.Scene();
                 const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
                 camera.position.z = 5;
-                scene.add(new THREE.DirectionalLight(0xffffff, 1).position.set(1, 1, 1) || new THREE.DirectionalLight(0xffffff, 1));
                 const light = new THREE.DirectionalLight(0xffffff, 1);
-                light.position.set(1,1,1);
-                scene.add(light);
+                light.position.set(1,1,1); scene.add(light);
                 scene.add(new THREE.AmbientLight(0x404040));
                 const loader = new THREE.STLLoader();
                 const geometry = loader.parse(re.target.result);
@@ -307,7 +534,7 @@ function Dead4RatApp() {
     };
 
     const savePreset = () => {
-        const name = prompt("Enter Preset Name:");
+        const name = prompt('Enter Preset Name:');
         if (name) { presetManager.savePreset(name, globalState.glitchez, canvasEngine.canvas); setPresets([...presetManager.presets]); }
     };
 
@@ -323,21 +550,60 @@ function Dead4RatApp() {
     const selectedLayer = mediaManager?.layers.find(l => l.id === selectedLayerId);
     const effectKeys = Object.keys(globalState.glitchez);
 
-    // Render an effect module
+    // ── Effect card renderer ──────────────────────────────────────────────
     const renderEffect = (key) => {
         const effect = globalState.glitchez[key];
+        const band = AUDIO_BAND_MAP[key] || 'MID';
+        const bandVal = band === 'BASS' ? liveAudio.current.bass : band === 'HIGH' ? liveAudio.current.high : liveAudio.current.mid;
+        const isAudioActive = effect.audioReactive && effect.enabled && audioEngine.isRunning;
+        const glowIntensity = isAudioActive ? Math.min(1, bandVal * 4) : 0;
+
+        const bandColor = band === 'BASS' ? '#FF5500' : band === 'MID' ? '#FF9900' : '#FFDD00';
+
         return (
-            <div className={`glitch-item ${effect.enabled ? 'effect-active' : ''}`} key={key}>
+            <div
+                className={`glitch-item ${effect.enabled ? 'effect-active' : ''}`}
+                key={key}
+                style={{
+                    boxShadow: glowIntensity > 0.05
+                        ? `0 0 ${Math.round(glowIntensity * 16)}px ${bandColor}55, inset 0 0 ${Math.round(glowIntensity * 8)}px ${bandColor}22`
+                        : 'none',
+                    borderLeftColor: effect.audioReactive ? bandColor : undefined,
+                    transition: 'box-shadow 0.08s ease',
+                }}
+            >
+                {/* Header row: dot + name + AUDIO toggle + ON/OFF toggle */}
                 <div className="glitch-header">
-                    <span style={{display: 'flex', alignItems: 'center'}}>
-                        <span className={`effect-dot ${effect.enabled ? 'on' : ''}`}></span>
-                        <span style={{color: effect.enabled ? 'var(--accent)' : 'var(--text-dim)'}}>{effect.name.toUpperCase()}</span>
+                    <span style={{display: 'flex', alignItems: 'center', gap: '4px', flex: 1, minWidth: 0}}>
+                        <span className={`effect-dot ${effect.enabled ? 'on' : ''}`} />
+                        <span style={{
+                            color: effect.enabled ? 'var(--accent)' : 'var(--text-dim)',
+                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                            fontSize: '0.7rem',
+                        }}>
+                            {effect.name.toUpperCase()}
+                        </span>
                     </span>
-                    <input type="checkbox" className="brutalist-toggle"
-                        checked={globalState.glitchez[key].enabled}
-                        onChange={(e) => { globalState.glitchez[key].enabled = e.target.checked; setUiRefresh(r => r + 1); }}
-                    />
+                    <span style={{display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0}}>
+                        {/* AUDIO reactive toggle */}
+                        <button
+                            className={`audio-band-btn ${effect.audioReactive ? 'active' : ''}`}
+                            title={`Audio reactive: ${band} band`}
+                            onClick={() => { globalState.glitchez[key].audioReactive = !effect.audioReactive; setUiRefresh(r => r + 1); }}
+                            style={{ borderColor: effect.audioReactive ? bandColor : undefined, color: effect.audioReactive ? bandColor : undefined }}
+                        >
+                            ⚡{effect.audioReactive ? ` ${band}` : ''}
+                        </button>
+                        {/* Enable toggle */}
+                        <input
+                            type="checkbox"
+                            className="brutalist-toggle"
+                            checked={effect.enabled}
+                            onChange={(e) => { globalState.glitchez[key].enabled = e.target.checked; setUiRefresh(r => r + 1); }}
+                        />
+                    </span>
                 </div>
+                {/* Params (only when enabled) */}
                 {effect.enabled && Object.keys(effect.params).map(pk => (
                     <div className="param-row" key={pk}>
                         <label>{pk.toUpperCase()}</label>
@@ -346,12 +612,26 @@ function Dead4RatApp() {
                             step={effect.params[pk].step} value={globalState.glitchez[key].params[pk].value}
                             onChange={(e) => { globalState.glitchez[key].params[pk].value = parseFloat(e.target.value); setUiRefresh(r => r + 1); }}
                         />
-                        <span style={{textAlign: 'right', color: 'var(--text-bright)', fontSize: '0.65rem'}}>{globalState.glitchez[key].params[pk].value.toFixed(2)}</span>
+                        <span style={{textAlign: 'right', color: 'var(--text-bright)', fontSize: '0.65rem'}}>
+                            {globalState.glitchez[key].params[pk].value.toFixed(2)}
+                        </span>
                     </div>
                 ))}
+                {/* Audio modulation info bar — shown when audioReactive is on */}
+                {effect.audioReactive && (
+                    <div className="audio-info-bar">
+                        <span style={{color: bandColor}}>⚡ {band}</span>
+                        <div className="audio-mini-meter">
+                            <div style={{width: `${Math.min(100, bandVal * 400)}%`, background: bandColor, height: '100%', transition: 'width 0.05s'}} />
+                        </div>
+                        <span style={{color: 'var(--text-muted)', fontSize: '0.5rem'}}>{(bandVal * 100).toFixed(0)}%</span>
+                    </div>
+                )}
             </div>
         );
     };
+
+    const audioOnline = useMic || !!audioFile;
 
     return (
         <React.Fragment>
@@ -380,20 +660,14 @@ function Dead4RatApp() {
                         <span className="status-label">SYST_LOAD</span>
                         <span className="status-value">{layers.length}_LYR</span>
                     </div>
-
-                    <div className="hud-divider"></div>
-
-                    <div style={{margin: '8px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
-                        <span className="status-label" style={{fontSize: '0.7rem'}}>AUDIO_REACTIVE</span>
-                        <label style={{display: 'flex', alignItems: 'center', cursor: 'pointer', gap: '6px'}}>
-                            <input type="checkbox" className="brutalist-toggle" checked={useMic} onChange={(e) => handleMicToggle(e.target.checked)} />
-                            <span style={{fontSize: '0.7rem', color: useMic ? 'var(--accent)' : 'var(--text-dim)', fontWeight: 'bold'}}>
-                                {useMic ? "ONLINE" : "OFFLINE"}
-                            </span>
-                        </label>
+                    <div className="status-row">
+                        <span className="status-label">AUDIO</span>
+                        <span className="status-value" style={{color: audioEngine?.isRunning ? 'var(--accent)' : 'var(--text-dim)'}}>
+                            {audioEngine?.isRunning ? (audioEngine?.sourceType === 'file' ? 'FILE_SRC' : 'MIC_SRC') : 'OFFLINE'}
+                        </span>
                     </div>
 
-                    <div className="hud-divider"></div>
+                    <div className="hud-divider" />
 
                     {!started && (
                         <button className="brutalist-button primary" style={{marginTop: '12px', width: '100%', fontSize: '1rem'}} onClick={toggleStart}>
@@ -404,14 +678,13 @@ function Dead4RatApp() {
                     {started && (
                         <div style={{marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '6px'}}>
                             <button className={`brutalist-button ${isRecording ? 'active' : ''}`} onClick={recordToggle}>
-                                {isRecording ? "STP_REC" : "STR_REC"}
+                                {isRecording ? 'STP_REC' : 'STR_REC'}
                             </button>
                             <button className="brutalist-button" onClick={() => canvasEngine.exportPNG()}>EXPORT_SNAPSHOT</button>
                             <button className="brutalist-button secondary" style={{fontSize: '0.65rem'}} onClick={() => setUiVisible(false)}>COLLAPSE_UI</button>
                         </div>
                     )}
 
-                    {/* ASCII decoration footer */}
                     <div style={{marginTop: '12px', fontSize: '0.55rem', color: 'var(--text-muted)', lineHeight: '1.4', letterSpacing: '1px'}}>
                         <span>────────────────────────</span><br/>
                         <span className="blink-cursor">{'>'} AWAITING INPUT</span>
@@ -419,19 +692,43 @@ function Dead4RatApp() {
                 </TerminalWindow>
             )}
 
-            {/* ═══════════════ COMMAND CENTER (MEDIA + PRESETS + OVERRIDES) ═══════════════ */}
+            {/* ═══════════════ SIGNAL MONITOR ═══════════════ */}
+            {uiVisible && started && (
+                <TerminalWindow
+                    id="win-signal"
+                    title="SIGNAL_MONITOR"
+                    tag="AUDIO"
+                    initialX={16}
+                    initialY={340}
+                    width="300px"
+                    onClose={() => togglePanel('signal')}
+                    minimized={!panels.signal}
+                >
+                    <SignalMonitor
+                        audioEngine={audioEngine}
+                        audioGain={audioGain}
+                        onGainChange={setAudioGain}
+                        audioFile={audioFile}
+                        onFileChange={handleFileSource}
+                        onMicToggle={handleMicToggle}
+                        useMic={useMic}
+                    />
+                </TerminalWindow>
+            )}
+
+            {/* ═══════════════ COMMAND CENTER ═══════════════ */}
             {uiVisible && started && (
                 <TerminalWindow
                     id="win-command"
                     title="COMMAND_CENTER"
                     initialX={16}
-                    initialY={380}
+                    initialY={660}
                     width="340px"
-                    maxHeight="calc(100vh - 420px)"
+                    maxHeight="calc(100vh - 700px)"
                     onClose={() => togglePanel('command')}
                     minimized={!panels.command}
                 >
-                    {/* ── OVERRIDES ── */}
+                    {/* OVERRIDES */}
                     <div className="section-header">CORE_KERNEL // OVERRIDES</div>
                     <div style={{display: 'flex', gap: '4px', marginBottom: '12px'}}>
                         <button className="brutalist-button" style={{fontSize: '0.65rem', flex: 1}} onClick={scrambleEngines}>ENGINES</button>
@@ -439,9 +736,9 @@ function Dead4RatApp() {
                         <button className="brutalist-button primary" style={{fontSize: '0.65rem', flex: 1}} onClick={resetSystem}>RESET</button>
                     </div>
 
-                    <div className="hud-divider"></div>
+                    <div className="hud-divider" />
 
-                    {/* ── MEDIA ── */}
+                    {/* MEDIA */}
                     <div className="section-header">COMM_LINK // MEDIA</div>
                     <div style={{display: 'flex', gap: '4px', marginBottom: '8px'}}>
                         <button className="brutalist-button" style={{flex: 1, fontSize: '0.6rem', padding: '6px 4px'}} onClick={addImage}>+ IMAGE</button>
@@ -494,9 +791,9 @@ function Dead4RatApp() {
                         </div>
                     )}
 
-                    <div className="hud-divider"></div>
+                    <div className="hud-divider" />
 
-                    {/* ── PRESETS ── */}
+                    {/* PRESETS */}
                     <div className="section-header">DATA_STASH // PRESETS</div>
                     <button className="brutalist-button primary" style={{width: '100%', marginBottom: '8px', fontSize: '0.7rem'}} onClick={savePreset}>COMMIT CURRENT STATE</button>
                     {presets.length > 0 && (
@@ -514,7 +811,7 @@ function Dead4RatApp() {
                 </TerminalWindow>
             )}
 
-            {/* ═══════════════ EFFECTS (combined) ═══════════════ */}
+            {/* ═══════════════ EFFECTS MODULES ═══════════════ */}
             {uiVisible && started && (
                 <TerminalWindow
                     id="win-fx"
@@ -526,11 +823,18 @@ function Dead4RatApp() {
                     onClose={() => togglePanel('effects')}
                     minimized={!panels.effects}
                 >
+                    {/* Audio-reactive summary bar */}
+                    {audioEngine?.isRunning && (
+                        <div className="audio-status-bar">
+                            <span className="audio-status-dot" />
+                            <span>AUDIO {audioEngine.sourceType === 'file' ? 'FILE' : 'MIC'} — REACTIVE EFFECTS: {effectKeys.filter(k => globalState.glitchez[k].audioReactive).length}</span>
+                        </div>
+                    )}
                     {effectKeys.map(renderEffect)}
                 </TerminalWindow>
             )}
 
-            {/* ═══════════════ COLLAPSED UI BUTTON ═══════════════ */}
+            {/* ═══════════════ COLLAPSED BUTTON ═══════════════ */}
             {!uiVisible && (
                 <button className="brutalist-button show-ui-btn" onClick={() => setUiVisible(true)}>
                     DEAD4RAT

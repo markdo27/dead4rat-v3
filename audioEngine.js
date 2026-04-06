@@ -25,8 +25,25 @@ class AudioEngine {
         this.threshold = 0.04;
 
         this.stream = null;
+        this.sourceNode = null; // generic source node (mic or file)
+        this.fileAudioElement = null; // for file-based playback
+        this.sourceType = 'mic'; // 'mic' | 'file'
     }
 
+    // ─── Getters for UI control ───────────────────────────────────────────
+    get smoothing() { return this._smoothing; }
+    set smoothing(val) {
+        this._smoothing = Math.min(0.99, Math.max(0.0, val));
+    }
+
+    /** Returns a copy of the raw frequency array for visualization */
+    getFrequencyData() {
+        if (!this.analyser || !this.dataArray) return new Uint8Array(0);
+        this.analyser.getByteFrequencyData(this.dataArray);
+        return this.dataArray;
+    }
+
+    // ─── Start from Microphone ────────────────────────────────────────────
     async start() {
         if (this.isRunning) return;
 
@@ -34,45 +51,106 @@ class AudioEngine {
             this.stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
             
             this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            const source = this.audioContext.createMediaStreamSource(this.stream);
+            this.sourceNode = this.audioContext.createMediaStreamSource(this.stream);
             
-            this.analyser = this.audioContext.createAnalyser();
-            this.analyser.fftSize = 2048;
-            this.analyser.smoothingTimeConstant = 0.8;
-            
-            source.connect(this.analyser);
-            
-            const bufferLength = this.analyser.frequencyBinCount;
-            this.dataArray = new Uint8Array(bufferLength);
-            
+            this._setupAnalyser();
+            this.sourceType = 'mic';
             this.isRunning = true;
             this.update();
-            console.log("Audio Engine Started (Multi-Band)");
+            console.log('[AudioEngine] Mic started (Multi-Band)');
         } catch (err) {
-            console.error("Microphone access denied or unavailable", err);
+            console.error('[AudioEngine] Microphone access denied or unavailable', err);
         }
     }
 
+    // ─── Start from Audio File (MP3 / WAV) ───────────────────────────────
+    async startFromFile(file) {
+        // Stop any running source first
+        this.stop();
+
+        try {
+            this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+            // Create an <audio> element so the user can also hear it
+            const audioEl = new Audio();
+            audioEl.src = URL.createObjectURL(file);
+            audioEl.loop = true;
+            audioEl.crossOrigin = 'anonymous';
+            audioEl.volume = 1.0;
+            this.fileAudioElement = audioEl;
+
+            // Wait for metadata
+            await new Promise(resolve => { audioEl.oncanplay = resolve; });
+            await audioEl.play();
+
+            this.sourceNode = this.audioContext.createMediaElementSource(audioEl);
+            // Re-route audio: source → analyser → destination (so we hear it)
+            this._setupAnalyser(true);
+            this.sourceType = 'file';
+            this.isRunning = true;
+            this.update();
+            console.log('[AudioEngine] File source started:', file.name);
+        } catch (err) {
+            console.error('[AudioEngine] File source failed:', err);
+        }
+    }
+
+    // ─── Internal: create & connect the analyser ─────────────────────────
+    _setupAnalyser(connectToDestination = false) {
+        const gl = this.audioContext;
+
+        this.analyser = gl.createAnalyser();
+        this.analyser.fftSize = 2048;
+        this.analyser.smoothingTimeConstant = 0.8;
+        
+        this.sourceNode.connect(this.analyser);
+        if (connectToDestination) {
+            // File playback: let the user hear the audio
+            this.analyser.connect(gl.destination);
+        }
+
+        const bufferLength = this.analyser.frequencyBinCount;
+        this.dataArray = new Uint8Array(bufferLength);
+    }
+
+    // ─── Stop ─────────────────────────────────────────────────────────────
     stop() {
-        if (!this.isRunning) return;
+        if (!this.isRunning && !this.audioContext) return;
         this.isRunning = false;
+
+        if (this.fileAudioElement) {
+            this.fileAudioElement.pause();
+            if (this.fileAudioElement.src) URL.revokeObjectURL(this.fileAudioElement.src);
+            this.fileAudioElement = null;
+        }
         if (this.stream) {
             this.stream.getTracks().forEach(track => track.stop());
             this.stream = null;
+        }
+        if (this.sourceNode) {
+            try { this.sourceNode.disconnect(); } catch(_) {}
+            this.sourceNode = null;
         }
         if (this.audioContext) {
             this.audioContext.close();
             this.audioContext = null;
         }
-        // Reset output values to avoid frozen "audio jitter"
+
+        // Reset output values
         this.rms = 0;
         this.spectralCentroid = 0;
         this.bass = 0;
         this.mid = 0;
         this.high = 0;
-        console.log("Audio Engine Stopped");
+        this._prevBass = 0;
+        this._prevMid = 0;
+        this._prevHigh = 0;
+        this.analyser = null;
+        this.dataArray = null;
+        console.log('[AudioEngine] Stopped');
     }
 
+    // ─── Update (per-frame) ───────────────────────────────────────────────
     update() {
         if (!this.isRunning) return;
         requestAnimationFrame(() => this.update());
