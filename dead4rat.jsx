@@ -381,23 +381,21 @@ function Dead4RatApp() {
     }, []);
 
     const resetSystem = () => {
+        // Deep clone defaults to restore all effects
         globalState.glitchez = JSON.parse(JSON.stringify(initialEffectSettings));
+        // Clear any active LFO state
         Object.keys(globalState.glitchez).forEach(k => {
             const effect = globalState.glitchez[k];
-            const toggleEl = document.getElementById(`toggle-${k}`);
-            if (toggleEl) toggleEl.checked = effect.enabled;
             Object.keys(effect.params).forEach(pk => {
-                const sliderEl = document.getElementById(`slider-${k}-${pk}`);
-                if (sliderEl) sliderEl.value = effect.params[pk].value;
+                delete effect.params[pk].lfo;
+                delete effect.params[pk]._lfoBase;
             });
         });
-        mediaManager.layers = [];
-        setLayers([]);
-        setSelectedLayerId(null);
-        setUseMic(false);
-        setAudioFile(null);
-        setAudioGain(1.0);
-        audioEngine.stop();
+        // Reset LFO globals
+        setLfoSpeed(1.0);
+        setLfoDepth(0.5);
+        globalState.lfoSpeed = 1.0;
+        globalState.lfoDepth = 0.5;
         setUiRefresh(r => r + 1);
     };
 
