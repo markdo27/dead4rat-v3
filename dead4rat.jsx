@@ -219,7 +219,7 @@ function SignalMonitor({ audioEngine, audioGain, onGainChange, audioFile, onFile
             {/* Spectrum Visualizer */}
             <canvas
                 ref={canvasRef}
-                width={272}
+                width={292}
                 height={60}
                 className="signal-canvas"
             />
@@ -644,10 +644,11 @@ function Dead4RatApp() {
                     tag="v3.0"
                     initialX={16}
                     initialY={16}
-                    width="290px"
+                    width="320px"
                     onClose={() => togglePanel('terminal')}
                     minimized={!panels.terminal}
                 >
+                    <div className="section-header">SYST_DIAG // STATUS</div>
                     <div className="status-row">
                         <span className="status-label">APP_STATE</span>
                         <span className="status-value highlight">STABLE_BOOT</span>
@@ -668,6 +669,8 @@ function Dead4RatApp() {
                     </div>
 
                     <div className="hud-divider" />
+
+                    <div className="section-header">CORE_CMD // CONTROLS</div>
 
                     {!started && (
                         <button className="brutalist-button primary" style={{marginTop: '12px', width: '100%', fontSize: '1rem'}} onClick={toggleStart}>
@@ -700,7 +703,7 @@ function Dead4RatApp() {
                     tag="AUDIO"
                     initialX={16}
                     initialY={340}
-                    width="300px"
+                    width="320px"
                     onClose={() => togglePanel('signal')}
                     minimized={!panels.signal}
                 >
@@ -723,7 +726,7 @@ function Dead4RatApp() {
                     title="COMMAND_CENTER"
                     initialX={16}
                     initialY={660}
-                    width="340px"
+                    width="320px"
                     maxHeight="calc(100vh - 700px)"
                     onClose={() => togglePanel('command')}
                     minimized={!panels.command}
