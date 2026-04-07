@@ -893,50 +893,55 @@ class CanvasEngine {
         const bass = state.bass || 0;
         const mid = state.mid || 0;
         const high = state.high || 0;
-        const aMod = (eff, m) => eff.audioReactive ? (1.0 + state.spectralCentroid * m) : 1.0;
-        const aBass = (eff, m) => eff.audioReactive ? (1.0 + bass * m) : 1.0;
-        const aMid = (eff, m) => eff.audioReactive ? (1.0 + mid * m) : 1.0;
-        const aHigh = (eff, m) => eff.audioReactive ? (1.0 + high * m) : 1.0;
+
+        // Universal band modulator: reads eff.audioBand to pick bass/mid/high
+        const getBandVal = (eff) => {
+            const b = eff.audioBand || 'MID';
+            return b === 'BASS' ? bass : b === 'HIGH' ? high : mid;
+        };
+        const aBand = (eff, m) => eff.audioReactive ? (1.0 + getBandVal(eff) * m) : 1.0;
+        const aBandAdd = (eff, m) => eff.audioReactive ? (getBandVal(eff) * m) : 0;
+        const aBandSub = (eff, m) => eff.audioReactive ? Math.max(0.1, 1.0 - getBandVal(eff) * m) : 1.0;
 
         // Apply all effect uniforms
         this.gl.uniform1f(this.locRgb, g.rgbShift.enabled ? 1.0 : 0.0);
-        this.gl.uniform1f(this.locRgbAmt, g.rgbShift.params.amount.value * aHigh(g.rgbShift, 8.0));
+        this.gl.uniform1f(this.locRgbAmt, g.rgbShift.params.amount.value * aBand(g.rgbShift, 8.0));
         this.gl.uniform1f(this.locRgbAngle, g.rgbShift.params.angle.value);
         this.gl.uniform1f(this.locRgbBlend, g.rgbShift.params.blendMode.value);
 
         this.gl.uniform1f(this.locScan, g.scanLines.enabled ? 1.0 : 0.0);
         this.gl.uniform1f(this.locScanDen, g.scanLines.params.density.value);
-        this.gl.uniform1f(this.locScanOpac, g.scanLines.params.opacity.value * aMid(g.scanLines, 2.0));
+        this.gl.uniform1f(this.locScanOpac, g.scanLines.params.opacity.value * aBand(g.scanLines, 2.0));
         this.gl.uniform1f(this.locScanBlend, g.scanLines.params.blendMode.value);
 
         this.gl.uniform1f(this.locNoise, g.noise.enabled ? 1.0 : 0.0);
-        this.gl.uniform1f(this.locNoiseAmt, g.noise.params.amount.value * aMid(g.noise, 3.0));
+        this.gl.uniform1f(this.locNoiseAmt, g.noise.params.amount.value * aBand(g.noise, 3.0));
         this.gl.uniform1f(this.locNoiseChroma, g.noise.params.chromatic.value);
         this.gl.uniform1f(this.locNoiseBlend, g.noise.params.blendMode.value);
 
         this.gl.uniform1f(this.locColDist, g.colorDistortion.enabled ? 1.0 : 0.0);
-        this.gl.uniform1f(this.locColHue, g.colorDistortion.params.hue.value + (g.colorDistortion.audioReactive ? mid * 180.0 : 0));
+        this.gl.uniform1f(this.locColHue, g.colorDistortion.params.hue.value + aBandAdd(g.colorDistortion, 180.0));
         this.gl.uniform1f(this.locColSat, g.colorDistortion.params.saturation.value);
         this.gl.uniform1f(this.locColDistBlend, g.colorDistortion.params.blendMode.value);
 
         this.gl.uniform1f(this.locBlock, g.blockiness.enabled ? 1.0 : 0.0);
-        this.gl.uniform1f(this.locBlockSize, g.blockiness.params.size.value * aBass(g.blockiness, 5.0));
+        this.gl.uniform1f(this.locBlockSize, g.blockiness.params.size.value * aBand(g.blockiness, 5.0));
         this.gl.uniform1f(this.locBlockBlend, g.blockiness.params.blendMode.value);
 
         this.gl.uniform1f(this.locChroma, g.chromaGlitch.enabled ? 1.0 : 0.0);
-        this.gl.uniform1f(this.locChromaShift, g.chromaGlitch.params.shiftAmount.value * aHigh(g.chromaGlitch, 5.0));
+        this.gl.uniform1f(this.locChromaShift, g.chromaGlitch.params.shiftAmount.value * aBand(g.chromaGlitch, 5.0));
         this.gl.uniform1f(this.locChromaBleed, g.chromaGlitch.params.bleedIntensity.value);
         this.gl.uniform1f(this.locChromaBlend, g.chromaGlitch.params.blendMode.value);
 
         this.gl.uniform1f(this.locVhs, g.vhsJitter.enabled ? 1.0 : 0.0);
-        this.gl.uniform1f(this.locVhsVert, g.vhsJitter.params.vertical.value * aBass(g.vhsJitter, 3.0));
-        this.gl.uniform1f(this.locVhsHorz, g.vhsJitter.params.horizontal.value * aBass(g.vhsJitter, 3.0));
+        this.gl.uniform1f(this.locVhsVert, g.vhsJitter.params.vertical.value * aBand(g.vhsJitter, 3.0));
+        this.gl.uniform1f(this.locVhsHorz, g.vhsJitter.params.horizontal.value * aBand(g.vhsJitter, 3.0));
         this.gl.uniform1f(this.locVhsTear, g.vhsJitter.params.tear.value);
         this.gl.uniform1f(this.locVhsBlend, g.vhsJitter.params.blendMode.value);
 
         this.gl.uniform1f(this.locFb, g.videoFeedback.enabled ? 1.0 : 0.0);
         this.gl.uniform1f(this.locFbAmt, g.videoFeedback.params.amount.value);
-        this.gl.uniform1f(this.locFbZoom, g.videoFeedback.params.zoom.value + (g.videoFeedback.audioReactive ? bass * 0.3 : 0));
+        this.gl.uniform1f(this.locFbZoom, g.videoFeedback.params.zoom.value + aBandAdd(g.videoFeedback, 0.3));
         this.gl.uniform1f(this.locFbRot, g.videoFeedback.params.rotation.value);
         this.gl.uniform1f(this.locFbMoveX, g.videoFeedback.params.moveX.value);
         this.gl.uniform1f(this.locFbMoveY, g.videoFeedback.params.moveY.value);
@@ -947,93 +952,93 @@ class CanvasEngine {
 
         this.gl.uniform1f(this.locMelt, g.acidMelt.enabled ? 1.0 : 0.0);
         this.gl.uniform1f(this.locMeltAmt, g.acidMelt.params.amount.value);
-        this.gl.uniform1f(this.locMeltGravity, g.acidMelt.params.gravity.value * aBass(g.acidMelt, 8.0));
-        this.gl.uniform1f(this.locMeltTurb, g.acidMelt.params.turbulence.value * aMid(g.acidMelt, 3.0));
+        this.gl.uniform1f(this.locMeltGravity, g.acidMelt.params.gravity.value * aBand(g.acidMelt, 8.0));
+        this.gl.uniform1f(this.locMeltTurb, g.acidMelt.params.turbulence.value * aBand(g.acidMelt, 3.0));
         this.gl.uniform1f(this.locMeltBlend, g.acidMelt.params.blendMode.value);
 
         this.gl.uniform1f(this.locCDelay, g.chromaDelay.enabled ? 1.0 : 0.0);
         this.gl.uniform1f(this.locCDelayAmt, g.chromaDelay.params.amount.value);
-        this.gl.uniform1f(this.locCDelayScaleR, g.chromaDelay.params.scaleR.value * aHigh(g.chromaDelay, 0.05));
+        this.gl.uniform1f(this.locCDelayScaleR, g.chromaDelay.params.scaleR.value * aBand(g.chromaDelay, 0.05));
         this.gl.uniform1f(this.locCDelayScaleG, g.chromaDelay.params.scaleG.value);
-        this.gl.uniform1f(this.locCDelayScaleB, g.chromaDelay.params.scaleB.value * aHigh(g.chromaDelay, 0.05));
+        this.gl.uniform1f(this.locCDelayScaleB, g.chromaDelay.params.scaleB.value * aBand(g.chromaDelay, 0.05));
         this.gl.uniform1f(this.locCDelayBlend, g.chromaDelay.params.blendMode.value);
 
         this.gl.uniform1f(this.locEdge, g.edgeDetection.enabled ? 1.0 : 0.0);
-        this.gl.uniform1f(this.locEdgeThresh, g.edgeDetection.params.threshold.value * (g.edgeDetection.audioReactive ? Math.max(0.1, 1.0 - high * 0.8) : 1.0));
+        this.gl.uniform1f(this.locEdgeThresh, g.edgeDetection.params.threshold.value * aBandSub(g.edgeDetection, 0.8));
         this.gl.uniform1f(this.locEdgeInv, g.edgeDetection.params.invert.value);
         this.gl.uniform1f(this.locEdgeColor, g.edgeDetection.params.colorMode.value);
         this.gl.uniform1f(this.locEdgeGlow, g.edgeDetection.params.glow.value);
         this.gl.uniform1f(this.locEdgeBlend, g.edgeDetection.params.blendMode.value);
 
         this.gl.uniform1f(this.locColz, g.colorize.enabled ? 1.0 : 0.0);
-        this.gl.uniform1f(this.locColzHue, g.colorize.params.hue.value + (g.colorize.audioReactive ? mid * 90.0 : 0));
-        this.gl.uniform1f(this.locColzStr, g.colorize.params.strength.value * aMod(g.colorize, 2.0));
+        this.gl.uniform1f(this.locColzHue, g.colorize.params.hue.value + aBandAdd(g.colorize, 90.0));
+        this.gl.uniform1f(this.locColzStr, g.colorize.params.strength.value * aBand(g.colorize, 2.0));
         this.gl.uniform1f(this.locColzBlend, g.colorize.params.blendMode.value);
 
         this.gl.uniform1f(this.locPoint, g.dataPointCloud.enabled ? 1.0 : 0.0);
         this.gl.uniform1f(this.locPointDen, g.dataPointCloud.params.density.value);
-        this.gl.uniform1f(this.locPointSize, g.dataPointCloud.params.size.value * aMid(g.dataPointCloud, 3.0));
+        this.gl.uniform1f(this.locPointSize, g.dataPointCloud.params.size.value * aBand(g.dataPointCloud, 3.0));
         this.gl.uniform1f(this.locPointDepth, g.dataPointCloud.params.depth.value);
         this.gl.uniform1f(this.locPointBlend, g.dataPointCloud.params.blendMode.value);
 
         this.gl.uniform1f(this.locMotion, g.motionDetection.enabled ? 1.0 : 0.0);
-        this.gl.uniform1f(this.locMoThresh, g.motionDetection.params.threshold.value * (g.motionDetection.audioReactive ? Math.max(0.1, 1.0 - bass * 0.8) : 1.0));
+        this.gl.uniform1f(this.locMoThresh, g.motionDetection.params.threshold.value * aBandSub(g.motionDetection, 0.8));
         this.gl.uniform1f(this.locMoDecay, g.motionDetection.params.decay.value);
         this.gl.uniform1f(this.locMoTint, g.motionDetection.params.tint.value);
         this.gl.uniform1f(this.locMoBlend, g.motionDetection.params.blendMode.value);
 
         this.gl.uniform1f(this.locKaleido, g.kaleidoscope.enabled ? 1.0 : 0.0);
         this.gl.uniform1f(this.locKaleidoSeg, g.kaleidoscope.params.segments.value);
-        this.gl.uniform1f(this.locKaleidoRot, g.kaleidoscope.params.rotation.value + (g.kaleidoscope.audioReactive ? mid * 45.0 : 0));
+        this.gl.uniform1f(this.locKaleidoRot, g.kaleidoscope.params.rotation.value + aBandAdd(g.kaleidoscope, 45.0));
         this.gl.uniform1f(this.locKaleidoZoom, g.kaleidoscope.params.zoom.value);
         this.gl.uniform1f(this.locKaleidoBlend, g.kaleidoscope.params.blendMode.value);
 
         this.gl.uniform1f(this.locBarrel, g.barrelDistortion.enabled ? 1.0 : 0.0);
-        this.gl.uniform1f(this.locBarrelAmt, g.barrelDistortion.params.amount.value * aBass(g.barrelDistortion, 3.0));
+        this.gl.uniform1f(this.locBarrelAmt, g.barrelDistortion.params.amount.value * aBand(g.barrelDistortion, 3.0));
         this.gl.uniform1f(this.locBarrelCX, g.barrelDistortion.params.centerX.value);
         this.gl.uniform1f(this.locBarrelCY, g.barrelDistortion.params.centerY.value);
         this.gl.uniform1f(this.locBarrelBlend, g.barrelDistortion.params.blendMode.value);
 
         this.gl.uniform1f(this.locPixSort, g.pixelSort.enabled ? 1.0 : 0.0);
-        this.gl.uniform1f(this.locPixSortThresh, g.pixelSort.params.threshold.value * (g.pixelSort.audioReactive ? Math.max(0.1, 1.0 - high * 0.5) : 1.0));
+        this.gl.uniform1f(this.locPixSortThresh, g.pixelSort.params.threshold.value * aBandSub(g.pixelSort, 0.5));
         this.gl.uniform1f(this.locPixSortDir, g.pixelSort.params.direction.value);
         this.gl.uniform1f(this.locPixSortBlend, g.pixelSort.params.blendMode.value);
 
         this.gl.uniform1f(this.locPoster, g.posterize.enabled ? 1.0 : 0.0);
-        this.gl.uniform1f(this.locPosterLevels, g.posterize.params.levels.value * (g.posterize.audioReactive ? Math.max(0.3, 1.0 - bass * 0.7) : 1.0));
+        this.gl.uniform1f(this.locPosterLevels, g.posterize.params.levels.value * aBandSub(g.posterize, 0.7));
         this.gl.uniform1f(this.locPosterBlend, g.posterize.params.blendMode.value);
 
         // --- New Effects ---
         this.gl.uniform1f(this.locSlicer, g.glitchSlicer.enabled ? 1.0 : 0.0);
         this.gl.uniform1f(this.locSlicerSlices, g.glitchSlicer.params.slices.value);
-        this.gl.uniform1f(this.locSlicerOffset, g.glitchSlicer.params.offset.value * aBass(g.glitchSlicer, 6.0));
+        this.gl.uniform1f(this.locSlicerOffset, g.glitchSlicer.params.offset.value * aBand(g.glitchSlicer, 6.0));
         this.gl.uniform1f(this.locSlicerSpeed, g.glitchSlicer.params.speed.value);
         this.gl.uniform1f(this.locSlicerBlend, g.glitchSlicer.params.blendMode.value);
 
         this.gl.uniform1f(this.locVortex, g.vortexWarp.enabled ? 1.0 : 0.0);
-        this.gl.uniform1f(this.locVortexStr, g.vortexWarp.params.strength.value * aMid(g.vortexWarp, 4.0));
+        this.gl.uniform1f(this.locVortexStr, g.vortexWarp.params.strength.value * aBand(g.vortexWarp, 4.0));
         this.gl.uniform1f(this.locVortexRad, g.vortexWarp.params.radius.value);
         this.gl.uniform1f(this.locVortexCX, g.vortexWarp.params.centerX.value);
         this.gl.uniform1f(this.locVortexCY, g.vortexWarp.params.centerY.value);
         this.gl.uniform1f(this.locVortexBlend, g.vortexWarp.params.blendMode.value);
 
         this.gl.uniform1f(this.locMirrorT, g.mirrorTile.enabled ? 1.0 : 0.0);
-        this.gl.uniform1f(this.locMirrorTX, g.mirrorTile.params.tilesX.value * aMid(g.mirrorTile, 2.0));
+        this.gl.uniform1f(this.locMirrorTX, g.mirrorTile.params.tilesX.value * aBand(g.mirrorTile, 2.0));
         this.gl.uniform1f(this.locMirrorTY, g.mirrorTile.params.tilesY.value);
         this.gl.uniform1f(this.locMirrorBlend, g.mirrorTile.params.blendMode.value);
 
         this.gl.uniform1f(this.locStrobe, g.stroboscope.enabled ? 1.0 : 0.0);
-        this.gl.uniform1f(this.locStrobeRate, g.stroboscope.params.rate.value * aBass(g.stroboscope, 3.0));
+        this.gl.uniform1f(this.locStrobeRate, g.stroboscope.params.rate.value * aBand(g.stroboscope, 3.0));
         this.gl.uniform1f(this.locStrobeHold, g.stroboscope.params.hold.value);
         this.gl.uniform1f(this.locStrobeBlend, g.stroboscope.params.blendMode.value);
 
         this.gl.uniform1f(this.locDither, g.ditherMatrix.enabled ? 1.0 : 0.0);
-        this.gl.uniform1f(this.locDitherScale, g.ditherMatrix.params.scale.value * aMid(g.ditherMatrix, 3.0));
+        this.gl.uniform1f(this.locDitherScale, g.ditherMatrix.params.scale.value * aBand(g.ditherMatrix, 3.0));
         this.gl.uniform1f(this.locDitherContrast, g.ditherMatrix.params.contrast.value);
         this.gl.uniform1f(this.locDitherBlend, g.ditherMatrix.params.blendMode.value);
 
         this.gl.uniform1f(this.locThermal, g.thermalVision.enabled ? 1.0 : 0.0);
-        this.gl.uniform1f(this.locThermalInt, g.thermalVision.params.intensity.value * aHigh(g.thermalVision, 2.0));
+        this.gl.uniform1f(this.locThermalInt, g.thermalVision.params.intensity.value * aBand(g.thermalVision, 2.0));
         this.gl.uniform1f(this.locThermalBias, g.thermalVision.params.bias.value);
         this.gl.uniform1f(this.locThermalBlend, g.thermalVision.params.blendMode.value);
 

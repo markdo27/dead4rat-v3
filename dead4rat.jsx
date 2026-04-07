@@ -1,56 +1,28 @@
 const initialEffectSettings = {
-    rgbShift:        { name: "RGB Shift",        enabled: false, audioReactive: false, params: { amount: { value: 5,    min: 0,    max: 50,   step: 1    }, angle:      { value: 0,    min: 0,    max: 360,  step: 1    }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
-    scanLines:       { name: "Scan Lines",       enabled: true,  audioReactive: false, params: { density: { value: 0.7, min: 0,    max: 1,    step: 0.01 }, opacity:    { value: 0.1, min: 0,    max: 1,    step: 0.01 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
-    noise:           { name: "Signal Noise",     enabled: false, audioReactive: false, params: { amount:  { value: 0.1, min: 0,    max: 1,    step: 0.01 }, chromatic:  { value: 0,   min: 0,    max: 1,    step: 1    }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
-    colorDistortion: { name: "LUT Corrupt",      enabled: false, audioReactive: false, params: { hue:     { value: 0,   min: 0,    max: 360,  step: 1    }, saturation: { value: 1,   min: 0,    max: 5,    step: 0.1  }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
-    blockiness:      { name: "Data Moshing",     enabled: false, audioReactive: false, params: { size:    { value: 4,   min: 1,    max: 32,   step: 1    }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
-    chromaGlitch:    { name: "Chroma Shift",     enabled: false, audioReactive: false, params: { shiftAmount: { value: 10, min: 0, max: 100, step: 1 }, bleedIntensity: { value: 0.3, min: 0, max: 1, step: 0.01 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
-    vhsJitter:       { name: "VHS Jitter",       enabled: false, audioReactive: false, params: { vertical: { value: 1, min: 0, max: 10, step: 0.1 }, horizontal: { value: 1, min: 0, max: 10, step: 0.1 }, tear: { value: 0.3, min: 0, max: 1, step: 0.01 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
-    videoFeedback:   { name: "FeedbackPro Loop", enabled: false, audioReactive: false, params: { amount: { value: 0.8, min: 0, max: 0.99, step: 0.01 }, zoom: { value: 1.005, min: 0.8, max: 1.5, step: 0.001 }, rotation: { value: 0.0, min: -5, max: 5, step: 0.1 }, moveX: { value: 0.0, min: -0.1, max: 0.1, step: 0.001 }, moveY: { value: 0.0, min: -0.1, max: 0.1, step: 0.001 }, hueShift: { value: 2.0, min: 0.0, max: 50.0, step: 0.1 }, lumaThresh: { value: 1.0, min: 0.0, max: 1.0, step: 0.01 }, mirror: { value: 0, min: 0, max: 1, step: 1 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
-    acidMelt:        { name: "Substrate Melt",   enabled: false, audioReactive: false, params: { amount: { value: 0.9, min: 0, max: 0.99, step: 0.01 }, gravity: { value: 0.01, min: -0.05, max: 0.05, step: 0.001 }, turbulence: { value: 0.05, min: 0, max: 0.5, step: 0.01 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
-    chromaDelay:     { name: "Chroma Ghost",     enabled: false, audioReactive: false, params: { amount: { value: 0.8, min: 0, max: 0.99, step: 0.01 }, scaleR: { value: 1.01, min: 0.8, max: 1.2, step: 0.001 }, scaleG: { value: 1.0, min: 0.8, max: 1.2, step: 0.001 }, scaleB: { value: 0.99, min: 0.8, max: 1.2, step: 0.001 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
-    edgeDetection:   { name: "Edge Detection",   enabled: false, audioReactive: false, params: { threshold: { value: 50, min: 1, max: 255, step: 1 }, invert: { value: 0, min: 0, max: 1, step: 1 }, colorMode: { value: 0, min: 0, max: 1, step: 1 }, glow: { value: 0.3, min: 0, max: 1, step: 0.01 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
-    colorize:        { name: "Screen Colorize",  enabled: false, audioReactive: false, params: { hue: { value: 200, min: 0, max: 360, step: 1 }, strength: { value: 0.5, min: 0, max: 1, step: 0.01 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
-    dataPointCloud:  { name: "Bag of Grains",    enabled: false, audioReactive: false, params: { density: { value: 0.2, min: 0.01, max: 1, step: 0.01 }, size: { value: 1, min: 1, max: 10, step: 1 }, depth: { value: 0.5, min: 0, max: 1, step: 0.01 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
-    motionDetection: { name: "Motion Slit",      enabled: false, audioReactive: false, params: { threshold: { value: 25, min: 1, max: 255, step: 1 }, decay: { value: 0.95, min: 0.8, max: 0.99, step: 0.01 }, tint: { value: 0.5, min: 0, max: 1, step: 0.01 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
-    kaleidoscope:    { name: "Kaleidoscope",     enabled: false, audioReactive: false, params: { segments: { value: 6, min: 2, max: 12, step: 1 }, rotation: { value: 0, min: -180, max: 180, step: 1 }, zoom: { value: 1.0, min: 0.2, max: 3.0, step: 0.01 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
-    barrelDistortion:{ name: "Barrel / Fisheye", enabled: false, audioReactive: false, params: { amount: { value: 0.5, min: -2, max: 2, step: 0.01 }, centerX: { value: 0.5, min: 0, max: 1, step: 0.01 }, centerY: { value: 0.5, min: 0, max: 1, step: 0.01 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
-    pixelSort:       { name: "Pixel Sort",       enabled: false, audioReactive: false, params: { threshold: { value: 0.5, min: 0, max: 1, step: 0.01 }, direction: { value: 0, min: 0, max: 1, step: 1 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
-    posterize:       { name: "Posterize",        enabled: false, audioReactive: false, params: { levels: { value: 8, min: 2, max: 32, step: 1 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
-    glitchSlicer:    { name: "Glitch Slicer",    enabled: false, audioReactive: false, params: { slices: { value: 8, min: 2, max: 32, step: 1 }, offset: { value: 30, min: 0, max: 200, step: 1 }, speed: { value: 5, min: 1, max: 30, step: 1 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
-    vortexWarp:      { name: "Vortex Warp",      enabled: false, audioReactive: false, params: { strength: { value: 2, min: -10, max: 10, step: 0.1 }, radius: { value: 0.5, min: 0.05, max: 1, step: 0.01 }, centerX: { value: 0.5, min: 0, max: 1, step: 0.01 }, centerY: { value: 0.5, min: 0, max: 1, step: 0.01 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
-    ditherMatrix:    { name: "Dither Matrix",    enabled: false, audioReactive: false, params: { scale: { value: 4, min: 2, max: 32, step: 1 }, contrast: { value: 1, min: 0, max: 2, step: 0.01 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
-    thermalVision:   { name: "Thermal Vision",   enabled: false, audioReactive: false, params: { intensity: { value: 1, min: 0, max: 1, step: 0.01 }, bias: { value: 0, min: -0.5, max: 0.5, step: 0.01 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
-    mirrorTile:      { name: "Mirror Tile",      enabled: false, audioReactive: false, params: { tilesX: { value: 2, min: 1, max: 8, step: 1 }, tilesY: { value: 2, min: 1, max: 8, step: 1 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
-    stroboscope:     { name: "Stroboscope",      enabled: false, audioReactive: false, params: { rate: { value: 4, min: 1, max: 30, step: 1 }, hold: { value: 0.5, min: 0, max: 1, step: 0.01 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } }
-};
-
-// Which band modulates each effect (for display + glow feedback)
-const AUDIO_BAND_MAP = {
-    rgbShift:        'HIGH',
-    scanLines:       'MID',
-    noise:           'MID',
-    colorDistortion: 'MID',
-    blockiness:      'BASS',
-    chromaGlitch:    'HIGH',
-    vhsJitter:       'BASS',
-    videoFeedback:   'BASS',
-    acidMelt:        'BASS',
-    chromaDelay:     'HIGH',
-    edgeDetection:   'HIGH',
-    colorize:        'MID',
-    dataPointCloud:  'MID',
-    motionDetection: 'BASS',
-    kaleidoscope:    'MID',
-    barrelDistortion:'BASS',
-    pixelSort:       'HIGH',
-    posterize:       'BASS',
-    glitchSlicer:    'BASS',
-    vortexWarp:      'MID',
-    ditherMatrix:    'MID',
-    thermalVision:   'HIGH',
-    mirrorTile:      'MID',
-    stroboscope:     'BASS',
+    rgbShift:        { name: "RGB Shift",        enabled: false, audioReactive: false, audioBand: 'HIGH', params: { amount: { value: 5,    min: 0,    max: 50,   step: 1    }, angle:      { value: 0,    min: 0,    max: 360,  step: 1    }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
+    scanLines:       { name: "Scan Lines",       enabled: true,  audioReactive: false, audioBand: 'MID',  params: { density: { value: 0.7, min: 0,    max: 1,    step: 0.01 }, opacity:    { value: 0.1, min: 0,    max: 1,    step: 0.01 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
+    noise:           { name: "Signal Noise",     enabled: false, audioReactive: false, audioBand: 'MID',  params: { amount:  { value: 0.1, min: 0,    max: 1,    step: 0.01 }, chromatic:  { value: 0,   min: 0,    max: 1,    step: 1    }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
+    colorDistortion: { name: "LUT Corrupt",      enabled: false, audioReactive: false, audioBand: 'MID',  params: { hue:     { value: 0,   min: 0,    max: 360,  step: 1    }, saturation: { value: 1,   min: 0,    max: 5,    step: 0.1  }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
+    blockiness:      { name: "Data Moshing",     enabled: false, audioReactive: false, audioBand: 'BASS', params: { size:    { value: 4,   min: 1,    max: 32,   step: 1    }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
+    chromaGlitch:    { name: "Chroma Shift",     enabled: false, audioReactive: false, audioBand: 'HIGH', params: { shiftAmount: { value: 10, min: 0, max: 100, step: 1 }, bleedIntensity: { value: 0.3, min: 0, max: 1, step: 0.01 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
+    vhsJitter:       { name: "VHS Jitter",       enabled: false, audioReactive: false, audioBand: 'BASS', params: { vertical: { value: 1, min: 0, max: 10, step: 0.1 }, horizontal: { value: 1, min: 0, max: 10, step: 0.1 }, tear: { value: 0.3, min: 0, max: 1, step: 0.01 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
+    videoFeedback:   { name: "FeedbackPro Loop", enabled: false, audioReactive: false, audioBand: 'BASS', params: { amount: { value: 0.8, min: 0, max: 0.99, step: 0.01 }, zoom: { value: 1.005, min: 0.8, max: 1.5, step: 0.001 }, rotation: { value: 0.0, min: -5, max: 5, step: 0.1 }, moveX: { value: 0.0, min: -0.1, max: 0.1, step: 0.001 }, moveY: { value: 0.0, min: -0.1, max: 0.1, step: 0.001 }, hueShift: { value: 2.0, min: 0.0, max: 50.0, step: 0.1 }, lumaThresh: { value: 1.0, min: 0.0, max: 1.0, step: 0.01 }, mirror: { value: 0, min: 0, max: 1, step: 1 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
+    acidMelt:        { name: "Substrate Melt",   enabled: false, audioReactive: false, audioBand: 'BASS', params: { amount: { value: 0.9, min: 0, max: 0.99, step: 0.01 }, gravity: { value: 0.01, min: -0.05, max: 0.05, step: 0.001 }, turbulence: { value: 0.05, min: 0, max: 0.5, step: 0.01 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
+    chromaDelay:     { name: "Chroma Ghost",     enabled: false, audioReactive: false, audioBand: 'HIGH', params: { amount: { value: 0.8, min: 0, max: 0.99, step: 0.01 }, scaleR: { value: 1.01, min: 0.8, max: 1.2, step: 0.001 }, scaleG: { value: 1.0, min: 0.8, max: 1.2, step: 0.001 }, scaleB: { value: 0.99, min: 0.8, max: 1.2, step: 0.001 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
+    edgeDetection:   { name: "Edge Detection",   enabled: false, audioReactive: false, audioBand: 'HIGH', params: { threshold: { value: 50, min: 1, max: 255, step: 1 }, invert: { value: 0, min: 0, max: 1, step: 1 }, colorMode: { value: 0, min: 0, max: 1, step: 1 }, glow: { value: 0.3, min: 0, max: 1, step: 0.01 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
+    colorize:        { name: "Screen Colorize",  enabled: false, audioReactive: false, audioBand: 'MID',  params: { hue: { value: 200, min: 0, max: 360, step: 1 }, strength: { value: 0.5, min: 0, max: 1, step: 0.01 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
+    dataPointCloud:  { name: "Bag of Grains",    enabled: false, audioReactive: false, audioBand: 'MID',  params: { density: { value: 0.2, min: 0.01, max: 1, step: 0.01 }, size: { value: 1, min: 1, max: 10, step: 1 }, depth: { value: 0.5, min: 0, max: 1, step: 0.01 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
+    motionDetection: { name: "Motion Slit",      enabled: false, audioReactive: false, audioBand: 'BASS', params: { threshold: { value: 25, min: 1, max: 255, step: 1 }, decay: { value: 0.95, min: 0.8, max: 0.99, step: 0.01 }, tint: { value: 0.5, min: 0, max: 1, step: 0.01 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
+    kaleidoscope:    { name: "Kaleidoscope",     enabled: false, audioReactive: false, audioBand: 'MID',  params: { segments: { value: 6, min: 2, max: 12, step: 1 }, rotation: { value: 0, min: -180, max: 180, step: 1 }, zoom: { value: 1.0, min: 0.2, max: 3.0, step: 0.01 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
+    barrelDistortion:{ name: "Barrel / Fisheye", enabled: false, audioReactive: false, audioBand: 'BASS', params: { amount: { value: 0.5, min: -2, max: 2, step: 0.01 }, centerX: { value: 0.5, min: 0, max: 1, step: 0.01 }, centerY: { value: 0.5, min: 0, max: 1, step: 0.01 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
+    pixelSort:       { name: "Pixel Sort",       enabled: false, audioReactive: false, audioBand: 'HIGH', params: { threshold: { value: 0.5, min: 0, max: 1, step: 0.01 }, direction: { value: 0, min: 0, max: 1, step: 1 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
+    posterize:       { name: "Posterize",        enabled: false, audioReactive: false, audioBand: 'BASS', params: { levels: { value: 8, min: 2, max: 32, step: 1 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
+    glitchSlicer:    { name: "Glitch Slicer",    enabled: false, audioReactive: false, audioBand: 'BASS', params: { slices: { value: 8, min: 2, max: 32, step: 1 }, offset: { value: 30, min: 0, max: 200, step: 1 }, speed: { value: 5, min: 1, max: 30, step: 1 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
+    vortexWarp:      { name: "Vortex Warp",      enabled: false, audioReactive: false, audioBand: 'MID',  params: { strength: { value: 2, min: -10, max: 10, step: 0.1 }, radius: { value: 0.5, min: 0.05, max: 1, step: 0.01 }, centerX: { value: 0.5, min: 0, max: 1, step: 0.01 }, centerY: { value: 0.5, min: 0, max: 1, step: 0.01 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
+    ditherMatrix:    { name: "Dither Matrix",    enabled: false, audioReactive: false, audioBand: 'MID',  params: { scale: { value: 4, min: 2, max: 32, step: 1 }, contrast: { value: 1, min: 0, max: 2, step: 0.01 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
+    thermalVision:   { name: "Thermal Vision",   enabled: false, audioReactive: false, audioBand: 'HIGH', params: { intensity: { value: 1, min: 0, max: 1, step: 0.01 }, bias: { value: 0, min: -0.5, max: 0.5, step: 0.01 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
+    mirrorTile:      { name: "Mirror Tile",      enabled: false, audioReactive: false, audioBand: 'MID',  params: { tilesX: { value: 2, min: 1, max: 8, step: 1 }, tilesY: { value: 2, min: 1, max: 8, step: 1 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
+    stroboscope:     { name: "Stroboscope",      enabled: false, audioReactive: false, audioBand: 'BASS', params: { rate: { value: 4, min: 1, max: 30, step: 1 }, hold: { value: 0.5, min: 0, max: 1, step: 0.01 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } }
 };
 
 // Frozen factory defaults — never mutated
@@ -780,14 +752,34 @@ function Dead4RatApp() {
     const effectKeys = Object.keys(globalState.glitchez);
 
     // ── Effect card renderer ──────────────────────────────────────────────
+    const BAND_CYCLE = ['BASS', 'MID', 'HIGH'];
     const renderEffect = (key) => {
         const effect = globalState.glitchez[key];
-        const band = AUDIO_BAND_MAP[key] || 'MID';
+        const band = effect.audioBand || 'MID';
         const bandVal = band === 'BASS' ? liveAudio.current.bass : band === 'HIGH' ? liveAudio.current.high : liveAudio.current.mid;
         const isAudioActive = effect.audioReactive && effect.enabled && audioEngine.isRunning;
         const glowIntensity = isAudioActive ? Math.min(1, bandVal * 4) : 0;
 
         const bandColor = band === 'BASS' ? '#FF5500' : band === 'MID' ? '#FF9900' : '#FFDD00';
+
+        const cycleBand = () => {
+            const eff = globalState.glitchez[key];
+            if (!eff.audioReactive) {
+                // Turn on with current band
+                eff.audioReactive = true;
+            } else {
+                // Cycle to next band, or turn off if at end
+                const idx = BAND_CYCLE.indexOf(eff.audioBand || 'MID');
+                if (idx >= BAND_CYCLE.length - 1) {
+                    // Was on last band → turn off
+                    eff.audioReactive = false;
+                } else {
+                    // Next band
+                    eff.audioBand = BAND_CYCLE[idx + 1];
+                }
+            }
+            setUiRefresh(r => r + 1);
+        };
 
         return (
             <div
@@ -814,11 +806,11 @@ function Dead4RatApp() {
                         </span>
                     </span>
                     <span style={{display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0}}>
-                        {/* AUDIO reactive toggle */}
+                        {/* AUDIO reactive toggle — cycles BASS→MID→HIGH→OFF */}
                         <button
                             className={`audio-band-btn ${effect.audioReactive ? 'active' : ''}`}
-                            title={`Audio reactive: ${band} band`}
-                            onClick={() => { globalState.glitchez[key].audioReactive = !effect.audioReactive; setUiRefresh(r => r + 1); }}
+                            title={effect.audioReactive ? `Audio: ${band} (click to cycle)` : 'Click to enable audio reactive'}
+                            onClick={cycleBand}
                             style={{ borderColor: effect.audioReactive ? bandColor : undefined, color: effect.audioReactive ? bandColor : undefined }}
                         >
                             ⚡{effect.audioReactive ? ` ${band}` : ''}
