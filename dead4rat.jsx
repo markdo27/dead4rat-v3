@@ -110,7 +110,6 @@ let mediaManager = null;
 let presetManager = null;
 let maskEngine = null;
 let blobTracker = null;
-let generativeEngine = null;
 
 // ═══════════════════════════════════════════
 // DRAGGABLE TERMINAL WINDOW
@@ -414,7 +413,6 @@ function Dead4RatApp() {
     const [audioFile, setAudioFile] = React.useState(null);
     const [lfoSpeed, setLfoSpeed] = React.useState(1.0);
     const [lfoDepth, setLfoDepth] = React.useState(0.5);
-    const [genMode, setGenMode] = React.useState('OFF');
 
     const [isolatePerson, setIsolatePerson] = React.useState(false);
     const [maskLoading, setMaskLoading] = React.useState(false);
@@ -431,7 +429,7 @@ function Dead4RatApp() {
     const [bassGain, setBassGain] = React.useState(1.0);
     const [midGain,  setMidGain]  = React.useState(1.0);
     const [highGain, setHighGain] = React.useState(1.0);
-    const [openCategories, setOpenCategories] = React.useState({ COLOR: true, DISTORT: false, TEXTURE: true, GLITCH: false, FEEDBACK: false, DETECT: false, GENERATORS: true });
+    const [openCategories, setOpenCategories] = React.useState({ COLOR: true, DISTORT: false, TEXTURE: true, GLITCH: false, FEEDBACK: false, DETECT: false });
     const toggleCategory = (name) => setOpenCategories(s => ({...s, [name]: !s[name]}));
 
     // Live band values for effect card glow (updated from render loop)
@@ -452,7 +450,6 @@ function Dead4RatApp() {
         if (!mediaManager)  mediaManager  = new MediaManager(window.innerWidth, window.innerHeight);
         if (!maskEngine)    maskEngine    = new MaskEngine(640, 480);
         if (!blobTracker)   blobTracker   = new BlobTracker();
-        if (!generativeEngine) generativeEngine = new GenerativeEngine();
         if (!presetManager) {
             presetManager = new PresetManager();
             setPresets(presetManager.presets);
@@ -644,24 +641,8 @@ function Dead4RatApp() {
                 globalState.maskCanvas = null;
             }
 
-            // Update generative engine
-            if (generativeEngine) {
-                generativeEngine.updateAudio(
-                    globalState.bass,
-                    globalState.mid,
-                    globalState.high,
-                    globalState.transient ? 1.0 : 0.0
-                );
-            }
-
-            // Determine base feed
-            let baseFeed = globalState.videoElement;
-            if (globalState.genMode && globalState.genMode !== 'OFF' && generativeEngine && generativeEngine.canvas) {
-                baseFeed = generativeEngine.canvas;
-            }
-
             // Composite first so blob tracker sees everything (webcam + video layers)
-            globalState.compositeSource = mediaManager.composite(baseFeed);
+            globalState.compositeSource = mediaManager.composite(globalState.videoElement);
 
             // Blob Tracker — analyse composite canvas so video layers are included
             if (blobTracker && blobTracker.enabled) {
@@ -679,13 +660,6 @@ function Dead4RatApp() {
     React.useEffect(() => {
         globalState.audioGain = audioGain;
     }, [audioGain]);
-
-    React.useEffect(() => {
-        globalState.genMode = genMode;
-        if (generativeEngine) {
-            generativeEngine.setParam('mode', genMode);
-        }
-    }, [genMode]);
 
     React.useEffect(() => {
         globalState.lfoSpeed = lfoSpeed;
@@ -1357,54 +1331,7 @@ function Dead4RatApp() {
                     )}
                     {/* Grouped by category */}
 
-                    {/* GENERATORS (Special Category) */}
-                    <div className="category-group">
-                        <div className="category-header" onClick={() => toggleCategory('GENERATORS')}>
-                            <span className="cat-arrow" style={{transform: openCategories['GENERATORS'] ? 'rotate(90deg)' : 'none'}}>▶</span>
-                            <span className="cat-name">GENERATORS (P5.JS)</span>
-                            <span style={{flex:1}} />
-                            <span className="cat-count">{genMode !== 'OFF' ? '1 ON' : 'OFF'}</span>
-                        </div>
-                        <div style={{display: openCategories['GENERATORS'] ? 'block' : 'none'}}>
-                            <div className="effect-card" style={{borderLeft: genMode !== 'OFF' ? '2px solid var(--accent)' : '2px solid transparent'}}>
-                                <div className="effect-header">
-                                    <div className="effect-title">GENERATIVE PATTERN</div>
-                                </div>
-                                <div style={{display: 'flex', gap: '4px', marginBottom: '8px', flexWrap: 'wrap'}}>
-                                    {['OFF', 'GRID TUNNEL', 'CUBE FIELD', 'RADIANT HORIZON'].map(m => (
-                                        <button 
-                                            key={m} 
-                                            className={`brutalist-button ${genMode === m ? 'primary' : ''}`}
-                                            style={{flex: '1 1 45%', fontSize: '0.6rem'}}
-                                            onClick={() => setGenMode(m)}
-                                        >{m}</button>
-                                    ))}
-                                </div>
-                                {genMode !== 'OFF' && (
-                                    <React.Fragment>
-                                        <div className="param-row">
-                                            <span className="param-name">SPEED</span>
-                                            <input type="range" min="0" max="3" step="0.01" defaultValue="1" onChange={(e) => {
-                                                if (generativeEngine) generativeEngine.setParam('speed', parseFloat(e.target.value));
-                                            }}/>
-                                        </div>
-                                        <div className="param-row">
-                                            <span className="param-name">ZOOM</span>
-                                            <input type="range" min="0.1" max="3" step="0.01" defaultValue="1" onChange={(e) => {
-                                                if (generativeEngine) generativeEngine.setParam('zoom', parseFloat(e.target.value));
-                                            }}/>
-                                        </div>
-                                        <div className="param-row">
-                                            <span className="param-name">AUDIO WARP</span>
-                                            <input type="range" min="0" max="2" step="0.01" defaultValue="1" onChange={(e) => {
-                                                if (generativeEngine) generativeEngine.setParam('audioWarp', parseFloat(e.target.value));
-                                            }}/>
-                                        </div>
-                                    </React.Fragment>
-                                )}
-                            </div>
-                        </div>
-                    </div>
+                    {/* Grouped by category */}
 
                     {EFFECT_CATEGORIES.map(cat => {
                         const activeCount = cat.keys.filter(k => globalState.glitchez[k]?.enabled).length;
