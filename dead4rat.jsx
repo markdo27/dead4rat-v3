@@ -89,6 +89,15 @@ const STARTER_PRESETS = [
     },
 ];
 
+const GEN_DEFAULTS = {
+    speed:  { name: 'SPEED', value: 1.0, min: 0, max: 3, step: 0.01 },
+    zoom:   { name: 'ZOOM', value: 1.0, min: 0.1, max: 3, step: 0.01 },
+    warp:   { name: 'WARP_INTENSITY', value: 1.0, min: 0, max: 2, step: 0.01 },
+    rotateX: { name: 'ROTATION_X', value: 0.0, min: 0, max: 6.28, step: 0.01 },
+    rotateY: { name: 'ROTATION_Y', value: 0.0, min: 0, max: 6.28, step: 0.01 },
+    rotateZ: { name: 'ROTATION_Z', value: 0.0, min: 0, max: 6.28, step: 0.01 }
+};
+
 // Global Mutation State (bypasses React for 60fps)
 const globalState = {
     timeSpeed: 1.0,
@@ -100,6 +109,9 @@ const globalState = {
     transient: false,
     isolatePerson: false,
     glitchez: JSON.parse(JSON.stringify(FACTORY_DEFAULTS)),
+    genMode: 'OFF',
+    genAudioBand: 'MID',
+    genParams: JSON.parse(JSON.stringify(GEN_DEFAULTS)),
     videoElement: null,
     compositeSource: null
 };
@@ -431,11 +443,10 @@ function Dead4RatApp() {
     const [highGain, setHighGain] = React.useState(1.0);
 
     const [genMode, setGenMode] = React.useState('OFF');
-    const [genSpeed, setGenSpeed] = React.useState(1.0);
-    const [genZoom, setGenZoom] = React.useState(1.0);
-    const [genAudioWarp, setGenAudioWarp] = React.useState(1.0);
+    const [genAudioBand, setGenAudioBand] = React.useState('MID');
+    const [genAudioReactive, setGenAudioReactive] = React.useState(true);
 
-    const [openCategories, setOpenCategories] = React.useState({ COLOR: true, DISTORT: false, TEXTURE: true, GLITCH: false, FEEDBACK: false, DETECT: false, GENERATORS: true });
+    const [openCategories, setOpenCategories] = React.useState({ COLOR: true, DISTORT: false, TEXTURE: true, GLITCH: false, FEEDBACK: false, DETECT: false });
     const toggleCategory = (name) => setOpenCategories(s => ({...s, [name]: !s[name]}));
 
     // Live band values for effect card glow (updated from render loop)
@@ -446,6 +457,7 @@ function Dead4RatApp() {
         command: true,
         effects: true,
         signal: true,
+        generators: true,
     });
 
     const togglePanel = (key) => setPanels(p => ({...p, [key]: !p[key]}));
@@ -474,6 +486,11 @@ function Dead4RatApp() {
                 delete effect.params[pk].lfo;
                 delete effect.params[pk]._lfoBase;
             });
+        });
+        globalState.genParams = JSON.parse(JSON.stringify(GEN_DEFAULTS));
+        Object.keys(globalState.genParams).forEach(pk => {
+            delete globalState.genParams[pk].lfo;
+            delete globalState.genParams[pk]._lfoBase;
         });
         // Reset LFO globals
         setLfoSpeed(1.0);
@@ -640,6 +657,23 @@ function Dead4RatApp() {
                 });
             });
 
+            // LFO for Generator Params
+            Object.values(globalState.genParams).forEach(p => {
+                if (!p.lfo) return;
+                const base = (p._lfoBase !== undefined) ? p._lfoBase : p.value;
+                const range = p.max - p.min;
+                let mod = 0;
+                const t = now * spd;
+                switch (p.lfo) {
+                    case 'sin': mod = Math.sin(t * Math.PI * 2) * 0.5 + 0.5; break;
+                    case 'tri': mod = Math.abs(((t % 1) * 2) - 1); break;
+                    case 'saw': mod = t % 1; break;
+                    case 'rnd': mod = (Math.sin(t * 127.1) * 43758.5453) % 1; mod = Math.abs(mod); break;
+                }
+                const offset = (mod - 0.5) * dep * range;
+                p.value = Math.min(p.max, Math.max(p.min, base + offset));
+            });
+
             if (globalState.isolatePerson && maskEngine && maskEngine.isReady) {
                 maskEngine.process(globalState.videoElement);
                 globalState.maskCanvas = maskEngine.getMask();
@@ -669,10 +703,8 @@ function Dead4RatApp() {
 
     React.useEffect(() => {
         globalState.genMode = genMode;
-        globalState.genSpeed = genSpeed;
-        globalState.genZoom = genZoom;
-        globalState.genAudioWarp = genAudioWarp;
-    }, [genMode, genSpeed, genZoom, genAudioWarp]);
+        globalState.genAudioBand = genAudioReactive ? genAudioBand : 'OFF';
+    }, [genMode, genAudioBand, genAudioReactive]);
 
     React.useEffect(() => {
         globalState.lfoSpeed = lfoSpeed;
@@ -1045,6 +1077,7 @@ function Dead4RatApp() {
                         {isRecording ? '⏹ REC' : '⏺ REC'}
                     </button>
                     <button onClick={() => canvasEngine.exportPNG(blobTracker)}>EXPORT</button>
+                    <button className={panels.generators ? 'hud-active' : ''} onClick={() => togglePanel('generators')}>GENERATORS</button>
                     <button onClick={() => setUiVisible(false)}>HIDE UI</button>
                 </div>
             )}
@@ -1342,51 +1375,6 @@ function Dead4RatApp() {
                             <span>AUDIO {audioEngine.sourceType === 'file' ? 'FILE' : 'MIC'} — REACTIVE: {effectKeys.filter(k => globalState.glitchez[k].audioReactive).length} · ON: {effectKeys.filter(k => globalState.glitchez[k].enabled).length}</span>
                         </div>
                     )}
-                    {/* Grouped by category */}
-
-                    {/* GENERATORS (Special Category) */}
-                    <div className="category-group">
-                        <div className="category-header" onClick={() => toggleCategory('GENERATORS')}>
-                            <span className="cat-arrow" style={{transform: openCategories['GENERATORS'] ? 'rotate(90deg)' : 'none'}}>▶</span>
-                            <span className="cat-name">GENERATORS (WEBGL)</span>
-                            <span style={{flex:1}} />
-                            <span className="cat-count">{genMode !== 'OFF' ? '1 ON' : 'OFF'}</span>
-                        </div>
-                        <div style={{display: openCategories['GENERATORS'] ? 'block' : 'none'}}>
-                            <div className="effect-card" style={{borderLeft: genMode !== 'OFF' ? '2px solid var(--accent)' : '2px solid transparent'}}>
-                                <div className="effect-header">
-                                    <div className="effect-title">SDF RAYMARCHING</div>
-                                </div>
-                                <div style={{display: 'flex', gap: '4px', marginBottom: '8px', flexWrap: 'wrap'}}>
-                                    {['OFF', 'GRID TUNNEL', 'CUBE FIELD', 'RADIANT HORIZON'].map(m => (
-                                        <button 
-                                            key={m} 
-                                            className={`brutalist-button ${genMode === m ? 'primary' : ''}`}
-                                            style={{flex: '1 1 45%', fontSize: '0.6rem'}}
-                                            onClick={() => setGenMode(m)}
-                                        >{m}</button>
-                                    ))}
-                                </div>
-                                {genMode !== 'OFF' && (
-                                    <React.Fragment>
-                                        <div className="param-row">
-                                            <span className="param-name">SPEED</span>
-                                            <input type="range" min="0" max="3" step="0.01" value={genSpeed} onChange={(e) => setGenSpeed(parseFloat(e.target.value))} />
-                                        </div>
-                                        <div className="param-row">
-                                            <span className="param-name">ZOOM</span>
-                                            <input type="range" min="0.1" max="3" step="0.01" value={genZoom} onChange={(e) => setGenZoom(parseFloat(e.target.value))} />
-                                        </div>
-                                        <div className="param-row">
-                                            <span className="param-name">AUDIO WARP</span>
-                                            <input type="range" min="0" max="2" step="0.01" value={genAudioWarp} onChange={(e) => setGenAudioWarp(parseFloat(e.target.value))} />
-                                        </div>
-                                    </React.Fragment>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-
                     {EFFECT_CATEGORIES.map(cat => {
                         const activeCount = cat.keys.filter(k => globalState.glitchez[k]?.enabled).length;
                         const isOpen = openCategories[cat.name];
@@ -1404,6 +1392,128 @@ function Dead4RatApp() {
                             </div>
                         );
                     })}
+                </TerminalWindow>
+            )}
+
+            {/* ═══════════════ GENERATORS MODULES ═══════════════ */}
+            {uiVisible && started && (
+                <TerminalWindow
+                    id="win-generators"
+                    title="GENERATIVE_MATRIX"
+                    tag="WEBGL"
+                    initialX={window.innerWidth - 740}
+                    initialY={16}
+                    width="340px"
+                    maxHeight="calc(100vh - 60px)"
+                    onClose={() => togglePanel('generators')}
+                    minimized={!panels.generators}
+                >
+                    <div className="section-header" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                        <span>// ALGORITHM: <span style={{color: genMode !== 'OFF' ? 'var(--accent)' : 'inherit', marginLeft: '4px'}}>{genMode}</span></span>
+                        <span style={{display: 'flex', alignItems: 'center', gap: '3px'}}>
+                            {[
+                                { id: 'BASS', label: 'B', color: '#FF5500' },
+                                { id: 'MID',  label: 'M', color: '#FF9900' },
+                                { id: 'HIGH', label: 'H', color: '#FFDD00' },
+                            ].map(b => {
+                                const isActive = genAudioReactive && genAudioBand === b.id;
+                                return (
+                                    <button
+                                        key={b.id}
+                                        className={`audio-band-btn ${isActive ? 'active' : ''}`}
+                                        title={`${b.id} band reactive${isActive ? ' (click to turn off)' : ''}`}
+                                        onClick={() => {
+                                            if (genAudioReactive && genAudioBand === b.id) setGenAudioReactive(false);
+                                            else { setGenAudioReactive(true); setGenAudioBand(b.id); }
+                                        }}
+                                        style={{
+                                            borderColor: isActive ? b.color : undefined,
+                                            color: isActive ? b.color : undefined,
+                                            background: isActive ? `${b.color}15` : undefined,
+                                            minWidth: '20px',
+                                            padding: '2px 5px',
+                                            fontSize: '0.65rem'
+                                        }}
+                                    >
+                                        {b.label}
+                                    </button>
+                                );
+                            })}
+                        </span>
+                    </div>
+                    
+                    <button 
+                        className={`brutalist-button ${genMode === 'OFF' ? 'primary' : ''}`}
+                        style={{width: '100%', marginBottom: '8px', fontSize: '0.65rem'}}
+                        onClick={() => setGenMode('OFF')}
+                    >{genMode === 'OFF' ? 'CORE STANDBY (CLICK MATRIX TO ACTIVATE)' : '[ SHUTDOWN CORE ]'}</button>
+
+                    <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', marginBottom: '16px'}}>
+                        {['GRID TUNNEL', 'CUBE FIELD', 'RADIANT HORIZON', 'FRACTAL PYRAMID', 'NEON CAVES'].map(m => (
+                            <button 
+                                key={m} 
+                                className={`brutalist-button ${genMode === m ? 'active' : ''}`}
+                                style={{
+                                    fontSize: '0.55rem', padding: '6px', 
+                                    borderColor: genMode === m ? 'var(--accent)' : 'var(--border)'
+                                }}
+                                onClick={() => setGenMode(m)}
+                            >{m}</button>
+                        ))}
+                    </div>
+
+                    <div className="section-header">// KINEMATIC_CONTROLS</div>
+                    <div style={{padding: '0 4px', opacity: genMode === 'OFF' ? 0.3 : 1.0, pointerEvents: genMode === 'OFF' ? 'none' : 'auto', transition: 'opacity 0.2s'}}>
+                        {Object.keys(globalState.genParams).map(pk => {
+                            const param = globalState.genParams[pk];
+                            const waves = [null, 'sin', 'tri', 'saw', 'rnd'];
+                            const waveLabels = { sin: '∿', tri: '△', saw: '⧸', rnd: '?' };
+                            const cycleWave = () => {
+                                const curIdx = waves.indexOf(param.lfo || null);
+                                const nextIdx = (curIdx + 1) % waves.length;
+                                const nextWave = waves[nextIdx];
+                                if (nextWave) {
+                                    param._lfoBase = param.value;
+                                    param.lfo = nextWave;
+                                } else {
+                                    if (param._lfoBase !== undefined) param.value = param._lfoBase;
+                                    delete param._lfoBase;
+                                    param.lfo = null;
+                                }
+                                setUiRefresh(r => r + 1);
+                            };
+                            return (
+                                <div className="param-row" key={pk} style={{display: 'flex', alignItems: 'center', marginBottom: '4px'}}>
+                                    <span className="param-name" style={{flex: '1', fontSize: '0.6rem'}}>{param.name}</span>
+                                    <input type="range" min={param.min} max={param.max} step={param.step}
+                                           className="brutalist-slider"
+                                           style={{flex: '2'}}
+                                           value={param._lfoBase !== undefined ? param._lfoBase : param.value}
+                                           onChange={(e) => {
+                                                const v = parseFloat(e.target.value);
+                                                if (param.lfo) { param._lfoBase = v; }
+                                                else { param.value = v; }
+                                                setUiRefresh(r => r+1);
+                                           }} />
+                                    <span className="param-value" style={{minWidth: '35px', textAlign: 'right', fontSize: '0.6rem'}}>
+                                        {(param._lfoBase !== undefined ? param._lfoBase : param.value).toFixed(2)}
+                                    </span>
+                                    <button
+                                        title="LFO Automate"
+                                        style={{
+                                            padding: '2px 4px', fontSize: '0.6rem', marginLeft: '4px',
+                                            background: param.lfo ? 'var(--accent)' : 'var(--bg-mid)',
+                                            color: param.lfo ? '#000' : 'var(--text-dim)',
+                                            cursor: 'pointer', border: '1px solid var(--border)', flexShrink: 0, width: '20px', textAlign: 'center'
+                                        }}
+                                        onClick={cycleWave}
+                                    >
+                                        {param.lfo ? waveLabels[param.lfo] : '[]'}
+                                    </button>
+                                </div>
+                            );
+                        })}
+                    </div>
                 </TerminalWindow>
             )}
 

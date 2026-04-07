@@ -213,10 +213,14 @@ class CanvasEngine {
             uniform float u_splitScan; uniform float u_splitBands; uniform float u_splitShift; uniform float u_splitWarp; uniform float u_splitBlend;
 
             // Generative Art
-            uniform float u_genMode; // 0=OFF, 1=Grid, 2=Cubes, 3=Radiant
+            uniform float u_genMode; // 0=OFF, 1=Grid, 2=Cubes, 3=Radiant, 4=Fractal, 5=Caves
             uniform float u_genSpeed;
             uniform float u_genScale;
             uniform float u_genWarp;
+            uniform float u_genRotX;
+            uniform float u_genRotY;
+            uniform float u_genRotZ;
+            uniform float u_genAudioBand;
 
             // --- Canvas Transform ---
             uniform float u_flipH;       // 0 or 1
@@ -299,21 +303,43 @@ class CanvasEngine {
                 vec3 q = abs(p) - b;
                 return length(max(q,0.0)) + min(max(q.x,max(q.y,q.z)),0.0);
             }
+            float sdOctahedron(vec3 p, float s) {
+                p = abs(p);
+                return (p.x + p.y + p.z - s) * 0.57735027;
+            }
+
+            float getGenBand() {
+                if (u_genAudioBand < 0.5) return u_bass;
+                if (u_genAudioBand > 1.5) return u_high;
+                return u_mid;
+            }
 
             float mapGen(vec3 p) {
+                float ABnd = getGenBand();
+                
+                // Master 3D Rotation
+                p.yz *= rot(u_genRotX);
+                p.xz *= rot(u_genRotY);
+                p.xy *= rot(u_genRotZ);
+
                 if (u_genMode < 1.5) {
-                    p.z -= u_time * u_genSpeed * 5.0 + u_bass * 5.0 * u_genWarp;
+                    // MODE 1: GRID TUNNEL
+                    p.z -= u_time * u_genSpeed * 5.0 + ABnd * 4.0 * u_genWarp;
                     vec3 q = p;
-                    q.xy *= rot(q.z * 0.05 * u_genWarp * u_mid);
+                    q.xy *= rot(q.z * 0.05 * u_genWarp * ABnd);
                     q.x = mod(q.x + 2.0, 4.0) - 2.0;
                     q.y = mod(q.y + 2.0, 4.0) - 2.0;
                     q.z = mod(q.z + 2.0, 4.0) - 2.0;
-                    float dBox = sdBox(q, vec3(1.9));
-                    float dWall = -sdBox(q, vec3(1.8));
-                    return max(dBox, dWall); 
+                    
+                    float r = 0.02 + ABnd * 0.15 * u_genWarp;
+                    float beamX = max(abs(q.y), abs(q.z)) - r;
+                    float beamY = max(abs(q.x), abs(q.z)) - r;
+                    float beamZ = max(abs(q.x), abs(q.y)) - r;
+                    return min(beamX, min(beamY, beamZ));
                 } 
                 else if (u_genMode < 2.5) {
-                    p.z -= u_time * u_genSpeed * 10.0 + u_bass * 10.0 * u_genWarp;
+                    // MODE 2: CUBE FIELD
+                    p.z -= u_time * u_genSpeed * 10.0 + ABnd * 10.0 * u_genWarp;
                     vec3 q = p;
                     q.x = mod(q.x + 3.0, 6.0) - 3.0;
                     q.y = mod(q.y + 3.0, 6.0) - 3.0;
@@ -325,9 +351,10 @@ class CanvasEngine {
                     float dInner = -sdBox(q, vec3(0.9 * scale));
                     return max(dBox, dInner);
                 } 
-                else {
+                else if (u_genMode < 3.5) {
+                    // MODE 3: RADIANT HORIZON
                     p.z -= u_time * u_genSpeed * 8.0;
-                    p.xy *= rot(u_time * 0.2 + u_mid * u_genWarp);
+                    p.xy *= rot(u_time * 0.2 + ABnd * u_genWarp);
                     vec2 qxy = p.xy;
                     float angle = atan(qxy.y, qxy.x);
                     float numLines = 16.0;
@@ -339,6 +366,33 @@ class CanvasEngine {
                     vec3 q = vec3(qxy.x - 2.0, qxy.y, mod(p.z, 2.0) - 1.0);
                     float dCore = length(q.xy) - 0.1 - u_transient * u_genWarp * 0.3;
                     return dCore;
+                }
+                else if (u_genMode < 4.5) {
+                    // MODE 4: FRACTAL PYRAMID (Infinite Twisting Octahedrons)
+                    p.z -= u_time * u_genSpeed * 6.0;
+                    vec3 q = p;
+                    q.x = mod(q.x + 4.0, 8.0) - 4.0;
+                    q.y = mod(q.y + 4.0, 8.0) - 4.0;
+                    q.z = mod(q.z + 4.0, 8.0) - 4.0;
+                    
+                    float scale = 1.0;
+                    for (int i=0; i<4; i++) {
+                        q = abs(q) - (0.5 + ABnd * 0.2 * u_genWarp);
+                        q.xy *= rot(0.5 + u_time * 0.2);
+                        q.xz *= rot(0.5);
+                        q *= 1.8;
+                        scale *= 1.8;
+                    }
+                    return sdOctahedron(q, 1.2) / scale;
+                }
+                else {
+                    // MODE 5: NEON CAVES (Organic hollow tunnel)
+                    p.z -= u_time * u_genSpeed * 5.0;
+                    vec3 q = p;
+                    // Negative radius for inner tunnel wall
+                    float d = (2.0 + ABnd * 1.5 * u_genWarp) - length(q.xy);
+                    float bump = sin(q.x * 2.0 + u_time) * sin(q.y * 2.0) * sin(q.z * 1.5);
+                    return d - bump * (0.5 + ABnd * u_genWarp * 0.8);
                 }
             }
 
@@ -942,10 +996,14 @@ class CanvasEngine {
         this.locSplitScan = loc("u_splitScan"); this.locSplitBands = loc("u_splitBands"); this.locSplitShift = loc("u_splitShift"); this.locSplitWarp = loc("u_splitWarp"); this.locSplitBlend = loc("u_splitBlend");
         
         // Generative Art
-        this.locGenMode  = loc("u_genMode");
-        this.locGenSpeed = loc("u_genSpeed");
-        this.locGenScale = loc("u_genScale");
-        this.locGenWarp  = loc("u_genWarp");
+        this.locGenMode      = loc("u_genMode");
+        this.locGenSpeed     = loc("u_genSpeed");
+        this.locGenScale     = loc("u_genScale");
+        this.locGenWarp      = loc("u_genWarp");
+        this.locGenRotX      = loc("u_genRotX");
+        this.locGenRotY      = loc("u_genRotY");
+        this.locGenRotZ      = loc("u_genRotZ");
+        this.locGenAudioBand = loc("u_genAudioBand");
 
         // Canvas Transform
         this.locFlipH    = loc("u_flipH");
@@ -1213,11 +1271,30 @@ class CanvasEngine {
         if (state.genMode === 'GRID TUNNEL') genModeNum = 1.0;
         else if (state.genMode === 'CUBE FIELD') genModeNum = 2.0;
         else if (state.genMode === 'RADIANT HORIZON') genModeNum = 3.0;
+        else if (state.genMode === 'FRACTAL PYRAMID') genModeNum = 4.0;
+        else if (state.genMode === 'NEON CAVES') genModeNum = 5.0;
+
+        let bNum = 1.0; // MID
+        if (state.genAudioBand === 'BASS') bNum = 0.0;
+        else if (state.genAudioBand === 'HIGH') bNum = 2.0;
 
         this.gl.uniform1f(this.locGenMode, genModeNum);
-        this.gl.uniform1f(this.locGenSpeed, state.genSpeed !== undefined ? state.genSpeed : 1.0);
-        this.gl.uniform1f(this.locGenScale, state.genZoom !== undefined ? state.genZoom : 1.0);
-        this.gl.uniform1f(this.locGenWarp, state.genAudioWarp !== undefined ? state.genAudioWarp : 1.0);
+        if (state.genParams) {
+            this.gl.uniform1f(this.locGenSpeed, state.genParams.speed.value);
+            this.gl.uniform1f(this.locGenScale, state.genParams.zoom.value);
+            this.gl.uniform1f(this.locGenWarp, state.genParams.warp.value);
+            this.gl.uniform1f(this.locGenRotX, state.genParams.rotateX.value);
+            this.gl.uniform1f(this.locGenRotY, state.genParams.rotateY.value);
+            this.gl.uniform1f(this.locGenRotZ, state.genParams.rotateZ.value);
+        } else {
+            this.gl.uniform1f(this.locGenSpeed, 1.0);
+            this.gl.uniform1f(this.locGenScale, 1.0);
+            this.gl.uniform1f(this.locGenWarp, 1.0);
+            this.gl.uniform1f(this.locGenRotX, 0.0);
+            this.gl.uniform1f(this.locGenRotY, 0.0);
+            this.gl.uniform1f(this.locGenRotZ, 0.0);
+        }
+        this.gl.uniform1f(this.locGenAudioBand, bNum);
 
         // --- Canvas Transform ---
         const ct = state.canvasTransform || {};
