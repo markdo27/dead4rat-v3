@@ -569,14 +569,16 @@ function Dead4RatApp() {
                 globalState.maskCanvas = null;
             }
 
-            // Blob Tracker
+            // Composite first so blob tracker sees everything (webcam + video layers)
+            globalState.compositeSource = mediaManager.composite(globalState.videoElement);
+
+            // Blob Tracker — analyse composite canvas so video layers are included
             if (blobTracker && blobTracker.enabled) {
-                blobTracker.process(globalState.videoElement);
+                blobTracker.process(globalState.compositeSource);
                 // Update live blob count display (throttled to avoid excess re-renders)
                 if (frames % 6 === 0) setBlobCount(blobTracker.blobCount);
             }
 
-            globalState.compositeSource = mediaManager.composite(globalState.videoElement);
             canvasEngine.render(globalState);
         };
         requestAnimationFrame(renderLoop);

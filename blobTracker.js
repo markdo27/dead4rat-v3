@@ -59,12 +59,14 @@ class BlobTracker {
     // ─────────────────────────────────────────────────
     // MAIN PROCESS — call every frame from render loop
     // ─────────────────────────────────────────────────
-    process(videoElement) {
+    process(source) {
         if (!this.enabled) return;
-        if (!videoElement || videoElement.readyState < 2) return;
+        if (!source) return;
+        // <video> needs readyState check; <canvas> is always ready
+        if (source.tagName === 'VIDEO' && source.readyState < 2) return;
 
-        // Down-sample webcam frame to analysis canvas
-        this.analysisCtx.drawImage(videoElement, 0, 0, this.analysisW, this.analysisH);
+        // Down-sample source frame to analysis canvas
+        this.analysisCtx.drawImage(source, 0, 0, this.analysisW, this.analysisH);
         const frame = this.analysisCtx.getImageData(0, 0, this.analysisW, this.analysisH);
         const curr  = frame.data;
 
