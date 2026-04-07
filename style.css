@@ -412,7 +412,7 @@ body, html {
 input[type="range"] {
     appearance: none;
     width: 100%;
-    height: 2px;
+    height: 4px;
     background: var(--border-dim);
     outline: none;
     border-radius: 0;
@@ -421,8 +421,8 @@ input[type="range"] {
 .brutalist-slider::-webkit-slider-thumb,
 input[type="range"]::-webkit-slider-thumb {
     appearance: none;
-    width: 8px;
-    height: 16px;
+    width: 12px;
+    height: 20px;
     background: var(--accent);
     cursor: ew-resize;
     border-radius: 0;
@@ -948,4 +948,197 @@ input[type="range"]::-webkit-slider-thumb:hover {
     box-shadow: 0 0 8px var(--accent);
     flex-shrink: 0;
     animation: audio-btn-pulse 1s ease-in-out infinite;
+}
+
+/* ═══════════════════════════════════════════
+   EFFECT CATEGORY GROUPS
+   ═══════════════════════════════════════════ */
+
+.category-group {
+    margin-bottom: 4px;
+    border: 1px solid var(--border-dim);
+}
+
+.category-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 7px 10px;
+    cursor: pointer;
+    background: rgba(255, 85, 0, 0.03);
+    border-bottom: 1px solid var(--border-dim);
+    transition: background 0.15s ease;
+    user-select: none;
+}
+
+.category-header:hover {
+    background: rgba(255, 85, 0, 0.08);
+}
+
+.category-header .cat-name {
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    font-weight: 800;
+    color: var(--accent);
+    letter-spacing: 2px;
+}
+
+.category-header .cat-count {
+    font-family: var(--font-mono);
+    font-size: 0.55rem;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+}
+
+.category-header .cat-arrow {
+    font-size: 0.6rem;
+    color: var(--text-dim);
+    transition: transform 0.2s ease;
+    margin-right: 6px;
+}
+
+.category-header .cat-arrow.open {
+    transform: rotate(90deg);
+}
+
+.category-body {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.25s ease;
+}
+
+.category-body.open {
+    max-height: 2000px;
+}
+
+/* ═══════════════════════════════════════════
+   HUD BAR — Compact post-boot status strip
+   ═══════════════════════════════════════════ */
+
+.hud-bar {
+    pointer-events: auto;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 4px 16px;
+    background: var(--panel-bg);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border-hard);
+    font-family: var(--font-mono);
+    font-size: 0.6rem;
+    letter-spacing: 1px;
+}
+
+.hud-bar .hud-label {
+    color: var(--text-dim);
+}
+
+.hud-bar .hud-value {
+    color: var(--accent);
+    font-weight: 700;
+}
+
+.hud-bar .hud-sep {
+    color: var(--border-dim);
+    margin: 0 2px;
+}
+
+.hud-bar button {
+    pointer-events: auto;
+    font-family: var(--font-mono);
+    font-size: 0.55rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    background: transparent;
+    color: var(--text-dim);
+    border: 1px solid var(--border-dim);
+    cursor: pointer;
+    letter-spacing: 1px;
+    transition: all 0.1s ease;
+}
+
+.hud-bar button:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: var(--accent-glow);
+}
+
+.hud-bar button.hud-active {
+    color: #000;
+    background: var(--accent);
+    border-color: var(--accent);
+}
+
+/* ═══════════════════════════════════════════
+   BLEND MODE BUTTON
+   ═══════════════════════════════════════════ */
+
+.blend-mode-btn {
+    pointer-events: auto;
+    font-family: var(--font-mono);
+    font-size: 0.55rem;
+    font-weight: 700;
+    padding: 2px 6px;
+    background: transparent;
+    color: var(--text-muted);
+    border: 1px solid var(--border-dim);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.1s ease;
+    letter-spacing: 0.5px;
+}
+
+.blend-mode-btn:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+}
+
+.blend-mode-btn.mode-active {
+    color: var(--accent);
+    border-color: var(--accent-dim);
+}
+
+/* ═══════════════════════════════════════════
+   SECTION HINT TEXT
+   ═══════════════════════════════════════════ */
+
+.section-hint {
+    font-size: 0.5rem;
+    color: var(--text-muted);
+    letter-spacing: 1px;
+    margin-top: -6px;
+    margin-bottom: 8px;
+    font-style: normal;
+}
+
+/* ═══════════════════════════════════════════
+   STARTER PRESET BADGE
+   ═══════════════════════════════════════════ */
+
+.preset-card.starter {
+    border-color: var(--accent-dim);
+}
+
+.preset-card.starter .preset-name {
+    color: var(--accent);
+}
+
+.starter-badge {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    padding: 1px 4px;
+    background: var(--accent-dim);
+    color: var(--text-bright);
+    font-size: 7px;
+    font-family: var(--font-mono);
+    font-weight: 800;
+    letter-spacing: 1px;
 }

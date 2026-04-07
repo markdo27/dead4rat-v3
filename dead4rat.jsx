@@ -56,6 +56,65 @@ const AUDIO_BAND_MAP = {
 // Frozen factory defaults — never mutated
 const FACTORY_DEFAULTS = JSON.parse(JSON.stringify(initialEffectSettings));
 
+// ── Effect Category Grouping ─────────────────────────────────────────
+const EFFECT_CATEGORIES = [
+    { name: 'COLOR', keys: ['rgbShift', 'colorDistortion', 'chromaGlitch', 'chromaDelay', 'colorize', 'thermalVision'] },
+    { name: 'DISTORT', keys: ['barrelDistortion', 'vortexWarp', 'kaleidoscope', 'mirrorTile'] },
+    { name: 'TEXTURE', keys: ['scanLines', 'noise', 'blockiness', 'posterize', 'ditherMatrix', 'dataPointCloud'] },
+    { name: 'GLITCH', keys: ['vhsJitter', 'glitchSlicer', 'pixelSort', 'stroboscope'] },
+    { name: 'FEEDBACK', keys: ['videoFeedback', 'acidMelt', 'motionDetection'] },
+    { name: 'DETECT', keys: ['edgeDetection'] },
+];
+
+// ── Blend Mode Names ─────────────────────────────────────────────────
+const BLEND_MODE_NAMES = ['NORMAL', 'ADD', 'MULTIPLY', 'SCREEN', 'OVERLAY', 'DIFFER'];
+
+// ── Built-In Starter Presets ─────────────────────────────────────────
+const STARTER_PRESETS = [
+    {
+        id: 'starter_vhs', name: 'VHS RETRO', isStarter: true,
+        settings: (() => {
+            const s = JSON.parse(JSON.stringify(FACTORY_DEFAULTS));
+            s.scanLines.enabled = true; s.scanLines.params.density.value = 0.85; s.scanLines.params.opacity.value = 0.25;
+            s.vhsJitter.enabled = true; s.vhsJitter.params.vertical.value = 2.5; s.vhsJitter.params.horizontal.value = 1.8;
+            s.noise.enabled = true; s.noise.params.amount.value = 0.15;
+            s.colorDistortion.enabled = true; s.colorDistortion.params.saturation.value = 0.7;
+            return s;
+        })(),
+    },
+    {
+        id: 'starter_acid', name: 'ACID DREAM', isStarter: true,
+        settings: (() => {
+            const s = JSON.parse(JSON.stringify(FACTORY_DEFAULTS));
+            s.videoFeedback.enabled = true; s.videoFeedback.params.amount.value = 0.88; s.videoFeedback.params.zoom.value = 1.01; s.videoFeedback.params.rotation.value = 0.5; s.videoFeedback.params.hueShift.value = 8;
+            s.acidMelt.enabled = true; s.acidMelt.params.amount.value = 0.85; s.acidMelt.params.turbulence.value = 0.12;
+            s.chromaDelay.enabled = true; s.chromaDelay.params.amount.value = 0.7;
+            return s;
+        })(),
+    },
+    {
+        id: 'starter_clean', name: 'CLEAN EDGES', isStarter: true,
+        settings: (() => {
+            const s = JSON.parse(JSON.stringify(FACTORY_DEFAULTS));
+            s.edgeDetection.enabled = true; s.edgeDetection.params.threshold.value = 40; s.edgeDetection.params.glow.value = 0.6;
+            s.scanLines.enabled = true; s.scanLines.params.density.value = 0.5; s.scanLines.params.opacity.value = 0.08;
+            s.colorize.enabled = true; s.colorize.params.hue.value = 180; s.colorize.params.strength.value = 0.3;
+            return s;
+        })(),
+    },
+    {
+        id: 'starter_cyber', name: 'CYBER PUNK', isStarter: true,
+        settings: (() => {
+            const s = JSON.parse(JSON.stringify(FACTORY_DEFAULTS));
+            s.rgbShift.enabled = true; s.rgbShift.params.amount.value = 12;
+            s.glitchSlicer.enabled = true; s.glitchSlicer.params.slices.value = 12; s.glitchSlicer.params.offset.value = 60;
+            s.posterize.enabled = true; s.posterize.params.levels.value = 6;
+            s.scanLines.enabled = true; s.scanLines.params.density.value = 0.9; s.scanLines.params.opacity.value = 0.2;
+            return s;
+        })(),
+    },
+];
+
 // Global Mutation State (bypasses React for 60fps)
 const globalState = {
     timeSpeed: 1.0,
@@ -372,6 +431,8 @@ function Dead4RatApp() {
     const [blobThreshold, setBlobThreshold] = React.useState(30);
     const [blobMinArea, setBlobMinArea] = React.useState(15);
     const [blobCount, setBlobCount] = React.useState(0);
+    const [openCategories, setOpenCategories] = React.useState({ COLOR: true, DISTORT: false, TEXTURE: true, GLITCH: false, FEEDBACK: false, DETECT: false });
+    const toggleCategory = (name) => setOpenCategories(s => ({...s, [name]: !s[name]}));
 
     // Live band values for effect card glow (updated from render loop)
     const liveAudio = React.useRef({ bass: 0, mid: 0, high: 0 });
@@ -744,6 +805,26 @@ function Dead4RatApp() {
                 {/* Params (only when enabled) */}
                 {effect.enabled && Object.keys(effect.params).map(pk => {
                     const param = globalState.glitchez[key].params[pk];
+
+                    // ── BlendMode: cycle button instead of slider ──
+                    if (pk === 'blendMode') {
+                        const modeIdx = Math.round(param.value);
+                        const modeName = BLEND_MODE_NAMES[modeIdx] || 'NORMAL';
+                        return (
+                            <div className="param-row" key={pk} style={{justifyContent: 'flex-end'}}>
+                                <button
+                                    className={`blend-mode-btn ${modeIdx > 0 ? 'mode-active' : ''}`}
+                                    onClick={() => {
+                                        param.value = (modeIdx + 1) % BLEND_MODE_NAMES.length;
+                                        setUiRefresh(r => r + 1);
+                                    }}
+                                    title="Click to cycle blend mode"
+                                >MIX: {modeName}</button>
+                            </div>
+                        );
+                    }
+
+                    // ── Regular param: slider + LFO ──
                     const waves = [null, 'sin', 'tri', 'saw', 'rnd'];
                     const waveLabels = { sin: '∿', tri: '△', saw: '⧸', rnd: '?' };
                     const cycleWave = () => {
@@ -806,8 +887,8 @@ function Dead4RatApp() {
     return (
         <React.Fragment>
 
-            {/* ═══════════════ TERMINAL ═══════════════ */}
-            {uiVisible && (
+            {/* ═══════════════ PRE-BOOT TERMINAL ═══════════════ */}
+            {uiVisible && !started && (
                 <TerminalWindow
                     id="win-terminal"
                     title="DEAD4RAT Terminal"
@@ -827,51 +908,50 @@ function Dead4RatApp() {
                         <span className="status-label">FRAMERATE</span>
                         <span className="status-value">{fps}_FPS</span>
                     </div>
-                    <div className="status-row">
-                        <span className="status-label">SYST_LOAD</span>
-                        <span className="status-value">{layers.length}_LYR</span>
-                    </div>
-                    <div className="status-row">
-                        <span className="status-label">CAM_FEED</span>
-                        <span className="status-value" style={{color: camOn ? 'var(--accent)' : 'var(--text-dim)'}}>
-                            {camOn ? 'ONLINE' : 'OFFLINE'}
-                        </span>
-                    </div>
-                    <div className="status-row">
-                        <span className="status-label">AUDIO</span>
-                        <span className="status-value" style={{color: audioEngine?.isRunning ? 'var(--accent)' : 'var(--text-dim)'}}>
-                            {audioEngine?.isRunning ? (audioEngine?.sourceType === 'file' ? 'FILE_SRC' : 'MIC_SRC') : 'OFFLINE'}
-                        </span>
-                    </div>
 
                     <div className="hud-divider" />
 
                     <div className="section-header">CORE_CMD // CONTROLS</div>
 
-                    {!started && (
-                        <button className="brutalist-button primary" style={{marginTop: '12px', width: '100%', fontSize: '1rem'}} onClick={toggleStart}>
-                            BOOT_KERNEL
-                        </button>
-                    )}
-
-                    {started && (
-                        <div style={{marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '6px'}}>
-                            <button className={`brutalist-button ${camOn ? '' : 'active'}`} onClick={toggleCam}>
-                                {camOn ? 'CAM_OFF' : 'CAM_ON'}
-                            </button>
-                            <button className={`brutalist-button ${isRecording ? 'active' : ''}`} onClick={recordToggle}>
-                                {isRecording ? 'STP_REC' : 'STR_REC'}
-                            </button>
-                            <button className="brutalist-button" onClick={() => canvasEngine.exportPNG()}>EXPORT_SNAPSHOT</button>
-                            <button className="brutalist-button secondary" style={{fontSize: '0.65rem'}} onClick={() => setUiVisible(false)}>COLLAPSE_UI</button>
-                        </div>
-                    )}
+                    <button className="brutalist-button primary" style={{marginTop: '12px', width: '100%', fontSize: '1rem'}} onClick={toggleStart}>
+                        BOOT_KERNEL
+                    </button>
 
                     <div style={{marginTop: '12px', fontSize: '0.55rem', color: 'var(--text-muted)', lineHeight: '1.4', letterSpacing: '1px'}}>
                         <span>────────────────────────</span><br/>
                         <span className="blink-cursor">{'>'} AWAITING INPUT</span>
                     </div>
                 </TerminalWindow>
+            )}
+
+            {/* ═══════════════ POST-BOOT HUD BAR ═══════════════ */}
+            {uiVisible && started && (
+                <div className="hud-bar">
+                    <span style={{color: 'var(--accent)', fontWeight: 800, letterSpacing: '2px'}}>D4R</span>
+                    <span className="hud-sep">│</span>
+                    <span className="hud-label">FPS</span>
+                    <span className="hud-value">{fps}</span>
+                    <span className="hud-sep">│</span>
+                    <span className="hud-label">CAM</span>
+                    <span className="hud-value" style={{color: camOn ? 'var(--accent)' : 'var(--text-dim)'}}>{camOn ? 'ON' : 'OFF'}</span>
+                    <span className="hud-sep">│</span>
+                    <span className="hud-label">LYR</span>
+                    <span className="hud-value">{layers.length}</span>
+                    <span className="hud-sep">│</span>
+                    <span className="hud-label">AUDIO</span>
+                    <span className="hud-value" style={{color: audioEngine?.isRunning ? 'var(--accent)' : 'var(--text-dim)'}}>
+                        {audioEngine?.isRunning ? (audioEngine?.sourceType === 'file' ? 'FILE' : 'MIC') : 'OFF'}
+                    </span>
+
+                    <span style={{flex: 1}} />
+
+                    <button onClick={toggleCam}>{camOn ? 'CAM OFF' : 'CAM ON'}</button>
+                    <button className={isRecording ? 'hud-active' : ''} onClick={recordToggle}>
+                        {isRecording ? '⏹ REC' : '⏺ REC'}
+                    </button>
+                    <button onClick={() => canvasEngine.exportPNG()}>EXPORT</button>
+                    <button onClick={() => setUiVisible(false)}>HIDE UI</button>
+                </div>
             )}
 
             {/* ═══════════════ SIGNAL MONITOR ═══════════════ */}
@@ -881,7 +961,7 @@ function Dead4RatApp() {
                     title="SIGNAL_MONITOR"
                     tag="AUDIO"
                     initialX={16}
-                    initialY={340}
+                    initialY={40}
                     width="320px"
                     onClose={() => togglePanel('signal')}
                     minimized={!panels.signal}
@@ -908,21 +988,23 @@ function Dead4RatApp() {
                     id="win-command"
                     title="COMMAND_CENTER"
                     initialX={16}
-                    initialY={660}
+                    initialY={260}
                     width="320px"
-                    maxHeight="calc(100vh - 700px)"
+                    maxHeight="calc(100vh - 300px)"
                     onClose={() => togglePanel('command')}
                     minimized={!panels.command}
                 >
                     {/* OVERRIDES */}
-                    <div className="section-header">CORE_KERNEL // OVERRIDES</div>
+                    <div className="section-header">// RANDOMIZE</div>
+                    <div className="section-hint">ENGINES = random on/off · PARAMS = random values · RESET = factory defaults</div>
                     <div style={{display: 'flex', gap: '4px', marginBottom: '12px'}}>
                         <button className="brutalist-button" style={{fontSize: '0.65rem', flex: 1}} onClick={scrambleEngines}>ENGINES</button>
                         <button className="brutalist-button" style={{fontSize: '0.65rem', flex: 1}} onClick={scrambleParams}>PARAMS</button>
                         <button className="brutalist-button primary" style={{fontSize: '0.65rem', flex: 1}} onClick={resetSystem}>RESET</button>
                     </div>
 
-                    <div className="section-header">SYST_DIAG // OVERLAYS</div>
+                    <div className="section-header">// ML OVERLAY</div>
+                    <div className="section-hint">Cut out person from background using AI mask</div>
                     <div style={{display: 'flex', gap: '4px', marginBottom: '12px'}}>
                         <button 
                             className={`brutalist-button ${isolatePerson ? 'primary' : ''}`} 
@@ -937,7 +1019,8 @@ function Dead4RatApp() {
                     <div className="hud-divider" />
 
                     {/* CANVAS TRANSFORM */}
-                    <div className="section-header">CANVAS_XFORM // TRANSFORM</div>
+                    <div className="section-header">// TRANSFORM</div>
+                    <div className="section-hint">Flip or rotate the entire output canvas</div>
                     <div style={{display: 'flex', gap: '4px', marginBottom: '6px'}}>
                         <button
                             className={`brutalist-button ${canvasTransform.flipH ? 'primary' : ''}`}
@@ -1139,19 +1222,34 @@ function Dead4RatApp() {
                     <div className="hud-divider" />
 
                     {/* PRESETS */}
-                    <div className="section-header">DATA_STASH // PRESETS</div>
-                    <button className="brutalist-button primary" style={{width: '100%', marginBottom: '8px', fontSize: '0.7rem'}} onClick={savePreset}>COMMIT CURRENT STATE</button>
+                    <div className="section-header">// PRESETS</div>
+                    <div className="section-hint">Click a preset to load it · SAVE stores current settings</div>
+                    <button className="brutalist-button primary" style={{width: '100%', marginBottom: '8px', fontSize: '0.7rem'}} onClick={savePreset}>+ SAVE CURRENT STATE</button>
+                    {/* Starter presets — always shown, non-deletable */}
+                    <div style={{fontSize: '0.5rem', color: 'var(--text-muted)', marginBottom: '4px', letterSpacing: '1px'}}>── BUILT-IN ──</div>
+                    <div className="preset-grid">
+                        {STARTER_PRESETS.map(p => (
+                            <div key={p.id} className="preset-card starter" onClick={() => loadPreset(p)} title={`Load ${p.name}`}>
+                                <div className="starter-badge">★</div>
+                                <div className="preset-name" style={{paddingTop: '14px'}}>{p.name}</div>
+                            </div>
+                        ))}
+                    </div>
+                    {/* User presets */}
                     {presets.length > 0 && (
-                        <div className="preset-grid">
-                            {presets.map(p => (
-                                <div key={p.id} className="preset-card" onClick={() => loadPreset(p)}>
-                                    <img src={p.thumbnail} alt={p.name} />
-                                    <div className="preset-name">{p.name.toUpperCase()}</div>
-                                    <button style={{position: 'absolute', top: 2, right: 2, padding: '2px 5px', background: 'var(--accent)', color: '#000', border: 'none', fontSize: '8px', fontWeight: 'bold', cursor: 'pointer', fontFamily: 'var(--font-mono)'}}
-                                        onClick={(e) => { e.stopPropagation(); presetManager.deletePreset(p.id); setPresets([...presetManager.presets]); }}>DELETE</button>
-                                </div>
-                            ))}
-                        </div>
+                        <React.Fragment>
+                            <div style={{fontSize: '0.5rem', color: 'var(--text-muted)', margin: '6px 0 4px', letterSpacing: '1px'}}>── SAVED ──</div>
+                            <div className="preset-grid">
+                                {presets.map(p => (
+                                    <div key={p.id} className="preset-card" onClick={() => loadPreset(p)}>
+                                        <img src={p.thumbnail} alt={p.name} />
+                                        <div className="preset-name">{p.name.toUpperCase()}</div>
+                                        <button style={{position: 'absolute', top: 2, right: 2, padding: '2px 5px', background: 'var(--accent)', color: '#000', border: 'none', fontSize: '8px', fontWeight: 'bold', cursor: 'pointer', fontFamily: 'var(--font-mono)'}}
+                                            onClick={(e) => { e.stopPropagation(); presetManager.deletePreset(p.id); setPresets([...presetManager.presets]); }}>DEL</button>
+                                    </div>
+                                ))}
+                            </div>
+                        </React.Fragment>
                     )}
                 </TerminalWindow>
             )}
@@ -1172,10 +1270,27 @@ function Dead4RatApp() {
                     {audioEngine?.isRunning && (
                         <div className="audio-status-bar">
                             <span className="audio-status-dot" />
-                            <span>AUDIO {audioEngine.sourceType === 'file' ? 'FILE' : 'MIC'} — REACTIVE EFFECTS: {effectKeys.filter(k => globalState.glitchez[k].audioReactive).length}</span>
+                            <span>AUDIO {audioEngine.sourceType === 'file' ? 'FILE' : 'MIC'} — REACTIVE: {effectKeys.filter(k => globalState.glitchez[k].audioReactive).length} · ON: {effectKeys.filter(k => globalState.glitchez[k].enabled).length}</span>
                         </div>
                     )}
-                    {effectKeys.map(renderEffect)}
+                    {/* Grouped by category */}
+                    {EFFECT_CATEGORIES.map(cat => {
+                        const activeCount = cat.keys.filter(k => globalState.glitchez[k]?.enabled).length;
+                        const isOpen = openCategories[cat.name];
+                        return (
+                            <div className="category-group" key={cat.name}>
+                                <div className="category-header" onClick={() => toggleCategory(cat.name)}>
+                                    <span className="cat-arrow" style={{transform: isOpen ? 'rotate(90deg)' : 'none'}}>▶</span>
+                                    <span className="cat-name">{cat.name}</span>
+                                    <span style={{flex:1}} />
+                                    <span className="cat-count">{activeCount > 0 ? `${activeCount} ON` : `${cat.keys.length} FX`}</span>
+                                </div>
+                                <div style={{display: isOpen ? 'block' : 'none'}}>
+                                    {cat.keys.map(k => globalState.glitchez[k] ? renderEffect(k) : null)}
+                                </div>
+                            </div>
+                        );
+                    })}
                 </TerminalWindow>
             )}
 
