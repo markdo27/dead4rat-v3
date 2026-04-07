@@ -762,21 +762,14 @@ function Dead4RatApp() {
 
         const bandColor = band === 'BASS' ? '#FF5500' : band === 'MID' ? '#FF9900' : '#FFDD00';
 
-        const cycleBand = () => {
+        const selectBand = (newBand) => {
             const eff = globalState.glitchez[key];
-            if (!eff.audioReactive) {
-                // Turn on with current band
-                eff.audioReactive = true;
+            if (eff.audioReactive && eff.audioBand === newBand) {
+                // Clicking same band turns off audio reactive
+                eff.audioReactive = false;
             } else {
-                // Cycle to next band, or turn off if at end
-                const idx = BAND_CYCLE.indexOf(eff.audioBand || 'MID');
-                if (idx >= BAND_CYCLE.length - 1) {
-                    // Was on last band → turn off
-                    eff.audioReactive = false;
-                } else {
-                    // Next band
-                    eff.audioBand = BAND_CYCLE[idx + 1];
-                }
+                eff.audioReactive = true;
+                eff.audioBand = newBand;
             }
             setUiRefresh(r => r + 1);
         };
@@ -793,7 +786,7 @@ function Dead4RatApp() {
                     transition: 'box-shadow 0.08s ease',
                 }}
             >
-                {/* Header row: dot + name + AUDIO toggle + ON/OFF toggle */}
+                {/* Header row: dot + name + BAND selectors + ON/OFF toggle */}
                 <div className="glitch-header">
                     <span style={{display: 'flex', alignItems: 'center', gap: '4px', flex: 1, minWidth: 0}}>
                         <span className={`effect-dot ${effect.enabled ? 'on' : ''}`} />
@@ -805,16 +798,32 @@ function Dead4RatApp() {
                             {effect.name.toUpperCase()}
                         </span>
                     </span>
-                    <span style={{display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0}}>
-                        {/* AUDIO reactive toggle — cycles BASS→MID→HIGH→OFF */}
-                        <button
-                            className={`audio-band-btn ${effect.audioReactive ? 'active' : ''}`}
-                            title={effect.audioReactive ? `Audio: ${band} (click to cycle)` : 'Click to enable audio reactive'}
-                            onClick={cycleBand}
-                            style={{ borderColor: effect.audioReactive ? bandColor : undefined, color: effect.audioReactive ? bandColor : undefined }}
-                        >
-                            ⚡{effect.audioReactive ? ` ${band}` : ''}
-                        </button>
+                    <span style={{display: 'flex', alignItems: 'center', gap: '3px', flexShrink: 0}}>
+                        {/* BAND selector buttons — BASS / MID / HIGH */}
+                        {[
+                            { id: 'BASS', label: 'B', color: '#FF5500' },
+                            { id: 'MID',  label: 'M', color: '#FF9900' },
+                            { id: 'HIGH', label: 'H', color: '#FFDD00' },
+                        ].map(b => {
+                            const isActive = effect.audioReactive && band === b.id;
+                            return (
+                                <button
+                                    key={b.id}
+                                    className={`audio-band-btn ${isActive ? 'active' : ''}`}
+                                    title={`${b.id} band reactive${isActive ? ' (click to turn off)' : ''}`}
+                                    onClick={() => selectBand(b.id)}
+                                    style={{
+                                        borderColor: isActive ? b.color : undefined,
+                                        color: isActive ? b.color : undefined,
+                                        background: isActive ? `${b.color}15` : undefined,
+                                        minWidth: '18px',
+                                        padding: '2px 4px',
+                                    }}
+                                >
+                                    {b.label}
+                                </button>
+                            );
+                        })}
                         {/* Enable toggle */}
                         <input
                             type="checkbox"
