@@ -210,25 +210,10 @@ TerminalWindow._globalZ = 10;
 
 function SignalMonitor({ audioEngine, audioGain, onGainChange, audioFile, onFileChange, onMicToggle, onAudioOff, useMic, lfoSpeed, onLfoSpeedChange, lfoDepth, onLfoDepthChange, bassGain, onBassGainChange, midGain, onMidGainChange, highGain, onHighGainChange }) {
     const canvasRef = React.useRef(null);
-    const animRef = React.useRef(null);
     const [bass, setBass] = React.useState(0);
     const [mid, setMid] = React.useState(0);
     const [high, setHigh] = React.useState(0);
     const [transient, setTransient] = React.useState(false);
-    // Spectrum selection: [0-1, 0-1] normalised range over displayed bins
-    const selRef = React.useRef({ active: false, start: null, end: null });
-    const [selDisplay, setSelDisplay] = React.useState(null); // {startHz, endHz, startN, endN}
-    const CANVAS_W = 292;
-    const CANVAS_H = 60;
-    const BIN_COUNT = 256;
-
-    // ─── Convert canvas x → bin index ─────────────────────────────────────
-    const xToBin = (x) => Math.round(Math.min(BIN_COUNT - 1, Math.max(0, (x / CANVAS_W) * BIN_COUNT)));
-    const binToHz = (bin) => {
-        if (!audioEngine?.analyser) return 0;
-        const nyquist = (audioEngine.audioContext?.sampleRate || 44100) / 2;
-        return Math.round((bin / BIN_COUNT) * nyquist);
-    };
 
     React.useEffect(() => {
         let frameId;
@@ -240,7 +225,6 @@ function SignalMonitor({ audioEngine, audioGain, onGainChange, audioFile, onFile
             const W = canvas.width;
             const H = canvas.height;
 
-            // Get fresh data
             const data = audioEngine.getFrequencyData();
             if (!data || data.length === 0) {
                 ctx.fillStyle = '#050505';
@@ -252,44 +236,18 @@ function SignalMonitor({ audioEngine, audioGain, onGainChange, audioFile, onFile
             ctx.fillStyle = '#050505';
             ctx.fillRect(0, 0, W, H);
 
-            // Draw spectrum bars (use first 256 bins for clarity)
-            const binCount = Math.min(data.length, BIN_COUNT);
+            // Draw spectrum bars
+            const binCount = Math.min(data.length, 256);
             const barW = W / binCount;
             for (let i = 0; i < binCount; i++) {
                 const v = data[i] / 255.0;
                 const barH = v * H;
-                let hue;
-                if (i < 8) hue = '#FF5500';
-                else if (i < 60) hue = '#FF8800';
-                else hue = `rgba(255,${Math.floor(200 + v * 55)},${Math.floor(v * 80)},${0.7 + v * 0.3})`;
-                ctx.fillStyle = hue;
+                let color;
+                if (i < 8) color = '#FF5500';
+                else if (i < 60) color = '#FF8800';
+                else color = `rgba(255,${Math.floor(200 + v * 55)},${Math.floor(v * 80)},${0.7 + v * 0.3})`;
+                ctx.fillStyle = color;
                 ctx.fillRect(i * barW, H - barH, Math.max(1, barW - 0.5), barH);
-            }
-
-            // Selection overlay
-            const sel = selRef.current;
-            if (sel.start !== null && sel.end !== null) {
-                const sX = Math.min(sel.start, sel.end);
-                const eX = Math.max(sel.start, sel.end);
-                // Dim outside selection
-                ctx.fillStyle = 'rgba(0,0,0,0.45)';
-                ctx.fillRect(0, 0, sX, H);
-                ctx.fillRect(eX, 0, W - eX, H);
-                // Selection border
-                ctx.strokeStyle = 'rgba(255,85,0,0.9)';
-                ctx.lineWidth = 1.5;
-                ctx.strokeRect(sX + 0.75, 0.75, eX - sX - 1.5, H - 1.5);
-                // Hz labels
-                const startBin = xToBin(sX);
-                const endBin   = xToBin(eX);
-                const sHz = binToHz(startBin);
-                const eHz = binToHz(endBin);
-                ctx.fillStyle = '#FF5500';
-                ctx.font = '8px "Share Tech Mono", monospace';
-                ctx.fillText(`${sHz}Hz`, sX + 3, 10);
-                ctx.textAlign = 'right';
-                ctx.fillText(`${eHz}Hz`, eX - 3, 10);
-                ctx.textAlign = 'left';
             }
 
             // Grid lines
@@ -299,49 +257,16 @@ function SignalMonitor({ audioEngine, audioGain, onGainChange, audioFile, onFile
                 ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
             }
 
-            // Update band values
-            setBass(audioEngine.bass);
-            setMid(audioEngine.mid);
-            setHigh(audioEngine.high);
+            // Update band values (apply master gain so meters reflect what the shader sees)
+            const g = audioGain || 1.0;
+            setBass(audioEngine.bass * g);
+            setMid(audioEngine.mid * g);
+            setHigh(audioEngine.high * g);
             setTransient(audioEngine.transientDetected);
         };
         draw();
         return () => cancelAnimationFrame(frameId);
-    }, [audioEngine]);
-
-    // ─── Mouse selection handlers ──────────────────────────────────────────
-    const handleMouseDown = (e) => {
-        const rect = canvasRef.current.getBoundingClientRect();
-        const x = (e.clientX - rect.left) * (CANVAS_W / rect.width);
-        selRef.current = { active: true, start: x, end: x };
-    };
-    const handleMouseMove = (e) => {
-        if (!selRef.current.active) return;
-        const rect = canvasRef.current.getBoundingClientRect();
-        const x = Math.max(0, Math.min(CANVAS_W, (e.clientX - rect.left) * (CANVAS_W / rect.width)));
-        selRef.current.end = x;
-    };
-    const handleMouseUp = () => {
-        if (!selRef.current.active) return;
-        selRef.current.active = false;
-        const { start, end } = selRef.current;
-        const sX = Math.min(start, end);
-        const eX = Math.max(start, end);
-        if (eX - sX < 4) {
-            // Click without drag — clear selection
-            selRef.current = { active: false, start: null, end: null };
-            if (audioEngine) { audioEngine.freqSelStart = 0; audioEngine.freqSelEnd = 1; }
-            setSelDisplay(null);
-            return;
-        }
-        const startBin = xToBin(sX); const endBin = xToBin(eX);
-        const sHz = binToHz(startBin); const eHz = binToHz(endBin);
-        if (audioEngine) {
-            audioEngine.freqSelStart = startBin / BIN_COUNT;
-            audioEngine.freqSelEnd   = endBin   / BIN_COUNT;
-        }
-        setSelDisplay({ startHz: sHz, endHz: eHz, startN: startBin / BIN_COUNT, endN: endBin / BIN_COUNT });
-    };
+    }, [audioEngine, audioGain]);
 
     const BandMeter = ({ label, value, color }) => (
         <div style={{display: 'flex', alignItems: 'center', gap: '6px', marginTop: '5px'}}>
@@ -368,27 +293,13 @@ function SignalMonitor({ audioEngine, audioGain, onGainChange, audioFile, onFile
 
     return (
         <div>
-            {/* Spectrum Visualizer with selection */}
-            <div style={{position: 'relative', cursor: 'crosshair', userSelect: 'none'}}>
-                <canvas
-                    ref={canvasRef}
-                    width={CANVAS_W}
-                    height={CANVAS_H}
-                    className="signal-canvas"
-                    onMouseDown={handleMouseDown}
-                    onMouseMove={handleMouseMove}
-                    onMouseUp={handleMouseUp}
-                    onMouseLeave={handleMouseUp}
-                    style={{display: 'block', cursor: 'crosshair'}}
-                />
-                {selDisplay && (
-                    <div style={{fontSize: '0.5rem', color: '#FF5500', marginTop: '2px', display: 'flex', justifyContent: 'space-between'}}>
-                        <span>◀ {selDisplay.startHz}Hz</span>
-                        <span style={{color: 'var(--text-dim)'}}>BAND SEL — click to clear</span>
-                        <span>{selDisplay.endHz}Hz ▶</span>
-                    </div>
-                )}
-            </div>
+            {/* Spectrum Visualizer */}
+            <canvas
+                ref={canvasRef}
+                width={292}
+                height={60}
+                className="signal-canvas"
+            />
 
             {/* Beat flash */}
             <div style={{display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px', marginBottom: '4px'}}>
@@ -405,118 +316,45 @@ function SignalMonitor({ audioEngine, audioGain, onGainChange, audioFile, onFile
 
             <div className="hud-divider" style={{marginTop: '10px'}} />
 
-            {/* Controls */}
+            {/* Master Volume */}
             <div className="signal-control-row">
-                <span className="status-label">GAIN</span>
+                <span className="status-label">MASTER</span>
                 <input type="range" className="brutalist-slider" min="0" max="300" step="1"
                     value={Math.round(audioGain * 100)}
                     onChange={(e) => onGainChange(parseFloat(e.target.value) / 100.0)}
                 />
-                <span style={{fontSize: '0.6rem', color: 'var(--text-bright)', width: '32px', textAlign: 'right'}}>
+                <span style={{fontSize: '0.6rem', color: audioGain > 1.0 ? 'var(--accent)' : 'var(--text-bright)', width: '38px', textAlign: 'right'}}>
                     {Math.round(audioGain * 100)}%
                 </span>
             </div>
+
             <div className="hud-divider" style={{marginTop: '8px'}} />
-            {/* ─── BAND EQ GAIN ─── */}
+
+            {/* Band EQ — simple horizontal sliders */}
             <div style={{fontSize: '0.6rem', color: 'var(--text-dim)', marginBottom: '6px', letterSpacing: '1px'}}>BAND EQ // GAIN</div>
-            <div style={{display: 'flex', gap: '6px', marginBottom: '6px'}}>
-                {[
-                    { key: 'BASS', color: '#FF5500', val: bassGain, set: onBassGainChange, prop: 'bassGain' },
-                    { key: 'MID',  color: '#FF9900', val: midGain,  set: onMidGainChange,  prop: 'midGain'  },
-                    { key: 'HIGH', color: '#FFDD00', val: highGain, set: onHighGainChange, prop: 'highGain' },
-                ].map(({ key, color, val, set, prop }) => {
-                    const db = val > 0 ? (20 * Math.log10(val)).toFixed(1) : '-∞';
-                    const dbNum = val > 0 ? 20 * Math.log10(val) : -99;
-                    const isBoost = dbNum > 0.1;
-                    const isCut   = dbNum < -0.1;
-                    return (
-                        <div key={key} style={{
-                            flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px',
-                            background: 'rgba(0,0,0,0.3)', border: `1px solid ${val !== 1.0 ? color + '66' : 'var(--border-dim)'}`,
-                            padding: '6px 3px 4px',
-                        }}>
-                            {/* Label */}
-                            <span style={{fontSize: '0.55rem', color, letterSpacing: '1px', fontWeight: 700}}>{key}</span>
-                            {/* Vertical fader track + thumb */}
-                            <div style={{
-                                position: 'relative', width: '100%', height: '70px',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center'
-                            }}>
-                                {/* Track */}
-                                <div style={{
-                                    position: 'absolute', width: '3px', height: '100%',
-                                    background: 'var(--border-dim)', left: '50%', transform: 'translateX(-50%)'
-                                }} />
-                                {/* Unity marker */}
-                                <div style={{
-                                    position: 'absolute', width: '10px', height: '1px',
-                                    background: color + '44', left: '50%', transform: 'translateX(-50%)',
-                                    top: '50%',
-                                }} />
-                                {/* Fill bar (from unity to thumb) */}
-                                <div style={{
-                                    position: 'absolute', width: '3px',
-                                    background: color + '88',
-                                    left: '50%', transform: 'translateX(-50%)',
-                                    // val 0=bottom, 1=center(50%), 4=top; map to px
-                                    ...((() => {
-                                        const sliderPct = val / 4;  // 0–1
-                                        const thumbY = (1 - sliderPct) * 70; // px from top
-                                        const centerY = 35; // unity is center
-                                        return thumbY < centerY
-                                            ? { top: thumbY + 'px', height: (centerY - thumbY) + 'px' }
-                                            : { top: centerY + 'px', height: (thumbY - centerY) + 'px' };
-                                    })())
-                                }} />
-                                {/* Thumb */}
-                                <div style={{
-                                    position: 'absolute', width: '18px', height: '5px',
-                                    background: color,
-                                    left: '50%', transform: 'translateX(-50%)',
-                                    top: `${(1 - val / 4) * 70}px`,
-                                    boxShadow: `0 0 6px ${color}`,
-                                    borderRadius: 0,
-                                }} />
-                                {/* Invisible vertical range input layered on top */}
-                                <input
-                                    type="range"
-                                    min="0" max="400" step="5"
-                                    value={Math.round(val * 100)}
-                                    onChange={(e) => {
-                                        const v = parseFloat(e.target.value) / 100;
-                                        set(v);
-                                        if (audioEngine) audioEngine[prop] = v;
-                                    }}
-                                    style={{
-                                        position: 'absolute', width: '70px', height: '18px',
-                                        opacity: 0, cursor: 'pointer',
-                                        transform: 'rotate(-90deg)',
-                                        left: '50%', top: '26px',
-                                        transformOrigin: 'center center',
-                                        margin: 0, padding: 0,
-                                    }}
-                                />
-                            </div>
-                            {/* dB readout */}
-                            <span style={{
-                                fontSize: '0.55rem', fontWeight: 700, letterSpacing: '0.5px',
-                                color: isBoost ? color : isCut ? 'var(--text-muted)' : 'var(--text-dim)',
-                            }}>{isBoost ? '+' : ''}{db}dB</span>
-                            {/* Reset button */}
-                            {val !== 1.0 && (
-                                <button
-                                    onClick={() => { set(1.0); if (audioEngine) audioEngine[prop] = 1.0; }}
-                                    style={{
-                                        background: 'none', border: `1px solid ${color}44`,
-                                        color: 'var(--text-muted)', fontSize: '0.45rem',
-                                        padding: '1px 4px', cursor: 'pointer',
-                                        fontFamily: 'var(--font-mono)',
-                                    }}
-                                >UNITY</button>
-                            )}
-                        </div>
-                    );
-                })}
+            <div className="signal-control-row">
+                <span className="status-label" style={{color: '#FF5500'}}>BASS</span>
+                <input type="range" className="brutalist-slider" min="0" max="400" step="5"
+                    value={Math.round(bassGain * 100)}
+                    onChange={(e) => { const v = parseFloat(e.target.value) / 100; onBassGainChange(v); if (audioEngine) audioEngine.bassGain = v; }}
+                />
+                <span style={{fontSize: '0.6rem', color: '#FF5500', width: '38px', textAlign: 'right'}}>{Math.round(bassGain * 100)}%</span>
+            </div>
+            <div className="signal-control-row">
+                <span className="status-label" style={{color: '#FF9900'}}>MID</span>
+                <input type="range" className="brutalist-slider" min="0" max="400" step="5"
+                    value={Math.round(midGain * 100)}
+                    onChange={(e) => { const v = parseFloat(e.target.value) / 100; onMidGainChange(v); if (audioEngine) audioEngine.midGain = v; }}
+                />
+                <span style={{fontSize: '0.6rem', color: '#FF9900', width: '38px', textAlign: 'right'}}>{Math.round(midGain * 100)}%</span>
+            </div>
+            <div className="signal-control-row">
+                <span className="status-label" style={{color: '#FFDD00'}}>HIGH</span>
+                <input type="range" className="brutalist-slider" min="0" max="400" step="5"
+                    value={Math.round(highGain * 100)}
+                    onChange={(e) => { const v = parseFloat(e.target.value) / 100; onHighGainChange(v); if (audioEngine) audioEngine.highGain = v; }}
+                />
+                <span style={{fontSize: '0.6rem', color: '#FFDD00', width: '38px', textAlign: 'right'}}>{Math.round(highGain * 100)}%</span>
             </div>
             <div className="signal-control-row">
                 <span className="status-label">SMOOTH</span>
