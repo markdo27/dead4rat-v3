@@ -80,6 +80,46 @@ class CompositorEngine {
         });
     }
 
+    addVideoLayer(file) {
+        return new Promise((resolve) => {
+            const url = URL.createObjectURL(file);
+            const vid = document.createElement('video');
+            vid.src = url;
+            vid.loop = true;
+            vid.muted = true;
+            vid.playsInline = true;
+            vid.autoplay = true;
+            vid.style.display = 'none';
+            document.body.appendChild(vid);
+
+            vid.onloadedmetadata = () => {
+                const layer = this._createBaseLayer('video');
+                layer.name = file.name.replace(/\.[^.]+$/, '');
+                layer.vid = vid;
+                layer.objectUrl = url;
+                layer.isPlaying = true;
+                layer.loop = true;
+                layer.speed = 1.0;
+
+                // Scale to fit within 640x480 max, preserving aspect
+                const maxDim = 640;
+                const ratio = Math.min(maxDim / vid.videoWidth, maxDim / vid.videoHeight, 1);
+                layer.width  = vid.videoWidth  * ratio;
+                layer.height = vid.videoHeight * ratio;
+                layer.x = (this.compCanvas.width  - layer.width)  / 2;
+                layer.y = (this.compCanvas.height - layer.height) / 2;
+
+                vid.play().catch(() => {});
+                this.layers.push(layer);
+                this.selectedLayerId = layer.id;
+                resolve(layer);
+            };
+
+            // Fallback if metadata already loaded
+            if (vid.readyState >= 1) vid.onloadedmetadata();
+        });
+    }
+
     addTextLayer(content = 'TYPE HERE') {
         const layer = this._createBaseLayer('text');
         layer.name = 'Text';
@@ -214,6 +254,14 @@ class CompositorEngine {
             layer.mesh?.geometry?.dispose();
         }
 
+        // Cleanup Video resources
+        if (layer.type === 'video' && layer.vid) {
+            layer.vid.pause();
+            layer.vid.src = '';
+            layer.vid.remove();
+            if (layer.objectUrl) URL.revokeObjectURL(layer.objectUrl);
+        }
+
         this.layers.splice(idx, 1);
         if (this.selectedLayerId === id) {
             this.selectedLayerId = this.layers.length > 0 ? this.layers[this.layers.length - 1].id : null;
@@ -278,6 +326,9 @@ class CompositorEngine {
                 case '3d':
                     this._draw3DLayer(ctx, layer);
                     break;
+                case 'video':
+                    this._drawVideoLayer(ctx, layer);
+                    break;
             }
 
             ctx.restore();
@@ -333,6 +384,16 @@ class CompositorEngine {
 
         // Draw Three.js canvas onto compositor
         ctx.drawImage(layer.threeCanvas, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
+    }
+
+    _drawVideoLayer(ctx, layer) {
+        if (!layer.vid || layer.vid.readyState < 2) return;
+        // Update playback speed
+        if (layer.vid.playbackRate !== (layer.speed || 1.0)) {
+            layer.vid.playbackRate = layer.speed || 1.0;
+        }
+        layer.vid.loop = layer.loop !== false;
+        ctx.drawImage(layer.vid, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
     }
 
     // ─────────────────────────────────────────────

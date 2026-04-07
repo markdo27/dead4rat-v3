@@ -622,6 +622,42 @@ function Dead4RatApp() {
         setSelectedLayerId(layer.id);
     };
 
+    const addVideo = () => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'video/*';
+        input.onchange = (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const url = URL.createObjectURL(file);
+            const vid = document.createElement('video');
+            vid.src = url;
+            vid.loop = true;
+            vid.muted = true;
+            vid.playsInline = true;
+            vid.autoplay = true;
+            vid.style.display = 'none';
+            document.body.appendChild(vid);
+            vid.onloadedmetadata = () => {
+                const maxDim = 800;
+                const ratio = Math.min(maxDim / vid.videoWidth, maxDim / vid.videoHeight, 1);
+                const w = vid.videoWidth  * ratio;
+                const h = vid.videoHeight * ratio;
+                const layer = mediaManager.addLayer('video', {
+                    name: file.name.replace(/\.[^.]+$/, ''),
+                    vid, objectUrl: url,
+                    width: w, height: h,
+                    isPlaying: true, loop: true, speed: 1.0,
+                });
+                vid.play().catch(() => {});
+                setLayers([...mediaManager.layers]);
+                setSelectedLayerId(layer.id);
+            };
+            if (vid.readyState >= 1) vid.onloadedmetadata();
+        };
+        input.click();
+    };
+
     const updateLayer = (id, key, val) => {
         const l = mediaManager.layers.find(l => l.id === id);
         if (l) { l[key] = val; setLayers([...mediaManager.layers]); }
@@ -1003,17 +1039,20 @@ function Dead4RatApp() {
                     <div style={{display: 'flex', gap: '4px', marginBottom: '8px'}}>
                         <button className="brutalist-button" style={{flex: 1, fontSize: '0.6rem', padding: '6px 4px'}} onClick={addImage}>+ IMAGE</button>
                         <button className="brutalist-button" style={{flex: 1, fontSize: '0.6rem', padding: '6px 4px'}} onClick={addText}>+ TEXT</button>
+                        <button className="brutalist-button" style={{flex: 1, fontSize: '0.6rem', padding: '6px 4px'}} onClick={addVideo}>+ VIDEO</button>
                     </div>
                     {layers.length > 0 && (
                         <div className="layer-list" style={{marginBottom: '8px'}}>
                             {layers.map(l => (
-                                <div key={l.id} className={`layer-item ${selectedLayerId === l.id ? 'selected' : ''}`}
-                                    style={{display: 'flex', justifyContent: 'space-between', padding: '6px 10px', borderBottom: '1px solid var(--border-dim)', cursor: 'pointer'}}
-                                    onClick={() => setSelectedLayerId(l.id)}>
-                                    <span style={{fontSize: '0.65rem', color: selectedLayerId === l.id ? 'var(--accent)' : 'var(--text-dim)'}}>{l.name.toUpperCase()}</span>
-                                    <button style={{background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.55rem', fontFamily: 'var(--font-mono)'}}
-                                        onClick={(e) => { e.stopPropagation(); mediaManager.removeLayer(l.id); setLayers([...mediaManager.layers]); }}>[REM]</button>
-                                </div>
+                            <div key={l.id} className={`layer-item ${selectedLayerId === l.id ? 'selected' : ''}`}
+                                style={{display: 'flex', justifyContent: 'space-between', padding: '6px 10px', borderBottom: '1px solid var(--border-dim)', cursor: 'pointer'}}
+                                onClick={() => setSelectedLayerId(l.id)}>
+                                <span style={{fontSize: '0.65rem', color: selectedLayerId === l.id ? 'var(--accent)' : 'var(--text-dim)'}}>
+                                    {l.type === 'video' ? '▶ ' : l.type === 'image' ? '◼ ' : 'T '}{l.name.toUpperCase()}
+                                </span>
+                                <button style={{background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.55rem', fontFamily: 'var(--font-mono)'}}
+                                    onClick={(e) => { e.stopPropagation(); mediaManager.removeLayer(l.id); setLayers([...mediaManager.layers]); }}>[REM]</button>
+                            </div>
                             ))}
                         </div>
                     )}
@@ -1033,6 +1072,52 @@ function Dead4RatApp() {
                                             <option value="Roboto Mono">Roboto Mono</option>
                                             <option value="Inter">Inter</option>
                                         </select>
+                                    </div>
+                                </React.Fragment>
+                            )}
+                            {selectedLayer.type === 'video' && (
+                                <React.Fragment>
+                                    <div style={{display: 'flex', gap: '4px', marginBottom: '6px'}}>
+                                        <button
+                                            className={`brutalist-button ${selectedLayer.isPlaying ? 'primary' : ''}`}
+                                            style={{flex: 1, fontSize: '0.6rem'}}
+                                            onClick={() => {
+                                                if (selectedLayer.vid) {
+                                                    if (selectedLayer.isPlaying) {
+                                                        selectedLayer.vid.pause();
+                                                        selectedLayer.isPlaying = false;
+                                                    } else {
+                                                        selectedLayer.vid.play();
+                                                        selectedLayer.isPlaying = true;
+                                                    }
+                                                }
+                                                setLayers([...mediaManager.layers]);
+                                            }}
+                                        >{selectedLayer.isPlaying ? '⏸ PAUSE' : '▶ PLAY'}</button>
+                                        <button
+                                            className={`brutalist-button ${selectedLayer.loop ? 'active' : ''}`}
+                                            style={{flex: '0 0 auto', fontSize: '0.6rem', padding: '4px 8px'}}
+                                            onClick={() => {
+                                                selectedLayer.loop = !selectedLayer.loop;
+                                                setLayers([...mediaManager.layers]);
+                                            }}
+                                        >LOOP</button>
+                                    </div>
+                                    <div className="param-row">
+                                        <label>SPEED</label>
+                                        <input type="range" min="0.25" max="4" step="0.05"
+                                            value={selectedLayer.speed || 1.0}
+                                            onChange={(e) => updateLayer(selectedLayer.id, 'speed', parseFloat(e.target.value))}
+                                        />
+                                        <span style={{color: 'var(--text-bright)', fontSize: '0.6rem', width: '32px', textAlign: 'right'}}>{(selectedLayer.speed || 1.0).toFixed(2)}x</span>
+                                    </div>
+                                    <div className="param-row">
+                                        <label>OPACITY</label>
+                                        <input type="range" min="0" max="1" step="0.01"
+                                            value={selectedLayer.opacity || 1.0}
+                                            onChange={(e) => updateLayer(selectedLayer.id, 'opacity', parseFloat(e.target.value))}
+                                        />
+                                        <span style={{color: 'var(--text-bright)', fontSize: '0.6rem', width: '32px', textAlign: 'right'}}>{Math.round((selectedLayer.opacity || 1.0) * 100)}%</span>
                                     </div>
                                 </React.Fragment>
                             )}

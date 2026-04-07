@@ -40,6 +40,16 @@ class MediaManager {
     }
 
     removeLayer(id) {
+        const layer = this.layers.find(l => l.id === id);
+        if (layer) {
+            // Clean up video resources
+            if (layer.type === 'video' && layer.vid) {
+                layer.vid.pause();
+                layer.vid.src = '';
+                layer.vid.remove();
+                if (layer.objectUrl) URL.revokeObjectURL(layer.objectUrl);
+            }
+        }
         this.layers = this.layers.filter(l => l.id !== id);
         if (this.selectedLayerId === id) this.selectedLayerId = null;
     }
@@ -74,8 +84,11 @@ class MediaManager {
                 ctx.textBaseline = 'middle';
                 ctx.fillText(layer.text || 'HELLO', 0, 0);
             } else if (layer.type === '3d' && layer.renderCanvas) {
-                // Three.js renders to an offscreen canvas, we just draw that canvas here
                 ctx.drawImage(layer.renderCanvas, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
+            } else if (layer.type === 'video' && layer.vid && layer.vid.readyState >= 2) {
+                if (layer.vid.playbackRate !== (layer.speed || 1.0)) layer.vid.playbackRate = layer.speed || 1.0;
+                layer.vid.loop = layer.loop !== false;
+                ctx.drawImage(layer.vid, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
             }
             
             ctx.restore();
