@@ -129,6 +129,11 @@ class CanvasEngine {
             uniform float u_dither; uniform float u_ditherScale; uniform float u_ditherContrast; uniform float u_ditherBlend;
             uniform float u_thermal; uniform float u_thermalInt; uniform float u_thermalBias; uniform float u_thermalBlend;
 
+            // --- Canvas Transform ---
+            uniform float u_flipH;       // 0 or 1
+            uniform float u_flipV;       // 0 or 1
+            uniform float u_rotation;    // 0=0deg 1=90deg 2=180deg 3=270deg
+
             // --- Utility Functions ---
             float rand(vec2 co) {
                 return fract(sin(dot(co.xy, vec2(12.9898, 78.233))) * 43758.5453);
@@ -197,6 +202,24 @@ class CanvasEngine {
 
             void main() {
                 vec2 uv = v_uv;
+
+                // =============================================================
+                // CANVAS TRANSFORM — runs FIRST, before every effect
+                // =============================================================
+                if (u_flipH > 0.5) uv.x = 1.0 - uv.x;
+                if (u_flipV > 0.5) uv.y = 1.0 - uv.y;
+                if (u_rotation > 0.5 && u_rotation < 1.5) {
+                    // 90 degrees CW
+                    vec2 c = uv - 0.5;
+                    uv = vec2(c.y, -c.x) + 0.5;
+                } else if (u_rotation > 1.5 && u_rotation < 2.5) {
+                    // 180 degrees
+                    uv = 1.0 - uv;
+                } else if (u_rotation > 2.5) {
+                    // 270 degrees CW
+                    vec2 c = uv - 0.5;
+                    uv = vec2(-c.y, c.x) + 0.5;
+                }
 
                 // =============================================================
                 // STAGE 0: UV-SPACE DISTORTIONS (modify coordinates before sampling)
@@ -694,6 +717,10 @@ class CanvasEngine {
         this.locDither = loc("u_dither"); this.locDitherScale = loc("u_ditherScale"); this.locDitherContrast = loc("u_ditherContrast"); this.locDitherBlend = loc("u_ditherBlend");
         // Thermal Vision
         this.locThermal = loc("u_thermal"); this.locThermalInt = loc("u_thermalInt"); this.locThermalBias = loc("u_thermalBias"); this.locThermalBlend = loc("u_thermalBlend");
+        // Canvas Transform
+        this.locFlipH    = loc("u_flipH");
+        this.locFlipV    = loc("u_flipV");
+        this.locRotation = loc("u_rotation");
     }
 
     initTextures() {
@@ -931,6 +958,12 @@ class CanvasEngine {
         this.gl.uniform1f(this.locThermalInt, g.thermalVision.params.intensity.value * aHigh(g.thermalVision, 2.0));
         this.gl.uniform1f(this.locThermalBias, g.thermalVision.params.bias.value);
         this.gl.uniform1f(this.locThermalBlend, g.thermalVision.params.blendMode.value);
+
+        // --- Canvas Transform ---
+        const ct = state.canvasTransform || {};
+        this.gl.uniform1f(this.locFlipH,    ct.flipH    ? 1.0 : 0.0);
+        this.gl.uniform1f(this.locFlipV,    ct.flipV    ? 1.0 : 0.0);
+        this.gl.uniform1f(this.locRotation, ct.rotation || 0.0);
 
         // Draw main quad to FBO
         gl.bindBuffer(gl.ARRAY_BUFFER, this.positionBuffer);

@@ -76,6 +76,7 @@ let canvasEngine = null;
 let mediaManager = null;
 let presetManager = null;
 let maskEngine = null;
+let blobTracker = null;
 
 // ═══════════════════════════════════════════
 // DRAGGABLE TERMINAL WINDOW
@@ -365,6 +366,12 @@ function Dead4RatApp() {
     const [isolatePerson, setIsolatePerson] = React.useState(false);
     const [maskLoading, setMaskLoading] = React.useState(false);
     const [camOn, setCamOn] = React.useState(true);
+    const [canvasTransform, setCanvasTransform] = React.useState({ flipH: false, flipV: false, rotation: 0 });
+    const [blobEnabled, setBlobEnabled] = React.useState(false);
+    const [blobOverlay, setBlobOverlay] = React.useState(true);
+    const [blobThreshold, setBlobThreshold] = React.useState(30);
+    const [blobMinArea, setBlobMinArea] = React.useState(15);
+    const [blobCount, setBlobCount] = React.useState(0);
 
     // Live band values for effect card glow (updated from render loop)
     const liveAudio = React.useRef({ bass: 0, mid: 0, high: 0 });
@@ -379,14 +386,17 @@ function Dead4RatApp() {
     const togglePanel = (key) => setPanels(p => ({...p, [key]: !p[key]}));
 
     React.useEffect(() => {
-        if (!canvasEngine) canvasEngine = new CanvasEngine('main-canvas');
-        if (!audioEngine) audioEngine = new AudioEngine();
-        if (!mediaManager) mediaManager = new MediaManager(window.innerWidth, window.innerHeight);
-        if (!maskEngine) maskEngine = new MaskEngine(640, 480);
+        if (!canvasEngine)  canvasEngine  = new CanvasEngine('main-canvas');
+        if (!audioEngine)   audioEngine   = new AudioEngine();
+        if (!mediaManager)  mediaManager  = new MediaManager(window.innerWidth, window.innerHeight);
+        if (!maskEngine)    maskEngine    = new MaskEngine(640, 480);
+        if (!blobTracker)   blobTracker   = new BlobTracker();
         if (!presetManager) {
             presetManager = new PresetManager();
             setPresets(presetManager.presets);
         }
+        // Init canvas transform in globalState
+        globalState.canvasTransform = { flipH: false, flipV: false, rotation: 0 };
     }, []);
 
     const resetSystem = () => {
@@ -557,6 +567,13 @@ function Dead4RatApp() {
                 globalState.maskCanvas = maskEngine.getMask();
             } else {
                 globalState.maskCanvas = null;
+            }
+
+            // Blob Tracker
+            if (blobTracker && blobTracker.enabled) {
+                blobTracker.process(globalState.videoElement);
+                // Update live blob count display (throttled to avoid excess re-renders)
+                if (frames % 6 === 0) setBlobCount(blobTracker.blobCount);
             }
 
             globalState.compositeSource = mediaManager.composite(globalState.videoElement);
@@ -878,6 +895,106 @@ function Dead4RatApp() {
                             {maskLoading ? 'LOADING ML...' : (isolatePerson ? 'ISOLATE: ON' : 'ISOLATE PERSON')}
                         </button>
                     </div>
+
+                    <div className="hud-divider" />
+
+                    {/* CANVAS TRANSFORM */}
+                    <div className="section-header">CANVAS_XFORM // TRANSFORM</div>
+                    <div style={{display: 'flex', gap: '4px', marginBottom: '6px'}}>
+                        <button
+                            className={`brutalist-button ${canvasTransform.flipH ? 'primary' : ''}`}
+                            style={{flex: 1, fontSize: '0.6rem'}}
+                            onClick={() => {
+                                const next = { ...canvasTransform, flipH: !canvasTransform.flipH };
+                                setCanvasTransform(next);
+                                globalState.canvasTransform = next;
+                            }}
+                        >⇔ H-FLIP</button>
+                        <button
+                            className={`brutalist-button ${canvasTransform.flipV ? 'primary' : ''}`}
+                            style={{flex: 1, fontSize: '0.6rem'}}
+                            onClick={() => {
+                                const next = { ...canvasTransform, flipV: !canvasTransform.flipV };
+                                setCanvasTransform(next);
+                                globalState.canvasTransform = next;
+                            }}
+                        >⇕ V-FLIP</button>
+                    </div>
+                    <div style={{marginBottom: '12px'}}>
+                        <div style={{fontSize: '0.6rem', color: 'var(--text-dim)', marginBottom: '4px'}}>ROTATION</div>
+                        <div style={{display: 'flex', gap: '3px'}}>
+                            {[['0°', 0], ['90°', 1], ['180°', 2], ['270°', 3]].map(([label, val]) => (
+                                <button
+                                    key={val}
+                                    className={`brutalist-button ${canvasTransform.rotation === val ? 'primary' : ''}`}
+                                    style={{flex: 1, fontSize: '0.6rem', padding: '4px 2px'}}
+                                    onClick={() => {
+                                        const next = { ...canvasTransform, rotation: val };
+                                        setCanvasTransform(next);
+                                        globalState.canvasTransform = next;
+                                    }}
+                                >{label}</button>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="hud-divider" />
+
+                    {/* BLOB TRACKER */}
+                    <div className="section-header">BLOB_TRACKER // DETECT</div>
+                    <div style={{display: 'flex', gap: '4px', marginBottom: '8px'}}>
+                        <button
+                            className={`brutalist-button ${blobEnabled ? 'primary' : ''}`}
+                            style={{flex: 1, fontSize: '0.65rem'}}
+                            onClick={() => {
+                                const next = !blobEnabled;
+                                setBlobEnabled(next);
+                                if (blobTracker) blobTracker.setEnabled(next);
+                                if (!next) setBlobCount(0);
+                            }}
+                        >{blobEnabled ? 'DETECT: ON' : 'DETECT: OFF'}</button>
+                        <button
+                            className={`brutalist-button ${blobOverlay ? 'active' : ''}`}
+                            style={{flex: '0 0 auto', fontSize: '0.6rem', padding: '4px 8px'}}
+                            onClick={() => {
+                                const next = !blobOverlay;
+                                setBlobOverlay(next);
+                                if (blobTracker) blobTracker.setShowOverlay(next);
+                            }}
+                        >OVL</button>
+                    </div>
+                    {blobEnabled && (
+                        <div style={{marginBottom: '8px'}}>
+                            <div className="param-row">
+                                <label>THRESHOLD</label>
+                                <input type="range" className="brutalist-slider" min="5" max="120" step="1"
+                                    value={blobThreshold}
+                                    onChange={(e) => {
+                                        const v = parseInt(e.target.value);
+                                        setBlobThreshold(v);
+                                        if (blobTracker) blobTracker.threshold = v;
+                                    }}
+                                />
+                                <span style={{color: 'var(--text-bright)', fontSize: '0.6rem', width: '28px', textAlign: 'right'}}>{blobThreshold}</span>
+                            </div>
+                            <div className="param-row">
+                                <label>MIN AREA</label>
+                                <input type="range" className="brutalist-slider" min="5" max="100" step="1"
+                                    value={blobMinArea}
+                                    onChange={(e) => {
+                                        const v = parseInt(e.target.value);
+                                        setBlobMinArea(v);
+                                        if (blobTracker) blobTracker.minArea = v;
+                                    }}
+                                />
+                                <span style={{color: 'var(--text-bright)', fontSize: '0.6rem', width: '28px', textAlign: 'right'}}>{blobMinArea}</span>
+                            </div>
+                            <div className="status-row" style={{marginTop: '6px'}}>
+                                <span className="status-label">BLOB COUNT</span>
+                                <span className="status-value" style={{color: blobCount > 0 ? 'var(--accent)' : 'var(--text-dim)'}}>{blobCount}</span>
+                            </div>
+                        </div>
+                    )}
 
                     <div className="hud-divider" />
 
