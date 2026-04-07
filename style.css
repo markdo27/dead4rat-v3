@@ -8,8 +8,9 @@
 
 :root {
     --bg-void: #050505;
-    --panel-bg: #0a0a0a;
-    --panel-bg-hover: #0f0f0f;
+    --panel-bg: rgba(8, 4, 2, 0.72);
+    --panel-bg-hover: rgba(14, 7, 3, 0.80);
+    --panel-header-bg: rgba(6, 3, 1, 0.65);
     --accent: #FF5500;
     --accent-dim: #662200;
     --accent-glow: rgba(255, 85, 0, 0.15);
@@ -65,12 +66,14 @@ body, html {
     pointer-events: auto;
     position: absolute;
     background: var(--panel-bg);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     color: var(--text-primary);
     padding: 0;
     z-index: 10;
     cursor: grab;
     border: 1px solid var(--border-hard);
-    box-shadow: none;
+    box-shadow: 0 4px 32px rgba(0,0,0,0.5), inset 0 0 0 1px rgba(255,85,0,0.04);
     /* Subtle dot grid background texture */
     background-image:
         radial-gradient(circle, rgba(255, 85, 0, 0.04) 1px, transparent 1px);
@@ -116,7 +119,7 @@ body, html {
     justify-content: space-between;
     align-items: center;
     padding: 6px 10px;
-    background: var(--panel-bg);
+    background: var(--panel-header-bg);
     color: var(--text-primary);
     cursor: grab;
     border-bottom: 1px solid var(--border-dim);
@@ -663,7 +666,9 @@ input[type="range"]::-webkit-slider-thumb:hover {
     bottom: 0;
     left: 0;
     width: 100%;
-    background: #000;
+    background: rgba(0,0,0,0.65);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
     color: var(--accent);
     font-family: var(--font-mono);
     font-size: 11px;
