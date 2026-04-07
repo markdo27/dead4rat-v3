@@ -215,6 +215,20 @@ function SignalMonitor({ audioEngine, audioGain, onGainChange, audioFile, onFile
     const [mid, setMid] = React.useState(0);
     const [high, setHigh] = React.useState(0);
     const [transient, setTransient] = React.useState(false);
+    // Spectrum selection: [0-1, 0-1] normalised range over displayed bins
+    const selRef = React.useRef({ active: false, start: null, end: null });
+    const [selDisplay, setSelDisplay] = React.useState(null); // {startHz, endHz, startN, endN}
+    const CANVAS_W = 292;
+    const CANVAS_H = 60;
+    const BIN_COUNT = 256;
+
+    // ─── Convert canvas x → bin index ─────────────────────────────────────
+    const xToBin = (x) => Math.round(Math.min(BIN_COUNT - 1, Math.max(0, (x / CANVAS_W) * BIN_COUNT)));
+    const binToHz = (bin) => {
+        if (!audioEngine?.analyser) return 0;
+        const nyquist = (audioEngine.audioContext?.sampleRate || 44100) / 2;
+        return Math.round((bin / BIN_COUNT) * nyquist);
+    };
 
     React.useEffect(() => {
         let frameId;
@@ -239,18 +253,43 @@ function SignalMonitor({ audioEngine, audioGain, onGainChange, audioFile, onFile
             ctx.fillRect(0, 0, W, H);
 
             // Draw spectrum bars (use first 256 bins for clarity)
-            const binCount = Math.min(data.length, 256);
+            const binCount = Math.min(data.length, BIN_COUNT);
             const barW = W / binCount;
             for (let i = 0; i < binCount; i++) {
                 const v = data[i] / 255.0;
                 const barH = v * H;
-                // Color by band: bass=orange, mid=yellow, high=white
                 let hue;
                 if (i < 8) hue = '#FF5500';
                 else if (i < 60) hue = '#FF8800';
                 else hue = `rgba(255,${Math.floor(200 + v * 55)},${Math.floor(v * 80)},${0.7 + v * 0.3})`;
                 ctx.fillStyle = hue;
                 ctx.fillRect(i * barW, H - barH, Math.max(1, barW - 0.5), barH);
+            }
+
+            // Selection overlay
+            const sel = selRef.current;
+            if (sel.start !== null && sel.end !== null) {
+                const sX = Math.min(sel.start, sel.end);
+                const eX = Math.max(sel.start, sel.end);
+                // Dim outside selection
+                ctx.fillStyle = 'rgba(0,0,0,0.45)';
+                ctx.fillRect(0, 0, sX, H);
+                ctx.fillRect(eX, 0, W - eX, H);
+                // Selection border
+                ctx.strokeStyle = 'rgba(255,85,0,0.9)';
+                ctx.lineWidth = 1.5;
+                ctx.strokeRect(sX + 0.75, 0.75, eX - sX - 1.5, H - 1.5);
+                // Hz labels
+                const startBin = xToBin(sX);
+                const endBin   = xToBin(eX);
+                const sHz = binToHz(startBin);
+                const eHz = binToHz(endBin);
+                ctx.fillStyle = '#FF5500';
+                ctx.font = '8px "Share Tech Mono", monospace';
+                ctx.fillText(`${sHz}Hz`, sX + 3, 10);
+                ctx.textAlign = 'right';
+                ctx.fillText(`${eHz}Hz`, eX - 3, 10);
+                ctx.textAlign = 'left';
             }
 
             // Grid lines
@@ -260,7 +299,7 @@ function SignalMonitor({ audioEngine, audioGain, onGainChange, audioFile, onFile
                 ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
             }
 
-            // Update band values for meters (directly from engine, not waiting for React setState)
+            // Update band values
             setBass(audioEngine.bass);
             setMid(audioEngine.mid);
             setHigh(audioEngine.high);
@@ -269,6 +308,40 @@ function SignalMonitor({ audioEngine, audioGain, onGainChange, audioFile, onFile
         draw();
         return () => cancelAnimationFrame(frameId);
     }, [audioEngine]);
+
+    // ─── Mouse selection handlers ──────────────────────────────────────────
+    const handleMouseDown = (e) => {
+        const rect = canvasRef.current.getBoundingClientRect();
+        const x = (e.clientX - rect.left) * (CANVAS_W / rect.width);
+        selRef.current = { active: true, start: x, end: x };
+    };
+    const handleMouseMove = (e) => {
+        if (!selRef.current.active) return;
+        const rect = canvasRef.current.getBoundingClientRect();
+        const x = Math.max(0, Math.min(CANVAS_W, (e.clientX - rect.left) * (CANVAS_W / rect.width)));
+        selRef.current.end = x;
+    };
+    const handleMouseUp = () => {
+        if (!selRef.current.active) return;
+        selRef.current.active = false;
+        const { start, end } = selRef.current;
+        const sX = Math.min(start, end);
+        const eX = Math.max(start, end);
+        if (eX - sX < 4) {
+            // Click without drag — clear selection
+            selRef.current = { active: false, start: null, end: null };
+            if (audioEngine) { audioEngine.freqSelStart = 0; audioEngine.freqSelEnd = 1; }
+            setSelDisplay(null);
+            return;
+        }
+        const startBin = xToBin(sX); const endBin = xToBin(eX);
+        const sHz = binToHz(startBin); const eHz = binToHz(endBin);
+        if (audioEngine) {
+            audioEngine.freqSelStart = startBin / BIN_COUNT;
+            audioEngine.freqSelEnd   = endBin   / BIN_COUNT;
+        }
+        setSelDisplay({ startHz: sHz, endHz: eHz, startN: startBin / BIN_COUNT, endN: endBin / BIN_COUNT });
+    };
 
     const BandMeter = ({ label, value, color }) => (
         <div style={{display: 'flex', alignItems: 'center', gap: '6px', marginTop: '5px'}}>
@@ -295,13 +368,27 @@ function SignalMonitor({ audioEngine, audioGain, onGainChange, audioFile, onFile
 
     return (
         <div>
-            {/* Spectrum Visualizer */}
-            <canvas
-                ref={canvasRef}
-                width={292}
-                height={60}
-                className="signal-canvas"
-            />
+            {/* Spectrum Visualizer with selection */}
+            <div style={{position: 'relative', cursor: 'crosshair', userSelect: 'none'}}>
+                <canvas
+                    ref={canvasRef}
+                    width={CANVAS_W}
+                    height={CANVAS_H}
+                    className="signal-canvas"
+                    onMouseDown={handleMouseDown}
+                    onMouseMove={handleMouseMove}
+                    onMouseUp={handleMouseUp}
+                    onMouseLeave={handleMouseUp}
+                    style={{display: 'block', cursor: 'crosshair'}}
+                />
+                {selDisplay && (
+                    <div style={{fontSize: '0.5rem', color: '#FF5500', marginTop: '2px', display: 'flex', justifyContent: 'space-between'}}>
+                        <span>◀ {selDisplay.startHz}Hz</span>
+                        <span style={{color: 'var(--text-dim)'}}>BAND SEL — click to clear</span>
+                        <span>{selDisplay.endHz}Hz ▶</span>
+                    </div>
+                )}
+            </div>
 
             {/* Beat flash */}
             <div style={{display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px', marginBottom: '4px'}}>
@@ -409,14 +496,6 @@ function SignalMonitor({ audioEngine, audioGain, onGainChange, audioFile, onFile
                     onClick={handleFileInput}
                 >
                     🎵 FILE
-                </button>
-                <button
-                    className="brutalist-button"
-                    style={{flex: '0 0 auto', fontSize: '0.6rem', padding: '5px 6px', opacity: (useMic || audioFile) ? 1 : 0.4}}
-                    onClick={onAudioOff}
-                    title="Turn off audio"
-                >
-                    ✕ OFF
                 </button>
             </div>
             {audioFile && (
@@ -979,6 +1058,19 @@ function Dead4RatApp() {
                     <span className="hud-value" style={{color: audioEngine?.isRunning ? 'var(--accent)' : 'var(--text-dim)'}}>
                         {audioEngine?.isRunning ? (audioEngine?.sourceType === 'file' ? 'FILE' : 'MIC') : 'OFF'}
                     </span>
+                    {audioEngine?.isRunning && (
+                        <button
+                            onClick={handleAudioOff}
+                            title="Turn off audio"
+                            style={{
+                                background: 'none', border: '1px solid var(--accent)',
+                                color: 'var(--accent)', cursor: 'pointer',
+                                fontFamily: 'var(--font-mono)', fontSize: '0.55rem',
+                                padding: '1px 5px', lineHeight: 1, borderRadius: 0,
+                                marginLeft: '2px',
+                            }}
+                        >✕</button>
+                    )}
 
                     <span style={{flex: 1}} />
 

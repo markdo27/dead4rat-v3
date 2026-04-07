@@ -66,16 +66,27 @@ class CanvasEngine {
     }
 
     resizeCanvas() {
-        const naturalW = window.innerWidth;
-        const naturalH = window.innerHeight;
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
 
         if (this.scaleMode === '1:1') {
-            // Fixed 1920×1080 output canvas, CSS-scaled down
+            // Fixed 1920×1080 render resolution, CSS-letterboxed
             this.canvas.width  = 1920;
             this.canvas.height = 1080;
+        } else if (this.scaleMode === 'FILL') {
+            // Render at 16:9 — crop to fill viewport
+            const aspect = 16 / 9;
+            if (vw / vh > aspect) {
+                this.canvas.width  = vw;
+                this.canvas.height = Math.round(vw / aspect);
+            } else {
+                this.canvas.height = vh;
+                this.canvas.width  = Math.round(vh * aspect);
+            }
         } else {
-            this.canvas.width  = naturalW;
-            this.canvas.height = naturalH;
+            // FIT / STRETCH — render at exact viewport size
+            this.canvas.width  = vw;
+            this.canvas.height = vh;
         }
 
         this._applyCanvasStyle();
@@ -84,36 +95,52 @@ class CanvasEngine {
     }
 
     _applyCanvasStyle() {
-        const c = this.canvas;
+        const c  = this.canvas;
         const vw = window.innerWidth;
         const vh = window.innerHeight;
+        const cw = this.canvas.width;
+        const ch = this.canvas.height;
+
+        // Reset any leftover inline styles cleanly
+        c.style.position = 'fixed';
+        c.style.margin   = '0';
+        c.style.padding  = '0';
 
         if (this.scaleMode === 'STRETCH') {
-            c.style.position = 'fixed';
-            c.style.left = '0'; c.style.top = '0';
-            c.style.width = '100vw'; c.style.height = '100vh';
-            c.style.objectFit = 'fill';
+            // Fill 100% of viewport, aspect ratio distorted
+            c.style.width  = vw + 'px';
+            c.style.height = vh + 'px';
+            c.style.left   = '0';
+            c.style.top    = '0';
+
         } else if (this.scaleMode === 'FILL') {
-            c.style.position = 'fixed';
-            c.style.left = '0'; c.style.top = '0';
-            c.style.width = '100vw'; c.style.height = '100vh';
-            c.style.objectFit = 'cover';
+            // Cover — render canvas is already 16:9; scale up to cover viewport
+            const scaleX = vw / cw;
+            const scaleY = vh / ch;
+            const scale  = Math.max(scaleX, scaleY);
+            const dw = Math.round(cw * scale);
+            const dh = Math.round(ch * scale);
+            c.style.width  = dw + 'px';
+            c.style.height = dh + 'px';
+            c.style.left   = Math.round((vw - dw) / 2) + 'px';
+            c.style.top    = Math.round((vh - dh) / 2) + 'px';
+
         } else if (this.scaleMode === '1:1') {
-            // 1920×1080 canvas shown letterboxed inside viewport
+            // 1920×1080 canvas letterboxed inside viewport
             const scale = Math.min(vw / 1920, vh / 1080);
-            const w = Math.round(1920 * scale);
-            const h = Math.round(1080 * scale);
-            c.style.position = 'fixed';
-            c.style.left = Math.round((vw - w) / 2) + 'px';
-            c.style.top  = Math.round((vh - h) / 2) + 'px';
-            c.style.width  = w + 'px';
-            c.style.height = h + 'px';
+            const dw = Math.round(1920 * scale);
+            const dh = Math.round(1080 * scale);
+            c.style.width  = dw + 'px';
+            c.style.height = dh + 'px';
+            c.style.left   = Math.round((vw - dw) / 2) + 'px';
+            c.style.top    = Math.round((vh - dh) / 2) + 'px';
+
         } else {
-            // FIT (default) — fills window naturally
-            c.style.position = 'fixed';
-            c.style.left = '0'; c.style.top = '0';
-            c.style.width = '100vw'; c.style.height = '100vh';
-            c.style.objectFit = 'contain';
+            // FIT (default) — canvas matches viewport; display 1:1
+            c.style.width  = vw + 'px';
+            c.style.height = vh + 'px';
+            c.style.left   = '0';
+            c.style.top    = '0';
         }
     }
 
