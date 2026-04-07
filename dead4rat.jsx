@@ -208,7 +208,7 @@ TerminalWindow._globalZ = 10;
 // SIGNAL MONITOR — Live spectrum + band meters
 // ═══════════════════════════════════════════
 
-function SignalMonitor({ audioEngine, audioGain, onGainChange, audioFile, onFileChange, onMicToggle, onAudioOff, useMic, lfoSpeed, onLfoSpeedChange, lfoDepth, onLfoDepthChange, bassThr, onBassThrChange, midThr, onMidThrChange, highThr, onHighThrChange }) {
+function SignalMonitor({ audioEngine, audioGain, onGainChange, audioFile, onFileChange, onMicToggle, onAudioOff, useMic, lfoSpeed, onLfoSpeedChange, lfoDepth, onLfoDepthChange, bassGain, onBassGainChange, midGain, onMidGainChange, highGain, onHighGainChange }) {
     const canvasRef = React.useRef(null);
     const animRef = React.useRef(null);
     const [bass, setBass] = React.useState(0);
@@ -417,30 +417,106 @@ function SignalMonitor({ audioEngine, audioGain, onGainChange, audioFile, onFile
                 </span>
             </div>
             <div className="hud-divider" style={{marginTop: '8px'}} />
-            <div style={{fontSize: '0.6rem', color: 'var(--text-dim)', marginBottom: '6px'}}>TRANSIENT THRESHOLDS</div>
-            <div className="signal-control-row">
-                <span className="status-label" style={{color: '#FF5500'}}>BASS</span>
-                <input type="range" className="brutalist-slider" min="1" max="50" step="1"
-                    value={bassThr}
-                    onChange={(e) => { const v = parseInt(e.target.value); onBassThrChange(v); if (audioEngine) audioEngine.bassThreshold = v / 100.0; }}
-                />
-                <span style={{fontSize: '0.6rem', color: '#FF5500', width: '32px', textAlign: 'right'}}>{bassThr}%</span>
-            </div>
-            <div className="signal-control-row">
-                <span className="status-label" style={{color: '#FF9900'}}>MID</span>
-                <input type="range" className="brutalist-slider" min="1" max="50" step="1"
-                    value={midThr}
-                    onChange={(e) => { const v = parseInt(e.target.value); onMidThrChange(v); if (audioEngine) audioEngine.midThreshold = v / 100.0; }}
-                />
-                <span style={{fontSize: '0.6rem', color: '#FF9900', width: '32px', textAlign: 'right'}}>{midThr}%</span>
-            </div>
-            <div className="signal-control-row">
-                <span className="status-label" style={{color: '#FFDD00'}}>HIGH</span>
-                <input type="range" className="brutalist-slider" min="1" max="50" step="1"
-                    value={highThr}
-                    onChange={(e) => { const v = parseInt(e.target.value); onHighThrChange(v); if (audioEngine) audioEngine.highThreshold = v / 100.0; }}
-                />
-                <span style={{fontSize: '0.6rem', color: '#FFDD00', width: '32px', textAlign: 'right'}}>{highThr}%</span>
+            {/* ─── BAND EQ GAIN ─── */}
+            <div style={{fontSize: '0.6rem', color: 'var(--text-dim)', marginBottom: '6px', letterSpacing: '1px'}}>BAND EQ // GAIN</div>
+            <div style={{display: 'flex', gap: '6px', marginBottom: '6px'}}>
+                {[
+                    { key: 'BASS', color: '#FF5500', val: bassGain, set: onBassGainChange, prop: 'bassGain' },
+                    { key: 'MID',  color: '#FF9900', val: midGain,  set: onMidGainChange,  prop: 'midGain'  },
+                    { key: 'HIGH', color: '#FFDD00', val: highGain, set: onHighGainChange, prop: 'highGain' },
+                ].map(({ key, color, val, set, prop }) => {
+                    const db = val > 0 ? (20 * Math.log10(val)).toFixed(1) : '-∞';
+                    const dbNum = val > 0 ? 20 * Math.log10(val) : -99;
+                    const isBoost = dbNum > 0.1;
+                    const isCut   = dbNum < -0.1;
+                    return (
+                        <div key={key} style={{
+                            flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px',
+                            background: 'rgba(0,0,0,0.3)', border: `1px solid ${val !== 1.0 ? color + '66' : 'var(--border-dim)'}`,
+                            padding: '6px 3px 4px',
+                        }}>
+                            {/* Label */}
+                            <span style={{fontSize: '0.55rem', color, letterSpacing: '1px', fontWeight: 700}}>{key}</span>
+                            {/* Vertical fader track + thumb */}
+                            <div style={{
+                                position: 'relative', width: '100%', height: '70px',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center'
+                            }}>
+                                {/* Track */}
+                                <div style={{
+                                    position: 'absolute', width: '3px', height: '100%',
+                                    background: 'var(--border-dim)', left: '50%', transform: 'translateX(-50%)'
+                                }} />
+                                {/* Unity marker */}
+                                <div style={{
+                                    position: 'absolute', width: '10px', height: '1px',
+                                    background: color + '44', left: '50%', transform: 'translateX(-50%)',
+                                    top: '50%',
+                                }} />
+                                {/* Fill bar (from unity to thumb) */}
+                                <div style={{
+                                    position: 'absolute', width: '3px',
+                                    background: color + '88',
+                                    left: '50%', transform: 'translateX(-50%)',
+                                    // val 0=bottom, 1=center(50%), 4=top; map to px
+                                    ...((() => {
+                                        const sliderPct = val / 4;  // 0–1
+                                        const thumbY = (1 - sliderPct) * 70; // px from top
+                                        const centerY = 35; // unity is center
+                                        return thumbY < centerY
+                                            ? { top: thumbY + 'px', height: (centerY - thumbY) + 'px' }
+                                            : { top: centerY + 'px', height: (thumbY - centerY) + 'px' };
+                                    })())
+                                }} />
+                                {/* Thumb */}
+                                <div style={{
+                                    position: 'absolute', width: '18px', height: '5px',
+                                    background: color,
+                                    left: '50%', transform: 'translateX(-50%)',
+                                    top: `${(1 - val / 4) * 70}px`,
+                                    boxShadow: `0 0 6px ${color}`,
+                                    borderRadius: 0,
+                                }} />
+                                {/* Invisible vertical range input layered on top */}
+                                <input
+                                    type="range"
+                                    min="0" max="400" step="5"
+                                    value={Math.round(val * 100)}
+                                    onChange={(e) => {
+                                        const v = parseFloat(e.target.value) / 100;
+                                        set(v);
+                                        if (audioEngine) audioEngine[prop] = v;
+                                    }}
+                                    style={{
+                                        position: 'absolute', width: '70px', height: '18px',
+                                        opacity: 0, cursor: 'pointer',
+                                        transform: 'rotate(-90deg)',
+                                        left: '50%', top: '26px',
+                                        transformOrigin: 'center center',
+                                        margin: 0, padding: 0,
+                                    }}
+                                />
+                            </div>
+                            {/* dB readout */}
+                            <span style={{
+                                fontSize: '0.55rem', fontWeight: 700, letterSpacing: '0.5px',
+                                color: isBoost ? color : isCut ? 'var(--text-muted)' : 'var(--text-dim)',
+                            }}>{isBoost ? '+' : ''}{db}dB</span>
+                            {/* Reset button */}
+                            {val !== 1.0 && (
+                                <button
+                                    onClick={() => { set(1.0); if (audioEngine) audioEngine[prop] = 1.0; }}
+                                    style={{
+                                        background: 'none', border: `1px solid ${color}44`,
+                                        color: 'var(--text-muted)', fontSize: '0.45rem',
+                                        padding: '1px 4px', cursor: 'pointer',
+                                        fontFamily: 'var(--font-mono)',
+                                    }}
+                                >UNITY</button>
+                            )}
+                        </div>
+                    );
+                })}
             </div>
             <div className="signal-control-row">
                 <span className="status-label">SMOOTH</span>
@@ -536,10 +612,10 @@ function Dead4RatApp() {
     const [blobMinArea, setBlobMinArea] = React.useState(15);
     const [blobLifespan, setBlobLifespan] = React.useState(45);
     const [blobCount, setBlobCount] = React.useState(0);
-    // Per-band transient thresholds
-    const [bassThr, setBassThr] = React.useState(15);
-    const [midThr,  setMidThr]  = React.useState(10);
-    const [highThr, setHighThr] = React.useState(8);
+    // Per-band EQ gain (0–4× multiplier, 1.0 = unity)
+    const [bassGain, setBassGain] = React.useState(1.0);
+    const [midGain,  setMidGain]  = React.useState(1.0);
+    const [highGain, setHighGain] = React.useState(1.0);
     const [openCategories, setOpenCategories] = React.useState({ COLOR: true, DISTORT: false, TEXTURE: true, GLITCH: false, FEEDBACK: false, DETECT: false });
     const toggleCategory = (name) => setOpenCategories(s => ({...s, [name]: !s[name]}));
 
@@ -1108,9 +1184,9 @@ function Dead4RatApp() {
                         onLfoSpeedChange={setLfoSpeed}
                         lfoDepth={lfoDepth}
                         onLfoDepthChange={setLfoDepth}
-                        bassThr={bassThr} onBassThrChange={setBassThr}
-                        midThr={midThr}   onMidThrChange={setMidThr}
-                        highThr={highThr} onHighThrChange={setHighThr}
+                        bassGain={bassGain} onBassGainChange={setBassGain}
+                        midGain={midGain}   onMidGainChange={setMidGain}
+                        highGain={highGain} onHighGainChange={setHighGain}
                     />
                 </TerminalWindow>
             )}

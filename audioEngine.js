@@ -26,10 +26,14 @@ class AudioEngine {
         
         // Global threshold (kept for backwards compat)
         this.threshold = 0.04;
-        // Per-band transient thresholds
+        // Per-band transient thresholds (internal, fixed defaults)
         this.bassThreshold = 0.15;
         this.midThreshold  = 0.10;
         this.highThreshold = 0.08;
+        // Per-band output gain (0–4×, default 1.0 = unity)
+        this.bassGain = 1.0;
+        this.midGain  = 1.0;
+        this.highGain = 1.0;
 
         this.stream = null;
         this.sourceNode = null; // generic source node (mic or file)
@@ -214,19 +218,25 @@ class AudioEngine {
         const rawMid = midCount > 0 ? midSum / midCount : 0;
         const rawHigh = highCount > 0 ? highSum / highCount : 0;
 
-        this.bass = this._prevBass * this._smoothing + rawBass * (1 - this._smoothing);
-        this.mid = this._prevMid * this._smoothing + rawMid * (1 - this._smoothing);
-        this.high = this._prevHigh * this._smoothing + rawHigh * (1 - this._smoothing);
+        const smoothedBass = this._prevBass * this._smoothing + rawBass * (1 - this._smoothing);
+        const smoothedMid  = this._prevMid  * this._smoothing + rawMid  * (1 - this._smoothing);
+        const smoothedHigh = this._prevHigh * this._smoothing + rawHigh * (1 - this._smoothing);
 
-        this._prevBass = this.bass;
-        this._prevMid = this.mid;
-        this._prevHigh = this.high;
+        // Apply per-band gain (clamped to 0–4×)
+        this.bass = Math.min(1, smoothedBass * Math.max(0, this.bassGain));
+        this.mid  = Math.min(1, smoothedMid  * Math.max(0, this.midGain));
+        this.high = Math.min(1, smoothedHigh * Math.max(0, this.highGain));
 
-        // Per-band Transient Detection
+        this._prevBass = smoothedBass;
+        this._prevMid  = smoothedMid;
+        this._prevHigh = smoothedHigh;
+
+        // Per-band Transient Detection (using gained values)
         this.bassTransient = this.bass > this.bassThreshold;
         this.midTransient  = this.mid  > this.midThreshold;
         this.highTransient = this.high > this.highThreshold;
         // Global transient: any band fires OR classic RMS
         this.transientDetected = this.bassTransient || this.midTransient || this.highTransient || (this.rms > this.threshold);
+
     }
 }
