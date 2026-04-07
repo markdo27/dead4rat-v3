@@ -364,6 +364,7 @@ function Dead4RatApp() {
     const [lfoDepth, setLfoDepth] = React.useState(0.5);
     const [isolatePerson, setIsolatePerson] = React.useState(false);
     const [maskLoading, setMaskLoading] = React.useState(false);
+    const [camOn, setCamOn] = React.useState(true);
 
     // Live band values for effect card glow (updated from render loop)
     const liveAudio = React.useRef({ bass: 0, mid: 0, high: 0 });
@@ -461,6 +462,27 @@ function Dead4RatApp() {
             setMaskLoading(false);
         }
         if (maskEngine) maskEngine.enabled = nextState;
+    };
+
+    const toggleCam = async () => {
+        const videoElement = document.getElementById('webcam-feed');
+        if (!videoElement) return;
+        if (camOn) {
+            // Stop all camera tracks
+            const stream = videoElement.srcObject;
+            if (stream) stream.getTracks().forEach(t => t.stop());
+            videoElement.srcObject = null;
+            globalState.videoElement = null;
+            setCamOn(false);
+        } else {
+            // Restart camera
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+                videoElement.srcObject = stream;
+                globalState.videoElement = videoElement;
+                setCamOn(true);
+            } catch (err) { console.error('Camera access denied', err); }
+        }
     };
 
     const toggleStart = async () => {
@@ -755,6 +777,12 @@ function Dead4RatApp() {
                         <span className="status-value">{layers.length}_LYR</span>
                     </div>
                     <div className="status-row">
+                        <span className="status-label">CAM_FEED</span>
+                        <span className="status-value" style={{color: camOn ? 'var(--accent)' : 'var(--text-dim)'}}>
+                            {camOn ? 'ONLINE' : 'OFFLINE'}
+                        </span>
+                    </div>
+                    <div className="status-row">
                         <span className="status-label">AUDIO</span>
                         <span className="status-value" style={{color: audioEngine?.isRunning ? 'var(--accent)' : 'var(--text-dim)'}}>
                             {audioEngine?.isRunning ? (audioEngine?.sourceType === 'file' ? 'FILE_SRC' : 'MIC_SRC') : 'OFFLINE'}
@@ -773,6 +801,9 @@ function Dead4RatApp() {
 
                     {started && (
                         <div style={{marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '6px'}}>
+                            <button className={`brutalist-button ${camOn ? '' : 'active'}`} onClick={toggleCam}>
+                                {camOn ? 'CAM_OFF' : 'CAM_ON'}
+                            </button>
                             <button className={`brutalist-button ${isRecording ? 'active' : ''}`} onClick={recordToggle}>
                                 {isRecording ? 'STP_REC' : 'STR_REC'}
                             </button>
