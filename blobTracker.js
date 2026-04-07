@@ -40,6 +40,10 @@ class BlobTracker {
         this.blobs        = [];    // [{x, y, w, h, area, cx, cy}] — screen-space coords
         this.blobCount    = 0;
 
+        // Persistence — blobs linger this many frames after motion stops
+        this.persistFrames = 45;   // ~0.75s at 60fps
+        this._persistBlobs = [];   // [{...blob, ttl, maxTtl}]
+
         this._prevPixels  = null;
 
         // Resize overlay canvas to match window
@@ -147,12 +151,59 @@ class BlobTracker {
 
         this.blobCount = this.blobs.length;
 
-        // ── Step 4: Draw overlay ─────────────────────────────
+        // ── Step 5: Merge with persistent blobs ─────────────
+        this._mergePersistence();
+
+        // ── Step 6: Draw overlay ─────────────────────────────
         if (this.showOverlay) {
             this._drawOverlay();
         } else {
             this.overlayCtx.clearRect(0, 0, this.overlayCanvas.width, this.overlayCanvas.height);
         }
+    }
+
+    _mergePersistence() {
+        const matchRadius = 120; // px — how close a new blob must be to refresh a persistent one
+
+        // Decrement TTL on all persistent blobs
+        for (const pb of this._persistBlobs) pb.ttl--;
+
+        // For each newly detected blob, try to match an existing persistent blob
+        for (const blob of this.blobs) {
+            const bcx = blob.x + blob.w / 2;
+            const bcy = blob.y + blob.h / 2;
+            let best = null, bestDist = matchRadius;
+
+            for (const pb of this._persistBlobs) {
+                const pcx = pb.x + pb.w / 2;
+                const pcy = pb.y + pb.h / 2;
+                const dist = Math.hypot(bcx - pcx, bcy - pcy);
+                if (dist < bestDist) { bestDist = dist; best = pb; }
+            }
+
+            if (best) {
+                // Update position/size with smooth lerp and reset TTL
+                const t = 0.35;
+                best.x = best.x + (blob.x - best.x) * t;
+                best.y = best.y + (blob.y - best.y) * t;
+                best.w = best.w + (blob.w - best.w) * t;
+                best.h = best.h + (blob.h - best.h) * t;
+                best.area = blob.area;
+                best.cx = blob.cx;
+                best.cy = blob.cy;
+                best.ttl = this.persistFrames;
+            } else {
+                // New blob — add to persistent list
+                this._persistBlobs.push({
+                    ...blob,
+                    ttl: this.persistFrames,
+                    maxTtl: this.persistFrames,
+                });
+            }
+        }
+
+        // Remove expired blobs
+        this._persistBlobs = this._persistBlobs.filter(pb => pb.ttl > 0);
     }
 
     _drawOverlay() {
@@ -161,11 +212,17 @@ class BlobTracker {
         const H   = this.overlayCanvas.height;
         ctx.clearRect(0, 0, W, H);
 
-        this.blobs.forEach((blob, i) => {
+        // Draw persistent (possibly fading) blobs — sorted so brightest on top
+        const sorted = [...this._persistBlobs].sort((a, b) => b.ttl - a.ttl);
+
+        sorted.forEach((blob, i) => {
             const isPrimary = i === 0;
-            const alpha     = isPrimary ? 1.0 : 0.55;
+            // Fade alpha based on remaining TTL
+            const lifeFrac  = blob.ttl / this.persistFrames; // 1=fresh, 0=dead
+            const baseAlpha = isPrimary ? 1.0 : 0.65;
+            const alpha     = baseAlpha * lifeFrac;
             const color     = isPrimary ? `rgba(255,85,0,${alpha})` : `rgba(255,136,0,${alpha})`;
-            const lineW     = isPrimary ? 2 : 1;
+            const lineW     = isPrimary ? 3 : 1.5;
 
             // Bounding box
             ctx.strokeStyle = color;
@@ -173,9 +230,9 @@ class BlobTracker {
             ctx.strokeRect(blob.x, blob.y, blob.w, blob.h);
 
             // Corner ticks (brutalist style)
-            const tick = 8;
+            const tick = 12;
             ctx.strokeStyle = isPrimary ? '#FF5500' : '#FF8800';
-            ctx.lineWidth = isPrimary ? 2 : 1;
+            ctx.lineWidth = isPrimary ? 3 : 1.5;
             [
                 [blob.x, blob.y, tick, 0, 0, tick],
                 [blob.x + blob.w, blob.y, -tick, 0, 0, tick],
@@ -193,7 +250,7 @@ class BlobTracker {
             const cy = blob.y + blob.h / 2;
             ctx.fillStyle = color;
             ctx.beginPath();
-            ctx.arc(cx, cy, isPrimary ? 5 : 3, 0, Math.PI * 2);
+            ctx.arc(cx, cy, isPrimary ? 7 : 4, 0, Math.PI * 2);
             ctx.fill();
 
             // ID label
