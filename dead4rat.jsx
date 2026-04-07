@@ -520,9 +520,15 @@ function Dead4RatApp() {
 
     const scrambleEngines = () => {
         Object.keys(globalState.glitchez).forEach(key => {
-            globalState.glitchez[key].enabled = Math.random() > 0.5;
-            const el = document.getElementById(`toggle-${key}`);
-            if (el) el.checked = globalState.glitchez[key].enabled;
+            let chance = 0.3; // Default 30% chance for most modules
+            
+            // Tone down heavy geometric and feedback effects to keep it usable
+            if (key === 'kaleidoscope') chance = 0.05; // 5% chance (rare)
+            else if (['mirrorTile', 'vortexWarp', 'videoFeedback', 'acidMelt', 'splitScan'].includes(key)) chance = 0.15;
+            // Higher chance for more pleasant baseline effects
+            else if (['rgbShift', 'scanLines', 'noise', 'colorDistortion', 'chromaGlitch'].includes(key)) chance = 0.5;
+            
+            globalState.glitchez[key].enabled = Math.random() < chance;
         });
         setUiRefresh(r => r + 1);
     };
