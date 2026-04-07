@@ -6,7 +6,9 @@
 class GenerativeEngine {
     constructor() {
         this.container = document.createElement('div');
-        this.container.style.display = 'none'; // Hidden from DOM, only used for its canvas
+        this.container.style.position = 'fixed';
+        this.container.style.left = '-9999px';
+        this.container.style.top = '0';
         document.body.appendChild(this.container);
 
         this.canvas = null; // Will point to the p5 HTMLCanvasElement
