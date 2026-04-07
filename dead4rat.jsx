@@ -429,7 +429,13 @@ function Dead4RatApp() {
     const [bassGain, setBassGain] = React.useState(1.0);
     const [midGain,  setMidGain]  = React.useState(1.0);
     const [highGain, setHighGain] = React.useState(1.0);
-    const [openCategories, setOpenCategories] = React.useState({ COLOR: true, DISTORT: false, TEXTURE: true, GLITCH: false, FEEDBACK: false, DETECT: false });
+
+    const [genMode, setGenMode] = React.useState('OFF');
+    const [genSpeed, setGenSpeed] = React.useState(1.0);
+    const [genZoom, setGenZoom] = React.useState(1.0);
+    const [genAudioWarp, setGenAudioWarp] = React.useState(1.0);
+
+    const [openCategories, setOpenCategories] = React.useState({ COLOR: true, DISTORT: false, TEXTURE: true, GLITCH: false, FEEDBACK: false, DETECT: false, GENERATORS: true });
     const toggleCategory = (name) => setOpenCategories(s => ({...s, [name]: !s[name]}));
 
     // Live band values for effect card glow (updated from render loop)
@@ -660,6 +666,13 @@ function Dead4RatApp() {
     React.useEffect(() => {
         globalState.audioGain = audioGain;
     }, [audioGain]);
+
+    React.useEffect(() => {
+        globalState.genMode = genMode;
+        globalState.genSpeed = genSpeed;
+        globalState.genZoom = genZoom;
+        globalState.genAudioWarp = genAudioWarp;
+    }, [genMode, genSpeed, genZoom, genAudioWarp]);
 
     React.useEffect(() => {
         globalState.lfoSpeed = lfoSpeed;
@@ -1331,7 +1344,48 @@ function Dead4RatApp() {
                     )}
                     {/* Grouped by category */}
 
-                    {/* Grouped by category */}
+                    {/* GENERATORS (Special Category) */}
+                    <div className="category-group">
+                        <div className="category-header" onClick={() => toggleCategory('GENERATORS')}>
+                            <span className="cat-arrow" style={{transform: openCategories['GENERATORS'] ? 'rotate(90deg)' : 'none'}}>▶</span>
+                            <span className="cat-name">GENERATORS (WEBGL)</span>
+                            <span style={{flex:1}} />
+                            <span className="cat-count">{genMode !== 'OFF' ? '1 ON' : 'OFF'}</span>
+                        </div>
+                        <div style={{display: openCategories['GENERATORS'] ? 'block' : 'none'}}>
+                            <div className="effect-card" style={{borderLeft: genMode !== 'OFF' ? '2px solid var(--accent)' : '2px solid transparent'}}>
+                                <div className="effect-header">
+                                    <div className="effect-title">SDF RAYMARCHING</div>
+                                </div>
+                                <div style={{display: 'flex', gap: '4px', marginBottom: '8px', flexWrap: 'wrap'}}>
+                                    {['OFF', 'GRID TUNNEL', 'CUBE FIELD', 'RADIANT HORIZON'].map(m => (
+                                        <button 
+                                            key={m} 
+                                            className={`brutalist-button ${genMode === m ? 'primary' : ''}`}
+                                            style={{flex: '1 1 45%', fontSize: '0.6rem'}}
+                                            onClick={() => setGenMode(m)}
+                                        >{m}</button>
+                                    ))}
+                                </div>
+                                {genMode !== 'OFF' && (
+                                    <React.Fragment>
+                                        <div className="param-row">
+                                            <span className="param-name">SPEED</span>
+                                            <input type="range" min="0" max="3" step="0.01" value={genSpeed} onChange={(e) => setGenSpeed(parseFloat(e.target.value))} />
+                                        </div>
+                                        <div className="param-row">
+                                            <span className="param-name">ZOOM</span>
+                                            <input type="range" min="0.1" max="3" step="0.01" value={genZoom} onChange={(e) => setGenZoom(parseFloat(e.target.value))} />
+                                        </div>
+                                        <div className="param-row">
+                                            <span className="param-name">AUDIO WARP</span>
+                                            <input type="range" min="0" max="2" step="0.01" value={genAudioWarp} onChange={(e) => setGenAudioWarp(parseFloat(e.target.value))} />
+                                        </div>
+                                    </React.Fragment>
+                                )}
+                            </div>
+                        </div>
+                    </div>
 
                     {EFFECT_CATEGORIES.map(cat => {
                         const activeCount = cat.keys.filter(k => globalState.glitchez[k]?.enabled).length;

@@ -212,6 +212,12 @@ class CanvasEngine {
             // Split Scan
             uniform float u_splitScan; uniform float u_splitBands; uniform float u_splitShift; uniform float u_splitWarp; uniform float u_splitBlend;
 
+            // Generative Art
+            uniform float u_genMode; // 0=OFF, 1=Grid, 2=Cubes, 3=Radiant
+            uniform float u_genSpeed;
+            uniform float u_genScale;
+            uniform float u_genWarp;
+
             // --- Canvas Transform ---
             uniform float u_flipH;       // 0 or 1
             uniform float u_flipV;       // 0 or 1
@@ -281,6 +287,87 @@ class CanvasEngine {
                     else result = 1.0 - 2.0 * (1.0 - base) * (1.0 - blend);
                 }
                 return clamp(result, 0.0, 1.0);
+            }
+
+            // --- GENERATIVE ART (RAYMARCHING) ---
+            mat2 rot(float a) {
+                float s = sin(a), c = cos(a);
+                return mat2(c, -s, s, c);
+            }
+
+            float sdBox(vec3 p, vec3 b) {
+                vec3 q = abs(p) - b;
+                return length(max(q,0.0)) + min(max(q.x,max(q.y,q.z)),0.0);
+            }
+
+            float mapGen(vec3 p) {
+                if (u_genMode < 1.5) {
+                    p.z -= u_time * u_genSpeed * 5.0 + u_bass * 5.0 * u_genWarp;
+                    vec3 q = p;
+                    q.xy *= rot(q.z * 0.05 * u_genWarp * u_mid);
+                    q.x = mod(q.x + 2.0, 4.0) - 2.0;
+                    q.y = mod(q.y + 2.0, 4.0) - 2.0;
+                    q.z = mod(q.z + 2.0, 4.0) - 2.0;
+                    float dBox = sdBox(q, vec3(1.9));
+                    float dWall = -sdBox(q, vec3(1.8));
+                    return max(dBox, dWall); 
+                } 
+                else if (u_genMode < 2.5) {
+                    p.z -= u_time * u_genSpeed * 10.0 + u_bass * 10.0 * u_genWarp;
+                    vec3 q = p;
+                    q.x = mod(q.x + 3.0, 6.0) - 3.0;
+                    q.y = mod(q.y + 3.0, 6.0) - 3.0;
+                    q.z = mod(q.z + 3.0, 6.0) - 3.0;
+                    q.xy *= rot(u_time + p.z * 0.05);
+                    q.xz *= rot(u_time * 0.7);
+                    float scale = 1.0 + u_transient * u_genWarp * 0.5;
+                    float dBox = sdBox(q, vec3(1.0 * scale));
+                    float dInner = -sdBox(q, vec3(0.9 * scale));
+                    return max(dBox, dInner);
+                } 
+                else {
+                    p.z -= u_time * u_genSpeed * 8.0;
+                    p.xy *= rot(u_time * 0.2 + u_mid * u_genWarp);
+                    vec2 qxy = p.xy;
+                    float angle = atan(qxy.y, qxy.x);
+                    float numLines = 16.0;
+                    float segment = 6.28318 / numLines;
+                    angle = mod(angle + segment * 0.5, segment) - segment * 0.5;
+                    float r = length(qxy);
+                    qxy = vec2(cos(angle), sin(angle)) * r;
+                    
+                    vec3 q = vec3(qxy.x - 2.0, qxy.y, mod(p.z, 2.0) - 1.0);
+                    float dCore = length(q.xy) - 0.1 - u_transient * u_genWarp * 0.3;
+                    return dCore;
+                }
+            }
+
+            vec3 renderGenerativeArt(vec2 uv) {
+                vec2 p = uv * 2.0 - 1.0;
+
+                vec3 ro = vec3(0.0, 0.0, -3.0);
+                vec3 rd = normalize(vec3(p, 1.0 / max(0.1, u_genScale)));
+                
+                float rJitter = rand(uv + u_time) * 0.02;
+
+                float t = 0.0;
+                float maxD = 30.0;
+                float colAccum = 0.0;
+                
+                for(int i = 0; i < 50; i++) {
+                    vec3 pos = ro + rd * t;
+                    float d = mapGen(pos) + rJitter;
+                    if(d < 0.02) {
+                        colAccum += 0.08 * (1.0 - t/maxD);
+                        d = 0.02; 
+                    }
+                    t += d;
+                    if(t > maxD) break;
+                }
+                
+                vec3 col = vec3(clamp(colAccum, 0.0, 1.0));
+                if (u_transient > 0.5) col += 0.15 * u_genWarp;
+                return col;
             }
 
             void main() {
@@ -409,6 +496,10 @@ class CanvasEngine {
                 // STAGE 1: BASE COLOR SAMPLING
                 // =============================================================
                 vec4 baseColor = texture2D(u_videoTex, clamp(uv, 0.0, 1.0));
+                
+                if (u_genMode > 0.5) {
+                    baseColor.rgb = renderGenerativeArt(uv);
+                }
 
                 // Block blend after UV warp
                 if (u_block > 0.5) {
@@ -849,6 +940,13 @@ class CanvasEngine {
         this.locParticleDisp = loc("u_particleDisp"); this.locParticleAmt = loc("u_particleAmt"); this.locParticleSpread = loc("u_particleSpread"); this.locParticleDir = loc("u_particleDir"); this.locParticleBlend = loc("u_particleBlend");
         // Split Scan
         this.locSplitScan = loc("u_splitScan"); this.locSplitBands = loc("u_splitBands"); this.locSplitShift = loc("u_splitShift"); this.locSplitWarp = loc("u_splitWarp"); this.locSplitBlend = loc("u_splitBlend");
+        
+        // Generative Art
+        this.locGenMode  = loc("u_genMode");
+        this.locGenSpeed = loc("u_genSpeed");
+        this.locGenScale = loc("u_genScale");
+        this.locGenWarp  = loc("u_genWarp");
+
         // Canvas Transform
         this.locFlipH    = loc("u_flipH");
         this.locFlipV    = loc("u_flipV");
@@ -1109,6 +1207,17 @@ class CanvasEngine {
         this.gl.uniform1f(this.locSplitShift, g.splitScan.params.shift.value * aBand(g.splitScan, 5.0));
         this.gl.uniform1f(this.locSplitWarp, g.splitScan.params.warp.value);
         this.gl.uniform1f(this.locSplitBlend, g.splitScan.params.blendMode.value);
+
+        // Generative Art
+        let genModeNum = 0.0;
+        if (state.genMode === 'GRID TUNNEL') genModeNum = 1.0;
+        else if (state.genMode === 'CUBE FIELD') genModeNum = 2.0;
+        else if (state.genMode === 'RADIANT HORIZON') genModeNum = 3.0;
+
+        this.gl.uniform1f(this.locGenMode, genModeNum);
+        this.gl.uniform1f(this.locGenSpeed, state.genSpeed !== undefined ? state.genSpeed : 1.0);
+        this.gl.uniform1f(this.locGenScale, state.genZoom !== undefined ? state.genZoom : 1.0);
+        this.gl.uniform1f(this.locGenWarp, state.genAudioWarp !== undefined ? state.genAudioWarp : 1.0);
 
         // --- Canvas Transform ---
         const ct = state.canvasTransform || {};
