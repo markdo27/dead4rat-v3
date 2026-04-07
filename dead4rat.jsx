@@ -22,7 +22,9 @@ const initialEffectSettings = {
     ditherMatrix:    { name: "Dither Matrix",    enabled: false, audioReactive: false, audioBand: 'MID',  params: { scale: { value: 4, min: 2, max: 32, step: 1 }, contrast: { value: 1, min: 0, max: 2, step: 0.01 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
     thermalVision:   { name: "Thermal Vision",   enabled: false, audioReactive: false, audioBand: 'HIGH', params: { intensity: { value: 1, min: 0, max: 1, step: 0.01 }, bias: { value: 0, min: -0.5, max: 0.5, step: 0.01 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
     mirrorTile:      { name: "Mirror Tile",      enabled: false, audioReactive: false, audioBand: 'MID',  params: { tilesX: { value: 2, min: 1, max: 8, step: 1 }, tilesY: { value: 2, min: 1, max: 8, step: 1 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
-    stroboscope:     { name: "Stroboscope",      enabled: false, audioReactive: false, audioBand: 'BASS', params: { rate: { value: 4, min: 1, max: 30, step: 1 }, hold: { value: 0.5, min: 0, max: 1, step: 0.01 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } }
+    stroboscope:     { name: "Stroboscope",      enabled: false, audioReactive: false, audioBand: 'BASS', params: { rate: { value: 4, min: 1, max: 30, step: 1 }, hold: { value: 0.5, min: 0, max: 1, step: 0.01 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
+    particleDisp:    { name: "Particle Scatter", enabled: false, audioReactive: false, audioBand: 'HIGH', params: { amount: { value: 0.5, min: 0, max: 1, step: 0.01 }, spread: { value: 50, min: 0, max: 200, step: 1 }, direction: { value: 0, min: 0, max: 360, step: 1 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } },
+    splitScan:       { name: "Split Scan",       enabled: false, audioReactive: false, audioBand: 'MID',  params: { bands: { value: 8, min: 2, max: 32, step: 1 }, shift: { value: 50, min: 0, max: 400, step: 1 }, warp: { value: 0.3, min: 0, max: 1, step: 0.01 }, blendMode: { value: 0, min: 0, max: 5, step: 1 } } }
 };
 
 // Frozen factory defaults — never mutated
@@ -32,8 +34,8 @@ const FACTORY_DEFAULTS = JSON.parse(JSON.stringify(initialEffectSettings));
 const EFFECT_CATEGORIES = [
     { name: 'COLOR', keys: ['rgbShift', 'colorDistortion', 'chromaGlitch', 'chromaDelay', 'colorize', 'thermalVision'] },
     { name: 'DISTORT', keys: ['barrelDistortion', 'vortexWarp', 'kaleidoscope', 'mirrorTile'] },
-    { name: 'TEXTURE', keys: ['scanLines', 'noise', 'blockiness', 'posterize', 'ditherMatrix', 'dataPointCloud'] },
-    { name: 'GLITCH', keys: ['vhsJitter', 'glitchSlicer', 'pixelSort', 'stroboscope'] },
+    { name: 'TEXTURE', keys: ['scanLines', 'noise', 'blockiness', 'posterize', 'ditherMatrix', 'dataPointCloud', 'particleDisp'] },
+    { name: 'GLITCH', keys: ['vhsJitter', 'glitchSlicer', 'pixelSort', 'stroboscope', 'splitScan'] },
     { name: 'FEEDBACK', keys: ['videoFeedback', 'acidMelt', 'motionDetection'] },
     { name: 'DETECT', keys: ['edgeDetection'] },
 ];
@@ -989,6 +991,35 @@ function Dead4RatApp() {
 
                     <span style={{flex: 1}} />
 
+                    {/* Transform controls — inline in header */}
+                    <button
+                        className={canvasTransform.flipH ? 'hud-active' : ''}
+                        onClick={() => { const next = { ...canvasTransform, flipH: !canvasTransform.flipH }; setCanvasTransform(next); globalState.canvasTransform = next; }}
+                        title="Horizontal flip"
+                    >⇔H</button>
+                    <button
+                        className={canvasTransform.flipV ? 'hud-active' : ''}
+                        onClick={() => { const next = { ...canvasTransform, flipV: !canvasTransform.flipV }; setCanvasTransform(next); globalState.canvasTransform = next; }}
+                        title="Vertical flip"
+                    >⇕V</button>
+                    {[['0°', 0], ['90°', 1], ['180°', 2], ['270°', 3]].map(([label, val]) => (
+                        <button
+                            key={val}
+                            className={canvasTransform.rotation === val ? 'hud-active' : ''}
+                            onClick={() => { const next = { ...canvasTransform, rotation: val }; setCanvasTransform(next); globalState.canvasTransform = next; }}
+                        >{label}</button>
+                    ))}
+                    <span className="hud-sep">│</span>
+                    {/* Scale mode */}
+                    {['FIT', 'FILL', '1:1', 'STRETCH'].map(mode => (
+                        <button
+                            key={mode}
+                            className={canvasScale === mode ? 'hud-active' : ''}
+                            onClick={() => { setCanvasScale(mode); if (canvasEngine) canvasEngine.setScaleMode(mode); }}
+                        >{mode}</button>
+                    ))}
+                    <span className="hud-sep">│</span>
+
                     <button onClick={toggleCam}>{camOn ? 'CAM OFF' : 'CAM ON'}</button>
                     <button className={isRecording ? 'hud-active' : ''} onClick={recordToggle}>
                         {isRecording ? '⏹ REC' : '⏺ REC'}
@@ -1064,69 +1095,8 @@ function Dead4RatApp() {
                         </button>
                     </div>
 
-                    <div className="hud-divider" />
 
-                    {/* CANVAS TRANSFORM */}
-                    <div className="section-header">// TRANSFORM</div>
-                    <div className="section-hint">Flip or rotate the entire output canvas</div>
-                    <div style={{display: 'flex', gap: '4px', marginBottom: '6px'}}>
-                        <button
-                            className={`brutalist-button ${canvasTransform.flipH ? 'primary' : ''}`}
-                            style={{flex: 1, fontSize: '0.6rem'}}
-                            onClick={() => {
-                                const next = { ...canvasTransform, flipH: !canvasTransform.flipH };
-                                setCanvasTransform(next);
-                                globalState.canvasTransform = next;
-                            }}
-                        >⇔ H-FLIP</button>
-                        <button
-                            className={`brutalist-button ${canvasTransform.flipV ? 'primary' : ''}`}
-                            style={{flex: 1, fontSize: '0.6rem'}}
-                            onClick={() => {
-                                const next = { ...canvasTransform, flipV: !canvasTransform.flipV };
-                                setCanvasTransform(next);
-                                globalState.canvasTransform = next;
-                            }}
-                        >⇕ V-FLIP</button>
-                    </div>
-                    <div style={{marginBottom: '12px'}}>
-                        <div style={{fontSize: '0.6rem', color: 'var(--text-dim)', marginBottom: '4px'}}>ROTATION</div>
-                        <div style={{display: 'flex', gap: '3px'}}>
-                            {[['0°', 0], ['90°', 1], ['180°', 2], ['270°', 3]].map(([label, val]) => (
-                                <button
-                                    key={val}
-                                    className={`brutalist-button ${canvasTransform.rotation === val ? 'primary' : ''}`}
-                                    style={{flex: 1, fontSize: '0.6rem', padding: '4px 2px'}}
-                                    onClick={() => {
-                                        const next = { ...canvasTransform, rotation: val };
-                                        setCanvasTransform(next);
-                                        globalState.canvasTransform = next;
-                                    }}
-                                >{label}</button>
-                            ))}
-                        </div>
-                    </div>
 
-                    <div className="hud-divider" />
-
-                    {/* CANVAS SCALE MODE */}
-                    <div className="section-header">// DISPLAY SCALE</div>
-                    <div className="section-hint">How the output canvas fills the screen</div>
-                    <div style={{display: 'flex', gap: '3px', marginBottom: '12px'}}>
-                        {['FIT', 'FILL', '1:1', 'STRETCH'].map(mode => (
-                            <button
-                                key={mode}
-                                className={`brutalist-button ${canvasScale === mode ? 'primary' : ''}`}
-                                style={{flex: 1, fontSize: '0.55rem', padding: '5px 2px'}}
-                                onClick={() => {
-                                    setCanvasScale(mode);
-                                    if (canvasEngine) canvasEngine.setScaleMode(mode);
-                                }}
-                            >{mode}</button>
-                        ))}
-                    </div>
-
-                    <div className="hud-divider" />
 
                     {/* BLOB TRACKER */}
                     <div className="section-header">BLOB_TRACKER // DETECT</div>

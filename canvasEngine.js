@@ -207,6 +207,11 @@ class CanvasEngine {
             uniform float u_dither; uniform float u_ditherScale; uniform float u_ditherContrast; uniform float u_ditherBlend;
             uniform float u_thermal; uniform float u_thermalInt; uniform float u_thermalBias; uniform float u_thermalBlend;
 
+            // Particle Dispersion
+            uniform float u_particleDisp; uniform float u_particleAmt; uniform float u_particleSpread; uniform float u_particleDir; uniform float u_particleBlend;
+            // Split Scan
+            uniform float u_splitScan; uniform float u_splitBands; uniform float u_splitShift; uniform float u_splitWarp; uniform float u_splitBlend;
+
             // --- Canvas Transform ---
             uniform float u_flipH;       // 0 or 1
             uniform float u_flipV;       // 0 or 1
@@ -358,6 +363,26 @@ class CanvasEngine {
                     if (mod(cellIndex.x, 2.0) > 0.5) cellFrac.x = 1.0 - cellFrac.x;
                     if (mod(cellIndex.y, 2.0) > 0.5) cellFrac.y = 1.0 - cellFrac.y;
                     uv = cellFrac;
+                }
+
+                // Split Scan (horizontal band offset distortion)
+                if (u_splitScan > 0.5) {
+                    float bands = max(2.0, floor(u_splitBands));
+                    float bandIdx = floor(uv.y * bands);
+                    float bandFrac = fract(uv.y * bands);
+                    // Alternating direction: odd bands go right, even go left
+                    float dir = mod(bandIdx, 2.0) > 0.5 ? 1.0 : -1.0;
+                    // Use noise for organic variation per band
+                    float noiseFactor = rand(vec2(bandIdx * 0.37, floor(u_time * 2.0))) * 2.0 - 1.0;
+                    float shiftPx = u_splitShift * (dir * 0.5 + noiseFactor * 0.5) / u_resolution.x;
+                    // Warp: non-linear distortion within each band
+                    float warpedFrac = bandFrac;
+                    if (u_splitWarp > 0.01) {
+                        warpedFrac = bandFrac + sin(bandFrac * 3.14159) * u_splitWarp * 0.3;
+                    }
+                    uv.x += shiftPx * smoothstep(0.0, 0.15, bandFrac) * smoothstep(1.0, 0.85, bandFrac);
+                    // Slight Y offset for warp
+                    uv.y = (bandIdx + warpedFrac) / bands;
                 }
 
                 // Data Moshing (pixelation + temporal I-frame ghost)
@@ -569,6 +594,31 @@ class CanvasEngine {
                     }
                     vec3 eCol = mix(baseColor.rgb, thermalCol, u_thermalInt);
                     baseColor.rgb = applyBlend(baseColor.rgb, eCol, u_thermalBlend);
+                }
+
+                // Particle Dispersion (luminance-driven pixel scatter)
+                if (u_particleDisp > 0.5) {
+                    float luma = dot(baseColor.rgb, vec3(0.299, 0.587, 0.114));
+                    // Hash per pixel for scatter direction
+                    float h1 = rand(floor(uv * u_resolution / 2.0) * 2.0 / u_resolution);
+                    float h2 = rand(floor(uv * u_resolution / 2.0) * 2.0 / u_resolution + vec2(7.31, 3.17));
+                    // Threshold: only scatter pixels above luminance threshold
+                    float thresh = 1.0 - u_particleAmt;
+                    float scatter = smoothstep(thresh - 0.1, thresh + 0.1, luma);
+                    // Direction from control + per-pixel randomness
+                    float dirRad = u_particleDir * 0.0174533; // degrees to rad
+                    float angle = dirRad + (h1 - 0.5) * 3.14159;
+                    float dist = h2 * u_particleSpread * scatter / u_resolution.x;
+                    // Time-based animation
+                    float timeAnim = fract(u_time * 0.3 + h1);
+                    dist *= timeAnim;
+                    vec2 offset = vec2(cos(angle), sin(angle)) * dist;
+                    vec2 srcUv = uv - offset;
+                    vec3 srcCol = texture2D(u_videoTex, clamp(srcUv, 0.0, 1.0)).rgb;
+                    // Fade particles based on distance
+                    float fade = 1.0 - smoothstep(0.0, u_particleSpread * 0.8 / u_resolution.x, length(offset));
+                    vec3 eCol = mix(baseColor.rgb * (1.0 - scatter * 0.5), srcCol, scatter * fade);
+                    baseColor.rgb = applyBlend(baseColor.rgb, eCol, u_particleBlend);
                 }
 
                 // =============================================================
@@ -795,6 +845,10 @@ class CanvasEngine {
         this.locDither = loc("u_dither"); this.locDitherScale = loc("u_ditherScale"); this.locDitherContrast = loc("u_ditherContrast"); this.locDitherBlend = loc("u_ditherBlend");
         // Thermal Vision
         this.locThermal = loc("u_thermal"); this.locThermalInt = loc("u_thermalInt"); this.locThermalBias = loc("u_thermalBias"); this.locThermalBlend = loc("u_thermalBlend");
+        // Particle Dispersion
+        this.locParticleDisp = loc("u_particleDisp"); this.locParticleAmt = loc("u_particleAmt"); this.locParticleSpread = loc("u_particleSpread"); this.locParticleDir = loc("u_particleDir"); this.locParticleBlend = loc("u_particleBlend");
+        // Split Scan
+        this.locSplitScan = loc("u_splitScan"); this.locSplitBands = loc("u_splitBands"); this.locSplitShift = loc("u_splitShift"); this.locSplitWarp = loc("u_splitWarp"); this.locSplitBlend = loc("u_splitBlend");
         // Canvas Transform
         this.locFlipH    = loc("u_flipH");
         this.locFlipV    = loc("u_flipV");
@@ -1041,6 +1095,20 @@ class CanvasEngine {
         this.gl.uniform1f(this.locThermalInt, g.thermalVision.params.intensity.value * aBand(g.thermalVision, 2.0));
         this.gl.uniform1f(this.locThermalBias, g.thermalVision.params.bias.value);
         this.gl.uniform1f(this.locThermalBlend, g.thermalVision.params.blendMode.value);
+
+        // Particle Dispersion
+        this.gl.uniform1f(this.locParticleDisp, g.particleDisp.enabled ? 1.0 : 0.0);
+        this.gl.uniform1f(this.locParticleAmt, g.particleDisp.params.amount.value * aBand(g.particleDisp, 2.0));
+        this.gl.uniform1f(this.locParticleSpread, g.particleDisp.params.spread.value * aBand(g.particleDisp, 4.0));
+        this.gl.uniform1f(this.locParticleDir, g.particleDisp.params.direction.value);
+        this.gl.uniform1f(this.locParticleBlend, g.particleDisp.params.blendMode.value);
+
+        // Split Scan
+        this.gl.uniform1f(this.locSplitScan, g.splitScan.enabled ? 1.0 : 0.0);
+        this.gl.uniform1f(this.locSplitBands, g.splitScan.params.bands.value * aBand(g.splitScan, 2.0));
+        this.gl.uniform1f(this.locSplitShift, g.splitScan.params.shift.value * aBand(g.splitScan, 5.0));
+        this.gl.uniform1f(this.locSplitWarp, g.splitScan.params.warp.value);
+        this.gl.uniform1f(this.locSplitBlend, g.splitScan.params.blendMode.value);
 
         // --- Canvas Transform ---
         const ct = state.canvasTransform || {};
