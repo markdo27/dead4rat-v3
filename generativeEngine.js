@@ -49,7 +49,7 @@ class GenerativeEngine {
             
             // Local state for the sketch
             let time = 0;
-            let starfield = [];
+            this.starfield = [];
 
             p.setup = () => {
                 // Initialize canvas as WEBGL for 3D primitive support
@@ -61,7 +61,7 @@ class GenerativeEngine {
                 
                 // Initialize starfield for cube field
                 for(let i=0; i<150; i++){
-                    starfield.push({
+                    this.starfield.push({
                         x: p.random(-2000, 2000),
                         y: p.random(-2000, 2000),
                         z: p.random(-4000, 0),
@@ -158,7 +158,7 @@ class GenerativeEngine {
         p.rotateX(time * 0.2);
         p.rotateY(time * 0.3);
         
-        for (let star of this.p5._elements[0].starfield) {
+        for (let star of this.starfield) {
             // Move forward
             star.z += star.speed * (1.0 + this.audio.bass * 2.0 * warpInt);
             
