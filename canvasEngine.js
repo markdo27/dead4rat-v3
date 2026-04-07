@@ -20,6 +20,7 @@ class CanvasEngine {
         this.fboB = null;
         this.renderTarget = null; // These will hold { fbo, tex }
         this.feedbackSource = null;
+        this.scaleMode = 'FIT'; // 'FIT' | 'FILL' | '1:1' | 'STRETCH'
 
         this.initShaders();
         this.initBuffers();
@@ -65,10 +66,60 @@ class CanvasEngine {
     }
 
     resizeCanvas() {
-        this.canvas.width = window.innerWidth;
-        this.canvas.height = window.innerHeight;
+        const naturalW = window.innerWidth;
+        const naturalH = window.innerHeight;
+
+        if (this.scaleMode === '1:1') {
+            // Fixed 1920×1080 output canvas, CSS-scaled down
+            this.canvas.width  = 1920;
+            this.canvas.height = 1080;
+        } else {
+            this.canvas.width  = naturalW;
+            this.canvas.height = naturalH;
+        }
+
+        this._applyCanvasStyle();
         this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
         this.initFBOs(this.canvas.width, this.canvas.height);
+    }
+
+    _applyCanvasStyle() {
+        const c = this.canvas;
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+
+        if (this.scaleMode === 'STRETCH') {
+            c.style.position = 'fixed';
+            c.style.left = '0'; c.style.top = '0';
+            c.style.width = '100vw'; c.style.height = '100vh';
+            c.style.objectFit = 'fill';
+        } else if (this.scaleMode === 'FILL') {
+            c.style.position = 'fixed';
+            c.style.left = '0'; c.style.top = '0';
+            c.style.width = '100vw'; c.style.height = '100vh';
+            c.style.objectFit = 'cover';
+        } else if (this.scaleMode === '1:1') {
+            // 1920×1080 canvas shown letterboxed inside viewport
+            const scale = Math.min(vw / 1920, vh / 1080);
+            const w = Math.round(1920 * scale);
+            const h = Math.round(1080 * scale);
+            c.style.position = 'fixed';
+            c.style.left = Math.round((vw - w) / 2) + 'px';
+            c.style.top  = Math.round((vh - h) / 2) + 'px';
+            c.style.width  = w + 'px';
+            c.style.height = h + 'px';
+        } else {
+            // FIT (default) — fills window naturally
+            c.style.position = 'fixed';
+            c.style.left = '0'; c.style.top = '0';
+            c.style.width = '100vw'; c.style.height = '100vh';
+            c.style.objectFit = 'contain';
+        }
+    }
+
+    setScaleMode(mode) {
+        this.scaleMode = mode;
+        this.resizeCanvas();
     }
 
     initShaders() {
@@ -996,17 +1047,46 @@ class CanvasEngine {
     }
 
     // --- Recording & Export Tools ---
-    exportPNG() {
+    exportPNG(blobTracker) {
+        // Composite WebGL canvas + blob overlay into an offscreen canvas before saving
+        const offscreen = document.createElement('canvas');
+        offscreen.width  = this.canvas.width;
+        offscreen.height = this.canvas.height;
+        const ctx = offscreen.getContext('2d');
+        ctx.drawImage(this.canvas, 0, 0);
+        if (blobTracker && blobTracker.enabled && blobTracker.showOverlay) {
+            ctx.drawImage(blobTracker.overlayCanvas, 0, 0, offscreen.width, offscreen.height);
+        }
         const link = document.createElement('a');
         link.download = `dead4rat_${Date.now()}.png`;
-        link.href = this.canvas.toDataURL('image/png');
+        link.href = offscreen.toDataURL('image/png');
         link.click();
     }
 
-    startRecording() {
+    startRecording(blobTracker) {
         if (this._isRecording) return;
-        
-        const stream = this.canvas.captureStream(60);
+
+        let stream;
+        if (blobTracker && blobTracker.enabled && blobTracker.showOverlay) {
+            // Composite WebGL canvas + blob overlay into a dedicated recording canvas
+            this._recCanvas = document.createElement('canvas');
+            this._recCanvas.width  = this.canvas.width;
+            this._recCanvas.height = this.canvas.height;
+            this._recCtx = this._recCanvas.getContext('2d');
+
+            // Drive compositing every frame
+            const composeFrame = () => {
+                if (!this._isRecording) return;
+                this._recCtx.drawImage(this.canvas, 0, 0);
+                this._recCtx.drawImage(blobTracker.overlayCanvas, 0, 0, this._recCanvas.width, this._recCanvas.height);
+                requestAnimationFrame(composeFrame);
+            };
+            requestAnimationFrame(composeFrame);
+            stream = this._recCanvas.captureStream(60);
+        } else {
+            stream = this.canvas.captureStream(60);
+        }
+
         this._chunks = [];
         this._recorder = new MediaRecorder(stream, {
             mimeType: 'video/webm;codecs=vp9'
@@ -1024,6 +1104,8 @@ class CanvasEngine {
             a.download = `dead4rat_${Date.now()}.webm`;
             a.click();
             URL.revokeObjectURL(url);
+            this._recCanvas = null;
+            this._recCtx = null;
         };
 
         this._recorder.start();

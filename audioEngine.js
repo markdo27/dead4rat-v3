@@ -9,6 +9,9 @@ class AudioEngine {
         this.rms = 0;
         this.spectralCentroid = 0;
         this.transientDetected = false;
+        this.bassTransient = false;
+        this.midTransient  = false;
+        this.highTransient = false;
         
         // Multi-band frequency energy
         this.bass = 0;   // 20-250 Hz
@@ -21,8 +24,12 @@ class AudioEngine {
         this._prevHigh = 0;
         this._smoothing = 0.7;
         
-        // Threshold control mapping
+        // Global threshold (kept for backwards compat)
         this.threshold = 0.04;
+        // Per-band transient thresholds
+        this.bassThreshold = 0.15;
+        this.midThreshold  = 0.10;
+        this.highThreshold = 0.08;
 
         this.stream = null;
         this.sourceNode = null; // generic source node (mic or file)
@@ -215,7 +222,11 @@ class AudioEngine {
         this._prevMid = this.mid;
         this._prevHigh = this.high;
 
-        // Transient Detection
-        this.transientDetected = this.rms > this.threshold;
+        // Per-band Transient Detection
+        this.bassTransient = this.bass > this.bassThreshold;
+        this.midTransient  = this.mid  > this.midThreshold;
+        this.highTransient = this.high > this.highThreshold;
+        // Global transient: any band fires OR classic RMS
+        this.transientDetected = this.bassTransient || this.midTransient || this.highTransient || (this.rms > this.threshold);
     }
 }

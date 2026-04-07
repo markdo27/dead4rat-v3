@@ -208,7 +208,7 @@ TerminalWindow._globalZ = 10;
 // SIGNAL MONITOR — Live spectrum + band meters
 // ═══════════════════════════════════════════
 
-function SignalMonitor({ audioEngine, audioGain, onGainChange, audioFile, onFileChange, onMicToggle, useMic, lfoSpeed, onLfoSpeedChange, lfoDepth, onLfoDepthChange }) {
+function SignalMonitor({ audioEngine, audioGain, onGainChange, audioFile, onFileChange, onMicToggle, onAudioOff, useMic, lfoSpeed, onLfoSpeedChange, lfoDepth, onLfoDepthChange, bassThr, onBassThrChange, midThr, onMidThrChange, highThr, onHighThrChange }) {
     const canvasRef = React.useRef(null);
     const animRef = React.useRef(null);
     const [bass, setBass] = React.useState(0);
@@ -329,15 +329,31 @@ function SignalMonitor({ audioEngine, audioGain, onGainChange, audioFile, onFile
                     {Math.round(audioGain * 100)}%
                 </span>
             </div>
+            <div className="hud-divider" style={{marginTop: '8px'}} />
+            <div style={{fontSize: '0.6rem', color: 'var(--text-dim)', marginBottom: '6px'}}>TRANSIENT THRESHOLDS</div>
             <div className="signal-control-row">
-                <span className="status-label">THRESH</span>
-                <input type="range" className="brutalist-slider" min="0" max="30" step="1"
-                    value={Math.round((audioEngine?.threshold || 0.04) * 100)}
-                    onChange={(e) => { if (audioEngine) audioEngine.threshold = parseFloat(e.target.value) / 100.0; }}
+                <span className="status-label" style={{color: '#FF5500'}}>BASS</span>
+                <input type="range" className="brutalist-slider" min="1" max="50" step="1"
+                    value={bassThr}
+                    onChange={(e) => { const v = parseInt(e.target.value); onBassThrChange(v); if (audioEngine) audioEngine.bassThreshold = v / 100.0; }}
                 />
-                <span style={{fontSize: '0.6rem', color: 'var(--text-bright)', width: '32px', textAlign: 'right'}}>
-                    {Math.round((audioEngine?.threshold || 0.04) * 100)}%
-                </span>
+                <span style={{fontSize: '0.6rem', color: '#FF5500', width: '32px', textAlign: 'right'}}>{bassThr}%</span>
+            </div>
+            <div className="signal-control-row">
+                <span className="status-label" style={{color: '#FF9900'}}>MID</span>
+                <input type="range" className="brutalist-slider" min="1" max="50" step="1"
+                    value={midThr}
+                    onChange={(e) => { const v = parseInt(e.target.value); onMidThrChange(v); if (audioEngine) audioEngine.midThreshold = v / 100.0; }}
+                />
+                <span style={{fontSize: '0.6rem', color: '#FF9900', width: '32px', textAlign: 'right'}}>{midThr}%</span>
+            </div>
+            <div className="signal-control-row">
+                <span className="status-label" style={{color: '#FFDD00'}}>HIGH</span>
+                <input type="range" className="brutalist-slider" min="1" max="50" step="1"
+                    value={highThr}
+                    onChange={(e) => { const v = parseInt(e.target.value); onHighThrChange(v); if (audioEngine) audioEngine.highThreshold = v / 100.0; }}
+                />
+                <span style={{fontSize: '0.6rem', color: '#FFDD00', width: '32px', textAlign: 'right'}}>{highThr}%</span>
             </div>
             <div className="signal-control-row">
                 <span className="status-label">SMOOTH</span>
@@ -394,6 +410,14 @@ function SignalMonitor({ audioEngine, audioGain, onGainChange, audioFile, onFile
                 >
                     🎵 FILE
                 </button>
+                <button
+                    className="brutalist-button"
+                    style={{flex: '0 0 auto', fontSize: '0.6rem', padding: '5px 6px', opacity: (useMic || audioFile) ? 1 : 0.4}}
+                    onClick={onAudioOff}
+                    title="Turn off audio"
+                >
+                    ✕ OFF
+                </button>
             </div>
             {audioFile && (
                 <div style={{marginTop: '5px', fontSize: '0.55rem', color: 'var(--accent)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>
@@ -426,11 +450,17 @@ function Dead4RatApp() {
     const [maskLoading, setMaskLoading] = React.useState(false);
     const [camOn, setCamOn] = React.useState(true);
     const [canvasTransform, setCanvasTransform] = React.useState({ flipH: false, flipV: false, rotation: 0 });
+    const [canvasScale, setCanvasScale] = React.useState('FIT');
     const [blobEnabled, setBlobEnabled] = React.useState(false);
     const [blobOverlay, setBlobOverlay] = React.useState(true);
     const [blobThreshold, setBlobThreshold] = React.useState(30);
     const [blobMinArea, setBlobMinArea] = React.useState(15);
+    const [blobLifespan, setBlobLifespan] = React.useState(45);
     const [blobCount, setBlobCount] = React.useState(0);
+    // Per-band transient thresholds
+    const [bassThr, setBassThr] = React.useState(15);
+    const [midThr,  setMidThr]  = React.useState(10);
+    const [highThr, setHighThr] = React.useState(8);
     const [openCategories, setOpenCategories] = React.useState({ COLOR: true, DISTORT: false, TEXTURE: true, GLITCH: false, FEEDBACK: false, DETECT: false });
     const toggleCategory = (name) => setOpenCategories(s => ({...s, [name]: !s[name]}));
 
@@ -488,6 +518,13 @@ function Dead4RatApp() {
             await audioEngine.start();
             setUseMic(true);
         }
+        setUiRefresh(r => r + 1);
+    };
+
+    const handleAudioOff = () => {
+        if (audioEngine) audioEngine.stop();
+        setUseMic(false);
+        setAudioFile(null);
         setUiRefresh(r => r + 1);
     };
 
@@ -728,7 +765,7 @@ function Dead4RatApp() {
 
     const recordToggle = () => {
         if (isRecording) canvasEngine.stopRecording();
-        else canvasEngine.startRecording();
+        else canvasEngine.startRecording(blobTracker);
         setIsRecording(!isRecording);
     };
 
@@ -949,7 +986,7 @@ function Dead4RatApp() {
                     <button className={isRecording ? 'hud-active' : ''} onClick={recordToggle}>
                         {isRecording ? '⏹ REC' : '⏺ REC'}
                     </button>
-                    <button onClick={() => canvasEngine.exportPNG()}>EXPORT</button>
+                    <button onClick={() => canvasEngine.exportPNG(blobTracker)}>EXPORT</button>
                     <button onClick={() => setUiVisible(false)}>HIDE UI</button>
                 </div>
             )}
@@ -973,11 +1010,15 @@ function Dead4RatApp() {
                         audioFile={audioFile}
                         onFileChange={handleFileSource}
                         onMicToggle={handleMicToggle}
+                        onAudioOff={handleAudioOff}
                         useMic={useMic}
                         lfoSpeed={lfoSpeed}
                         onLfoSpeedChange={setLfoSpeed}
                         lfoDepth={lfoDepth}
                         onLfoDepthChange={setLfoDepth}
+                        bassThr={bassThr} onBassThrChange={setBassThr}
+                        midThr={midThr}   onMidThrChange={setMidThr}
+                        highThr={highThr} onHighThrChange={setHighThr}
                     />
                 </TerminalWindow>
             )}
@@ -1061,6 +1102,25 @@ function Dead4RatApp() {
 
                     <div className="hud-divider" />
 
+                    {/* CANVAS SCALE MODE */}
+                    <div className="section-header">// DISPLAY SCALE</div>
+                    <div className="section-hint">How the output canvas fills the screen</div>
+                    <div style={{display: 'flex', gap: '3px', marginBottom: '12px'}}>
+                        {['FIT', 'FILL', '1:1', 'STRETCH'].map(mode => (
+                            <button
+                                key={mode}
+                                className={`brutalist-button ${canvasScale === mode ? 'primary' : ''}`}
+                                style={{flex: 1, fontSize: '0.55rem', padding: '5px 2px'}}
+                                onClick={() => {
+                                    setCanvasScale(mode);
+                                    if (canvasEngine) canvasEngine.setScaleMode(mode);
+                                }}
+                            >{mode}</button>
+                        ))}
+                    </div>
+
+                    <div className="hud-divider" />
+
                     {/* BLOB TRACKER */}
                     <div className="section-header">BLOB_TRACKER // DETECT</div>
                     <div style={{display: 'flex', gap: '4px', marginBottom: '8px'}}>
@@ -1109,6 +1169,18 @@ function Dead4RatApp() {
                                     }}
                                 />
                                 <span style={{color: 'var(--text-bright)', fontSize: '0.6rem', width: '28px', textAlign: 'right'}}>{blobMinArea}</span>
+                            </div>
+                            <div className="param-row">
+                                <label>LIFESPAN</label>
+                                <input type="range" className="brutalist-slider" min="5" max="180" step="1"
+                                    value={blobLifespan}
+                                    onChange={(e) => {
+                                        const v = parseInt(e.target.value);
+                                        setBlobLifespan(v);
+                                        if (blobTracker) blobTracker.persistFrames = v;
+                                    }}
+                                />
+                                <span style={{color: 'var(--text-bright)', fontSize: '0.6rem', width: '28px', textAlign: 'right'}}>{blobLifespan}f</span>
                             </div>
                             <div className="status-row" style={{marginTop: '6px'}}>
                                 <span className="status-label">BLOB COUNT</span>
