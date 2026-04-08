@@ -509,21 +509,26 @@ class CanvasEngine {
                 }
                 else if (u_genMode < 4.5) {
                     // ── MODE 4: MANDELBULB DRIFT ───────────────────────
-                    // 3D Mandelbulb distance estimator, audio-driven power
-                    p.z -= u_time * u_genSpeed * 2.0;
+                    // 3D Mandelbulb viewed from orbiting camera (no z-drift)
+                    // Slow rotation so the object stays visible
+                    p.xz *= rot(u_time * u_genSpeed * 0.25);
+                    p.yz *= rot(u_time * u_genSpeed * 0.15 + ABnd * u_genWarp * 0.4);
+                    // Scale so bulb fills view (radius ~1.2 world units)
+                    p *= 0.8;
                     float power = 3.0 + u_genIter * 5.0 + ABnd * 2.0 * u_genWarp;
-                    vec3 z = p; float dr = 1.0; float rr = 0.0;
+                    vec3 mz = p; float dr = 1.0; float rr = 1.0;
                     for (int i = 0; i < 7; i++) {
-                        rr = length(z);
+                        rr = length(mz);
                         if (rr > 2.0) break;
-                        float theta = acos(clamp(z.z / max(rr, 0.0001), -1.0, 1.0));
-                        float phi = atan(z.y, z.x);
-                        dr = pow(rr, power - 1.0) * power * dr + 1.0;
-                        float zr = pow(rr, power);
+                        float theta = acos(clamp(mz.z / max(rr, 0.0001), -1.0, 1.0));
+                        float phi = atan(mz.y, mz.x);
+                        dr = pow(max(rr, 0.0001), power - 1.0) * power * dr + 1.0;
+                        float zr = pow(max(rr, 0.0001), power);
                         theta *= power; phi *= power;
-                        z = zr * vec3(sin(theta)*cos(phi), sin(theta)*sin(phi), cos(theta)) + p;
+                        mz = zr * vec3(sin(theta)*cos(phi), sin(theta)*sin(phi), cos(theta)) + p;
                     }
-                    return 0.5 * log(max(rr, 0.001)) * rr / max(dr, 0.001);
+                    // DE: log(max(rr,1)) guarantees >= 0 so ray never steps backward
+                    return max(0.5 * log(max(rr, 1.0)) * rr / max(dr, 0.001), 0.001);
                 }
                 else if (u_genMode < 5.5) {
                     // ── MODE 5: BIOLUMINESCENT ABYSS ──────────────────
@@ -577,28 +582,32 @@ class CanvasEngine {
                 }
                 else {
                     // ── MODE 8: MYCELIUM ───────────────────────────────
-                    // Organic branching network via capsule SDF field
+                    // Organic branching network — z-repeated for infinite tunnel
                     p.z -= u_time * u_genSpeed * 2.5;
+                    // Tile branches every 6 units along z
+                    float period = 6.0;
+                    p.z = mod(p.z + period * 0.5, period) - period * 0.5;
+                    p.xy *= rot(u_time * 0.06);
                     float myc = 20.0;
-                    float branchR = (0.03 + ABnd * 0.035) * u_genDensity;
+                    float branchR = (0.06 + ABnd * 0.06) * u_genDensity;
                     for (int b = 0; b < 6; b++) {
                         float bf = float(b);
                         float angle = bf * 1.0472 + u_time * 0.08;
                         vec3 warpB = vec3(
-                            snoise(vec2(p.y*0.5+bf*17.3, p.z*0.4)),
-                            snoise(vec2(p.z*0.5+bf*41.7, p.x*0.4)),
-                            snoise(vec2(p.x*0.5+bf*23.1, p.y*0.4))
-                        ) * u_genWarp * 0.45;
+                            snoise(vec2(bf*17.3, p.z*0.3)) * 0.6,
+                            snoise(vec2(bf*41.7, p.z*0.25)) * 0.6,
+                            snoise(vec2(bf*23.1, u_time*0.04)) * 0.4
+                        ) * u_genWarp * 0.5;
                         vec3 pa = warpB;
-                        vec3 pb = vec3(cos(angle), sin(angle)*0.8, 0.5+snoise(vec2(bf, u_time*0.05))*0.3)
-                                  * (0.75 + ABnd * 0.35 * u_genWarp) + warpB;
-                        myc = smin(myc, sdCapsule(p, pa, pb, branchR), 0.1);
+                        vec3 pb = vec3(cos(angle), sin(angle)*0.8, snoise(vec2(bf, u_time*0.05))*0.4)
+                                  * (0.9 + ABnd * 0.4 * u_genWarp) + warpB;
+                        myc = smin(myc, sdCapsule(p, pa, pb, branchR), 0.15);
                         // Sub-branch at midpoint
                         vec3 mid = (pa + pb) * 0.5;
-                        float subAng = angle + 1.5707 + snoise(vec2(p.x*0.2+bf*5.1, p.y*0.2))*0.8;
-                        vec3 subEnd = mid + vec3(cos(subAng), sin(subAng)*0.55, sin(subAng)*0.4)
-                                      * (0.4 + ABnd * 0.18);
-                        myc = smin(myc, sdCapsule(p, mid, subEnd, branchR*0.55), 0.05);
+                        float subAng = angle + 1.5707 + snoise(vec2(bf*5.1, u_time*0.07)) * 0.9;
+                        vec3 subEnd = mid + vec3(cos(subAng), sin(subAng)*0.55, sin(subAng)*0.35)
+                                      * (0.5 + ABnd * 0.2);
+                        myc = smin(myc, sdCapsule(p, mid, subEnd, branchR * 0.6), 0.08);
                     }
                     return myc;
                 }
