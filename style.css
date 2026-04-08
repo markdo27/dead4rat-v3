@@ -169,9 +169,7 @@ body, html {
     color: var(--text-dim);
     font-family: var(--font-mono);
     font-size: 0.8rem;
-    min-width: var(--touch-target);
-    min-height: var(--touch-target);
-    padding: 10px 12px;
+    padding: 4px 10px;
     cursor: pointer;
     letter-spacing: 0;
     line-height: 1;
