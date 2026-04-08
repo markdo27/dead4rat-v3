@@ -309,6 +309,10 @@ class CanvasEngine {
             uniform float u_genRotY;
             uniform float u_genRotZ;
             uniform float u_genAudioBand;
+            uniform float u_genColor1;  // palette hue offset (0-1)
+            uniform float u_genColor2;  // palette saturation / secondary offset
+            uniform float u_genDensity; // tube/branch density multiplier
+            uniform float u_genIter;    // iteration intensity (0-1)
 
             // --- Canvas Transform ---
             uniform float u_flipH;       // 0 or 1
@@ -381,7 +385,9 @@ class CanvasEngine {
                 return clamp(result, 0.0, 1.0);
             }
 
-            // --- GENERATIVE ART (RAYMARCHING) ---
+            // ═══════════════════════════════════════════════════════════
+            // GENERATIVE MATRIX — 8 Modes (Algorithmic Art Enhanced)
+            // ═══════════════════════════════════════════════════════════
             mat2 rot(float a) {
                 float s = sin(a), c = cos(a);
                 return mat2(c, -s, s, c);
@@ -395,6 +401,34 @@ class CanvasEngine {
                 p = abs(p);
                 return (p.x + p.y + p.z - s) * 0.57735027;
             }
+            float sdCapsule(vec3 p, vec3 a, vec3 b, float r) {
+                vec3 pa = p - a, ba = b - a;
+                float h = clamp(dot(pa,ba)/dot(ba,ba), 0.0, 1.0);
+                return length(pa - ba*h) - r;
+            }
+            float smin(float a, float b, float k) {
+                float h = clamp(0.5 + 0.5*(b-a)/k, 0.0, 1.0);
+                return mix(b, a, h) - k*h*(1.0-h);
+            }
+
+            // 3D noise from 2D slices
+            float snoise3(vec3 p) {
+                return snoise(vec2(p.x + p.z*0.47, p.y))      * 0.55
+                     + snoise(vec2(p.x, p.z + p.y*0.31))      * 0.30
+                     + snoise(vec2(p.y + p.x*0.59, p.z))      * 0.15;
+            }
+            // 4-octave FBM
+            float fbm3(vec3 p) {
+                float v = 0.0; float amp = 0.5;
+                vec3 s = vec3(1.7, 9.2, 5.4);
+                for (int i = 0; i < 4; i++) { v += amp * snoise3(p); p = p*2.02+s; amp *= 0.5; }
+                return v;
+            }
+            // Cosine palette (Inigo Quilez)
+            vec3 cospal(float t, float off) {
+                vec3 d = vec3(off, off+0.33, off+0.67);
+                return vec3(0.5) + vec3(0.5)*cos(6.28318*(vec3(1.0,0.75,0.5)*t + d));
+            }
 
             float getGenBand() {
                 if (u_genAudioBand < 0.5) return u_bass;
@@ -404,111 +438,205 @@ class CanvasEngine {
 
             float mapGen(vec3 p) {
                 float ABnd = getGenBand();
-                
-                // Master 3D Rotation
+                float tmp;
                 p.yz *= rot(u_genRotX);
                 p.xz *= rot(u_genRotY);
                 p.xy *= rot(u_genRotZ);
 
                 if (u_genMode < 1.5) {
-                    // MODE 1: GRID TUNNEL
+                    // ── MODE 1: PLASMA LATTICE ─────────────────────────
+                    // FBM domain-warped wireframe grid, noise-breathing tube radii
                     p.z -= u_time * u_genSpeed * 5.0 + ABnd * 4.0 * u_genWarp;
-                    vec3 q = p;
-                    q.xy *= rot(q.z * 0.05 * u_genWarp * ABnd);
+                    vec3 warp = vec3(
+                        snoise(vec2(p.y*0.4+u_time*0.11, p.z*0.4)),
+                        snoise(vec2(p.z*0.4+u_time*0.09, p.x*0.4+5.3)),
+                        snoise(vec2(p.x*0.4+u_time*0.13, p.y*0.4+11.7))
+                    ) * u_genWarp * 0.65;
+                    vec3 q = p + warp;
+                    q.xy *= rot(q.z * 0.07 * u_genWarp + ABnd * 0.4);
                     q.x = mod(q.x + 2.0, 4.0) - 2.0;
                     q.y = mod(q.y + 2.0, 4.0) - 2.0;
                     q.z = mod(q.z + 2.0, 4.0) - 2.0;
-                    
-                    float r = 0.02 + ABnd * 0.15 * u_genWarp;
-                    float beamX = max(abs(q.y), abs(q.z)) - r;
-                    float beamY = max(abs(q.x), abs(q.z)) - r;
-                    float beamZ = max(abs(q.x), abs(q.y)) - r;
-                    return min(beamX, min(beamY, beamZ));
-                } 
+                    float noiseR = snoise(vec2(p.x*0.7+u_time*0.2, p.y*0.7)) * 0.5 + 0.5;
+                    float r = (0.022 + noiseR*0.03) * u_genDensity + ABnd * 0.18 * u_genWarp;
+                    float bX = max(abs(q.y), abs(q.z)) - r;
+                    float bY = max(abs(q.x), abs(q.z)) - r;
+                    float bZ = max(abs(q.x), abs(q.y)) - r;
+                    return min(bX, min(bY, bZ));
+                }
                 else if (u_genMode < 2.5) {
-                    // MODE 2: CUBE FIELD
-                    p.z -= u_time * u_genSpeed * 10.0 + ABnd * 10.0 * u_genWarp;
-                    vec3 q = p;
-                    q.x = mod(q.x + 3.0, 6.0) - 3.0;
-                    q.y = mod(q.y + 3.0, 6.0) - 3.0;
-                    q.z = mod(q.z + 3.0, 6.0) - 3.0;
-                    q.xy *= rot(u_time + p.z * 0.05);
-                    q.xz *= rot(u_time * 0.7);
-                    float scale = 1.0 + u_transient * u_genWarp * 0.5;
-                    float dBox = sdBox(q, vec3(1.0 * scale));
-                    float dInner = -sdBox(q, vec3(0.9 * scale));
-                    return max(dBox, dInner);
-                } 
+                    // ── MODE 2: CRYSTAL STORM ──────────────────────────
+                    // Menger-fold IFS cubes — shatters on transients
+                    p.z -= u_time * u_genSpeed * 8.0 + ABnd * 6.0 * u_genWarp;
+                    p.x = mod(p.x + 3.0, 6.0) - 3.0;
+                    p.y = mod(p.y + 3.0, 6.0) - 3.0;
+                    p.z = mod(p.z + 3.0, 6.0) - 3.0;
+                    p.xy *= rot(u_time * 0.6 + ABnd * u_genWarp * 1.2);
+                    p.xz *= rot(u_time * 0.4 + u_transient * 0.8);
+                    vec3 qm = p; float msc = 1.0;
+                    for (int i = 0; i < 4; i++) {
+                        qm = abs(qm);
+                        tmp = qm.x; qm.x = max(qm.x, qm.y); qm.y = min(tmp, qm.y);
+                        tmp = qm.x; qm.x = max(qm.x, qm.z); qm.z = min(tmp, qm.z);
+                        tmp = qm.y; qm.y = max(qm.y, qm.z); qm.z = min(tmp, qm.y);
+                        qm.z -= 0.5 * (1.2 + u_genIter * 0.6) / msc;
+                        qm.xy *= rot(0.35 + u_time*0.04 + u_transient*0.3);
+                        qm *= 1.6 + u_transient * u_genWarp * 0.4;
+                        msc *= 1.6;
+                    }
+                    float dOuter = sdBox(qm / msc, vec3(1.0));
+                    float dInner = -sdBox(qm / msc, vec3(0.82 + u_transient * 0.12));
+                    return max(dOuter, dInner);
+                }
                 else if (u_genMode < 3.5) {
-                    // MODE 3: RADIANT HORIZON
-                    p.z -= u_time * u_genSpeed * 8.0;
-                    p.xy *= rot(u_time * 0.2 + ABnd * u_genWarp);
-                    vec2 qxy = p.xy;
-                    float angle = atan(qxy.y, qxy.x);
-                    float numLines = 16.0;
-                    float segment = 6.28318 / numLines;
-                    angle = mod(angle + segment * 0.5, segment) - segment * 0.5;
-                    float r = length(qxy);
-                    qxy = vec2(cos(angle), sin(angle)) * r;
-                    
-                    vec3 q = vec3(qxy.x - 2.0, qxy.y, mod(p.z, 2.0) - 1.0);
-                    float dCore = length(q.xy) - 0.1 - u_transient * u_genWarp * 0.3;
-                    return dCore;
+                    // ── MODE 3: SOLAR CORONA ───────────────────────────
+                    // Magnetic dipole field lines + audio eruption plumes
+                    p.z -= u_time * u_genSpeed * 6.0;
+                    p.xy *= rot(u_time * 0.12 + ABnd * u_genWarp * 0.25);
+                    float numLines = 10.0 + u_genDensity * 8.0;
+                    float ang = atan(p.y, p.x);
+                    float seg = 6.28318 / numLines;
+                    float fAng = mod(ang + seg*0.5, seg) - seg*0.5;
+                    float r = length(p.xy);
+                    // Field line shape: dipole potential surface
+                    float potential = r - (1.5 + sin(fAng * 3.0 + u_time*0.5)*0.4*u_genWarp
+                                        + fbm3(p*0.3+u_time*0.06)*0.5*u_genWarp);
+                    float fieldLine = abs(potential) - (0.035 + ABnd * 0.13 * u_genWarp);
+                    // Eruption plumes along z
+                    float eruptR = r - (1.65 + cos(p.z*1.1 + u_time*0.9) * ABnd * 0.7 * u_genWarp);
+                    float plume = abs(eruptR) - (0.05 + ABnd * 0.22);
+                    return min(fieldLine, plume);
                 }
                 else if (u_genMode < 4.5) {
-                    // MODE 4: FRACTAL PYRAMID (Infinite Twisting Octahedrons)
-                    p.z -= u_time * u_genSpeed * 6.0;
-                    vec3 q = p;
-                    q.x = mod(q.x + 4.0, 8.0) - 4.0;
-                    q.y = mod(q.y + 4.0, 8.0) - 4.0;
-                    q.z = mod(q.z + 4.0, 8.0) - 4.0;
-                    
-                    float scale = 1.0;
-                    for (int i=0; i<4; i++) {
-                        q = abs(q) - (0.5 + ABnd * 0.2 * u_genWarp);
-                        q.xy *= rot(0.5 + u_time * 0.2);
-                        q.xz *= rot(0.5);
-                        q *= 1.8;
-                        scale *= 1.8;
+                    // ── MODE 4: MANDELBULB DRIFT ───────────────────────
+                    // 3D Mandelbulb distance estimator, audio-driven power
+                    p.z -= u_time * u_genSpeed * 2.0;
+                    float power = 3.0 + u_genIter * 5.0 + ABnd * 2.0 * u_genWarp;
+                    vec3 z = p; float dr = 1.0; float rr = 0.0;
+                    for (int i = 0; i < 7; i++) {
+                        rr = length(z);
+                        if (rr > 2.0) break;
+                        float theta = acos(clamp(z.z / max(rr, 0.0001), -1.0, 1.0));
+                        float phi = atan(z.y, z.x);
+                        dr = pow(rr, power - 1.0) * power * dr + 1.0;
+                        float zr = pow(rr, power);
+                        theta *= power; phi *= power;
+                        z = zr * vec3(sin(theta)*cos(phi), sin(theta)*sin(phi), cos(theta)) + p;
                     }
-                    return sdOctahedron(q, 1.2) / scale;
-                } else {
-                    // MODE 5: NEON CAVES (Organic hollow tunnel)
-                    p.z -= u_time * u_genSpeed * 5.0;
-                    vec3 q = p;
-                    // Negative radius for inner tunnel wall
-                    float d = (2.0 + ABnd * 1.5 * u_genWarp) - length(q.xy);
-                    float bump = sin(q.x * 2.0 + u_time) * sin(q.y * 2.0) * sin(q.z * 1.5);
-                    return d - bump * (0.5 + ABnd * u_genWarp * 0.8);
+                    return 0.5 * log(max(rr, 0.001)) * rr / max(dr, 0.001);
+                }
+                else if (u_genMode < 5.5) {
+                    // ── MODE 5: BIOLUMINESCENT ABYSS ──────────────────
+                    // FBM-displaced organic cave with bioluminescent pockets
+                    p.z -= u_time * u_genSpeed * 4.5;
+                    float fbmD = fbm3(p*0.45 + u_time*0.07) * u_genWarp * 1.5;
+                    float detail = snoise(vec2(p.x*2.0+u_time*0.2, p.y*2.0)) * 0.28 * u_genWarp;
+                    float tunnelR = 2.1 + fbmD + ABnd * 0.9 * u_genWarp;
+                    float d = tunnelR - length(p.xy + vec2(detail));
+                    float bump = sin(p.x*3.0+u_time*0.3)*sin(p.y*2.7)*sin(p.z*1.5+u_time*0.2);
+                    d -= bump * (0.35 + ABnd * u_genWarp * 0.55);
+                    // Glowing nodule clusters on walls
+                    vec3 qp = vec3(mod(p.x+1.0,2.0)-1.0, mod(p.y+1.0,2.0)-1.0, mod(p.z+1.5,3.0)-1.5);
+                    float pockets = length(qp) - (0.14 + ABnd * 0.07) * u_genDensity;
+                    return smin(d, pockets, 0.25);
+                }
+                else if (u_genMode < 6.5) {
+                    // ── MODE 6: FLOW FIELD ─────────────────────────────
+                    // Curl-noise streamlines as luminous tubes
+                    p.z -= u_time * u_genSpeed * 6.0;
+                    float eps = 0.05;
+                    float nx = snoise3(p + vec3(eps, 0.0, 0.0)) - snoise3(p - vec3(eps, 0.0, 0.0));
+                    float ny = snoise3(p + vec3(0.0, eps, 0.0)) - snoise3(p - vec3(0.0, eps, 0.0));
+                    float nz = snoise3(p + vec3(0.0, 0.0, eps)) - snoise3(p - vec3(0.0, 0.0, eps));
+                    vec3 curl = vec3(nz - ny, nx - nz, ny - nx) * u_genWarp;
+                    vec3 qf = p + curl * sin(p.z*0.5 + u_time) * 0.3;
+                    qf.x = mod(qf.x + 1.5, 3.0) - 1.5;
+                    qf.y = mod(qf.y + 1.5, 3.0) - 1.5;
+                    float flowR = (0.038 + ABnd * 0.09 * u_genWarp) * u_genDensity;
+                    float tube1 = length(qf.xy) - flowR;
+                    vec3 qf2 = p * 1.618 + curl*cos(p.z*0.7+u_time*1.3)*0.2;
+                    qf2.x = mod(qf2.x + 1.0, 2.0) - 1.0;
+                    qf2.y = mod(qf2.y + 1.0, 2.0) - 1.0;
+                    float tube2 = length(qf2.xy) - flowR * 0.65;
+                    return min(tube1, tube2);
+                }
+                else if (u_genMode < 7.5) {
+                    // ── MODE 7: WAVE COLLAPSE ──────────────────────────
+                    // Multi-frequency standing wave interference patterns
+                    p.z -= u_time * u_genSpeed * 3.0;
+                    float f1 = 1.8 * u_genDensity;
+                    float f2 = f1 * 1.618;
+                    float f3 = f1 * 2.618;
+                    float w1 = sin(p.x*f1 + u_time*1.2) * sin(p.y*f1 + u_time*0.8);
+                    float w2 = sin((p.x*0.866+p.y*0.5)*f2 + u_time*0.95) * sin(p.z*f2*0.4);
+                    float w3 = sin((p.x*0.5-p.y*0.866)*f3 + u_time*1.1 + ABnd*u_genWarp*2.0);
+                    float interference = (w1 + w2 + w3) / 3.0;
+                    float surface = abs(interference) - (0.09 + ABnd * 0.18 * u_genWarp);
+                    float nodal = abs(sin(length(p.xy)*f1*0.8 - u_time*u_genSpeed)) - 0.045;
+                    return min(surface, nodal);
+                }
+                else {
+                    // ── MODE 8: MYCELIUM ───────────────────────────────
+                    // Organic branching network via capsule SDF field
+                    p.z -= u_time * u_genSpeed * 2.5;
+                    float myc = 20.0;
+                    float branchR = (0.03 + ABnd * 0.035) * u_genDensity;
+                    for (int b = 0; b < 6; b++) {
+                        float bf = float(b);
+                        float angle = bf * 1.0472 + u_time * 0.08;
+                        vec3 warpB = vec3(
+                            snoise(vec2(p.y*0.5+bf*17.3, p.z*0.4)),
+                            snoise(vec2(p.z*0.5+bf*41.7, p.x*0.4)),
+                            snoise(vec2(p.x*0.5+bf*23.1, p.y*0.4))
+                        ) * u_genWarp * 0.45;
+                        vec3 pa = warpB;
+                        vec3 pb = vec3(cos(angle), sin(angle)*0.8, 0.5+snoise(vec2(bf, u_time*0.05))*0.3)
+                                  * (0.75 + ABnd * 0.35 * u_genWarp) + warpB;
+                        myc = smin(myc, sdCapsule(p, pa, pb, branchR), 0.1);
+                        // Sub-branch at midpoint
+                        vec3 mid = (pa + pb) * 0.5;
+                        float subAng = angle + 1.5707 + snoise(vec2(p.x*0.2+bf*5.1, p.y*0.2))*0.8;
+                        vec3 subEnd = mid + vec3(cos(subAng), sin(subAng)*0.55, sin(subAng)*0.4)
+                                      * (0.4 + ABnd * 0.18);
+                        myc = smin(myc, sdCapsule(p, mid, subEnd, branchR*0.55), 0.05);
+                    }
+                    return myc;
                 }
             }
 
             vec3 renderGenerativeArt(vec2 uv) {
                 vec2 p = uv * 2.0 - 1.0;
-
+                p.x *= u_resolution.x / max(1.0, u_resolution.y); // aspect correct
                 vec3 ro = vec3(0.0, 0.0, -3.0);
                 vec3 rd = normalize(vec3(p, 1.0 / max(0.1, u_genScale)));
-                
-                float rJitter = rand(uv + u_time) * 0.02;
-
-                float t = 0.0;
-                float maxD = 30.0;
+                float rJitter = rand(uv + u_time) * 0.012;
+                float t = 0.01; float maxD = 30.0;
                 float colAccum = 0.0;
-                
-                for(int i = 0; i < 50; i++) {
+                vec3 colorAccum = vec3(0.0);
+                for (int i = 0; i < 80; i++) {
                     vec3 pos = ro + rd * t;
                     float d = mapGen(pos) + rJitter;
-                    if(d < 0.02) {
-                        colAccum += 0.08 * (1.0 - t/maxD);
-                        d = 0.02; 
+                    if (d < 0.018) {
+                        float contrib = 0.065 * (1.0 - t / maxD);
+                        colAccum += contrib;
+                        float tVal = fract(t*0.18 + length(pos.xy)*0.14 + u_time*0.04 + u_genColor1);
+                        colorAccum += contrib * cospal(tVal, u_genColor1);
+                        d = 0.018;
+                    } else {
+                        d = max(d, 0.005);
                     }
                     t += d;
-                    if(t > maxD) break;
+                    if (t > maxD || colAccum > 1.8) break;
                 }
-                
-                vec3 col = vec3(clamp(colAccum, 0.0, 1.0));
-                if (u_transient > 0.5) col += 0.15 * u_genWarp;
-                return col;
+                colAccum = clamp(colAccum, 0.0, 1.0);
+                if (colAccum < 0.001) return vec3(0.0);
+                vec3 baseCol = colorAccum / max(0.001, colAccum);
+                vec3 col = baseCol * colAccum;
+                // Chromatic fringe on bright hits
+                col.r *= 1.0 + u_genColor2 * 0.3;
+                col.b *= 1.0 + (1.0 - u_genColor2) * 0.3;
+                if (u_transient > 0.5) col += 0.12 * u_genWarp * vec3(1.0, 0.45, 0.1);
+                return clamp(col, 0.0, 1.0);
             }
 
             void main() {
@@ -1091,6 +1219,10 @@ class CanvasEngine {
         this.locGenRotY      = loc("u_genRotY");
         this.locGenRotZ      = loc("u_genRotZ");
         this.locGenAudioBand = loc("u_genAudioBand");
+        this.locGenColor1    = loc("u_genColor1");
+        this.locGenColor2    = loc("u_genColor2");
+        this.locGenDensity   = loc("u_genDensity");
+        this.locGenIter      = loc("u_genIter");
 
         // Canvas Transform
         this.locFlipH    = loc("u_flipH");
@@ -1355,12 +1487,18 @@ class CanvasEngine {
 
         // Generative Art
         let genModeNum = 0.0;
-        if (state.genMode === 'GRID TUNNEL') genModeNum = 1.0;
-        else if (state.genMode === 'CUBE FIELD') genModeNum = 2.0;
+        if (state.genMode === 'GRID TUNNEL')    genModeNum = 1.0;
+        else if (state.genMode === 'CUBE FIELD')      genModeNum = 2.0;
+        else if (state.genMode === 'SOLAR CORONA')    genModeNum = 3.0;
+        else if (state.genMode === 'MANDELBULB')      genModeNum = 4.0;
+        else if (state.genMode === 'BIO ABYSS')       genModeNum = 5.0;
+        else if (state.genMode === 'FLOW FIELD')      genModeNum = 6.0;
+        else if (state.genMode === 'WAVE COLLAPSE')   genModeNum = 7.0;
+        else if (state.genMode === 'MYCELIUM')        genModeNum = 8.0;
+        // Legacy name compat
         else if (state.genMode === 'RADIANT HORIZON') genModeNum = 3.0;
         else if (state.genMode === 'FRACTAL PYRAMID') genModeNum = 4.0;
-        else if (state.genMode === 'NEON CAVES') genModeNum = 5.0;
-        else if (state.genMode === 'THE SPIRIT') genModeNum = 6.0;
+        else if (state.genMode === 'NEON CAVES')      genModeNum = 5.0;
 
         let bNum = 1.0; // MID
         if (state.genAudioBand === 'BASS') bNum = 0.0;
@@ -1368,12 +1506,16 @@ class CanvasEngine {
 
         this.gl.uniform1f(this.locGenMode, genModeNum);
         if (state.genParams) {
-            this.gl.uniform1f(this.locGenSpeed, state.genParams.speed.value);
-            this.gl.uniform1f(this.locGenScale, state.genParams.zoom.value);
-            this.gl.uniform1f(this.locGenWarp, state.genParams.warp.value);
-            this.gl.uniform1f(this.locGenRotX, state.genParams.rotateX.value);
-            this.gl.uniform1f(this.locGenRotY, state.genParams.rotateY.value);
-            this.gl.uniform1f(this.locGenRotZ, state.genParams.rotateZ.value);
+            this.gl.uniform1f(this.locGenSpeed,   state.genParams.speed.value);
+            this.gl.uniform1f(this.locGenScale,   state.genParams.zoom.value);
+            this.gl.uniform1f(this.locGenWarp,    state.genParams.warp.value);
+            this.gl.uniform1f(this.locGenRotX,    state.genParams.rotateX.value);
+            this.gl.uniform1f(this.locGenRotY,    state.genParams.rotateY.value);
+            this.gl.uniform1f(this.locGenRotZ,    state.genParams.rotateZ.value);
+            this.gl.uniform1f(this.locGenColor1,  state.genParams.colorA  ? state.genParams.colorA.value  : 0.0);
+            this.gl.uniform1f(this.locGenColor2,  state.genParams.colorB  ? state.genParams.colorB.value  : 0.5);
+            this.gl.uniform1f(this.locGenDensity, state.genParams.density ? state.genParams.density.value : 1.0);
+            this.gl.uniform1f(this.locGenIter,    state.genParams.iterations ? state.genParams.iterations.value : 0.5);
         } else {
             this.gl.uniform1f(this.locGenSpeed, 1.0);
             this.gl.uniform1f(this.locGenScale, 1.0);

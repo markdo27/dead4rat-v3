@@ -90,12 +90,16 @@ const STARTER_PRESETS = [
 ];
 
 const GEN_DEFAULTS = {
-    speed:  { name: 'SPEED', value: 1.0, min: 0, max: 3, step: 0.01 },
-    zoom:   { name: 'ZOOM', value: 1.0, min: 0.1, max: 3, step: 0.01 },
-    warp:   { name: 'WARP_INTENSITY', value: 1.0, min: 0, max: 2, step: 0.01 },
-    rotateX: { name: 'ROTATION_X', value: 0.0, min: 0, max: 6.28, step: 0.01 },
-    rotateY: { name: 'ROTATION_Y', value: 0.0, min: 0, max: 6.28, step: 0.01 },
-    rotateZ: { name: 'ROTATION_Z', value: 0.0, min: 0, max: 6.28, step: 0.01 }
+    speed:      { name: 'SPEED',      value: 1.0, min: 0,   max: 3,   step: 0.01 },
+    zoom:       { name: 'ZOOM',       value: 1.0, min: 0.1, max: 3,   step: 0.01 },
+    warp:       { name: 'WARP',       value: 1.0, min: 0,   max: 2,   step: 0.01 },
+    density:    { name: 'DENSITY',    value: 1.0, min: 0.1, max: 3.0, step: 0.01 },
+    iterations: { name: 'ITERATIONS', value: 0.5, min: 0.0, max: 1.0, step: 0.01 },
+    colorA:     { name: 'PALETTE_A',  value: 0.0, min: 0.0, max: 1.0, step: 0.01 },
+    colorB:     { name: 'CHROMA_B',   value: 0.5, min: 0.0, max: 1.0, step: 0.01 },
+    rotateX:    { name: 'ROTATION_X', value: 0.0, min: 0,   max: 6.28, step: 0.01 },
+    rotateY:    { name: 'ROTATION_Y', value: 0.0, min: 0,   max: 6.28, step: 0.01 },
+    rotateZ:    { name: 'ROTATION_Z', value: 0.0, min: 0,   max: 6.28, step: 0.01 }
 };
 
 // Global Mutation State (bypasses React for 60fps)
@@ -1504,12 +1508,17 @@ function Dead4RatApp() {
                     >{genMode === 'OFF' ? 'CORE STANDBY (CLICK MATRIX TO ACTIVATE)' : '[ SHUTDOWN CORE ]'}</button>
 
                     <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', marginBottom: '16px'}}>
-                        {['GRID TUNNEL', 'CUBE FIELD', 'RADIANT HORIZON', 'FRACTAL PYRAMID', 'NEON CAVES'].map(m => (
+                        {[
+                            'GRID TUNNEL', 'CUBE FIELD',
+                            'SOLAR CORONA', 'MANDELBULB',
+                            'BIO ABYSS',   'FLOW FIELD',
+                            'WAVE COLLAPSE','MYCELIUM'
+                        ].map(m => (
                             <button 
                                 key={m} 
                                 className={`brutalist-button ${genMode === m ? 'active' : ''}`}
                                 style={{
-                                    fontSize: '0.55rem', padding: '6px', 
+                                    fontSize: '0.52rem', padding: '6px 4px', 
                                     borderColor: genMode === m ? 'var(--accent)' : 'var(--border)'
                                 }}
                                 onClick={() => setGenMode(m)}
