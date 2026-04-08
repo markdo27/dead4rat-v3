@@ -41,6 +41,7 @@ body, html {
     color: var(--text-primary);
     font-family: var(--font-mono);
     text-transform: uppercase;
+    font-variant-numeric: tabular-nums;
     overflow: hidden;
     user-select: none;
     touch-action: manipulation;
@@ -81,8 +82,8 @@ body, html {
     padding: 0;
     z-index: 10;
     cursor: grab;
-    border: 1px solid var(--border-hard);
-    box-shadow: 0 4px 32px rgba(0,0,0,0.5), inset 0 0 0 1px rgba(255,85,0,0.04);
+    border: 2px solid var(--border-hard);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.8), inset 0 0 0 1px rgba(255,85,0,0.04);
     /* Subtle dot grid background texture */
     background-image:
         radial-gradient(circle, rgba(255, 85, 0, 0.04) 1px, transparent 1px);
@@ -203,7 +204,7 @@ body, html {
    ═══════════════════════════════════════════ */
 
 .sticker-body {
-    padding: 12px 16px 20px;
+    padding: var(--spacing-md);
 }
 
 /* ═══════════════════════════════════════════
@@ -290,14 +291,19 @@ body, html {
     text-transform: uppercase;
     font-size: 0.95rem;
     padding: var(--spacing-sm) var(--spacing-md);
+    min-height: 36px;
     background: transparent;
     color: var(--accent);
     border: 1px solid var(--accent);
     cursor: pointer;
-    transition: all 0.1s ease;
+    transition: all 0.12s ease;
     letter-spacing: 1px;
     position: relative;
     white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
 }
 
 .brutalist-button:active {
@@ -352,11 +358,18 @@ body, html {
     background: var(--accent);
     color: #000;
     border-color: var(--accent);
+    font-weight: 900;
+}
+
+.brutalist-button.primary::before,
+.brutalist-button.primary::after {
+    color: rgba(0, 0, 0, 0.5);
 }
 
 .brutalist-button.primary:hover {
     background: var(--text-bright);
     color: #000;
+    border-color: var(--text-bright);
     box-shadow: 0 0 20px var(--accent-glow-strong);
 }
 
@@ -373,6 +386,25 @@ body, html {
     background: var(--accent-glow);
 }
 
+/* Danger / destructive action button */
+.brutalist-button.danger {
+    background: transparent;
+    color: var(--color-danger);
+    border-color: var(--color-danger);
+}
+
+.brutalist-button.danger::before,
+.brutalist-button.danger::after {
+    color: rgba(255, 51, 51, 0.5);
+}
+
+.brutalist-button.danger:hover {
+    background: var(--color-danger);
+    color: #000;
+    border-color: var(--color-danger);
+    box-shadow: 0 0 16px rgba(255, 51, 51, 0.4);
+}
+
 /* Active/recording state */
 .brutalist-button.active {
     background: var(--accent);
@@ -383,6 +415,19 @@ body, html {
 @keyframes pulse-border {
     0%, 100% { box-shadow: 0 0 5px var(--accent-glow); }
     50% { box-shadow: 0 0 20px var(--accent-glow-strong), inset 0 0 5px var(--accent-glow); }
+}
+
+/* ─────────────────────────────────────────────
+   CMD-BTN — Compact Command Center button size
+   Standard outline style at 0.72rem for dense
+   multi-button rows inside panels.
+   ───────────────────────────────────────────── */
+
+.brutalist-button.cmd-btn {
+    font-size: 0.72rem;
+    letter-spacing: 1.5px;
+    padding: 7px 10px;
+    min-height: 34px;
 }
 
 /* ═══════════════════════════════════════════
@@ -465,7 +510,7 @@ body, html {
 input[type="range"] {
     appearance: none;
     width: 100%;
-    height: 4px;
+    height: 2px;
     background: var(--border-dim);
     outline: none;
     border-radius: 0;

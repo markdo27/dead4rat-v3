@@ -252,7 +252,7 @@ function ParamRow({
                 onChange={onChange}
             />
             {showValue && (
-                <span style={{fontSize: '0.6rem', color: 'var(--text-bright)'}}>
+                <span style={{fontSize: '0.6rem', color: 'var(--text-bright)', textAlign: 'right', display: 'inline-block'}}>
                     {typeof value === 'number' ? value.toFixed(step < 1 ? 2 : 0) : value}{suffix}
                 </span>
             )}

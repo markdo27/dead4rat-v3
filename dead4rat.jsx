@@ -1168,18 +1168,18 @@ function Dead4RatApp() {
                     {/* OVERRIDES */}
                     <div className="section-header">// RANDOMIZE</div>
                     <div className="section-hint">ENGINES = random on/off · PARAMS = random values · RESET = factory defaults</div>
-                    <div style={{display: 'flex', gap: '4px', marginBottom: '12px'}}>
-                        <button className="brutalist-button" style={{fontSize: '0.65rem', flex: 1}} onClick={scrambleEngines}>ENGINES</button>
-                        <button className="brutalist-button" style={{fontSize: '0.65rem', flex: 1}} onClick={scrambleParams}>PARAMS</button>
-                        <button className="brutalist-button primary" style={{fontSize: '0.65rem', flex: 1}} onClick={resetSystem}>RESET</button>
+                    <div style={{display: 'flex', gap: '6px', marginBottom: '12px'}}>
+                        <button className="brutalist-button cmd-btn" style={{flex: 1}} onClick={scrambleEngines}>ENGINES</button>
+                        <button className="brutalist-button cmd-btn" style={{flex: 1}} onClick={scrambleParams}>PARAMS</button>
+                        <button className="brutalist-button cmd-btn danger" style={{flex: '0 0 auto'}} onClick={resetSystem}>RESET</button>
                     </div>
 
                     <div className="section-header">// ML OVERLAY</div>
                     <div className="section-hint">Cut out person from background using AI mask</div>
-                    <div style={{display: 'flex', gap: '4px', marginBottom: '12px'}}>
+                    <div style={{display: 'flex', gap: '6px', marginBottom: '12px'}}>
                         <button 
-                            className={`brutalist-button ${isolatePerson ? 'primary' : ''}`} 
-                            style={{fontSize: '0.65rem', flex: 1}} 
+                            className={`brutalist-button cmd-btn ${isolatePerson ? 'primary' : ''}`} 
+                            style={{flex: 1}} 
                             onClick={handleIsolateToggle}
                             disabled={maskLoading}
                         >
@@ -1192,10 +1192,10 @@ function Dead4RatApp() {
 
                     {/* BLOB TRACKER */}
                     <div className="section-header">BLOB_TRACKER // DETECT</div>
-                    <div style={{display: 'flex', gap: '4px', marginBottom: '8px'}}>
+                    <div style={{display: 'flex', gap: '6px', marginBottom: '8px'}}>
                         <button
-                            className={`brutalist-button ${blobEnabled ? 'primary' : ''}`}
-                            style={{flex: 1, fontSize: '0.65rem'}}
+                            className={`brutalist-button cmd-btn ${blobEnabled ? 'primary' : ''}`}
+                            style={{flex: 1}}
                             onClick={() => {
                                 const next = !blobEnabled;
                                 setBlobEnabled(next);
@@ -1204,18 +1204,18 @@ function Dead4RatApp() {
                             }}
                         >{blobEnabled ? 'DETECT: ON' : 'DETECT: OFF'}</button>
                         <button
-                            className={`brutalist-button ${blobOverlay ? 'active' : ''}`}
-                            style={{flex: '0 0 auto', fontSize: '0.6rem', padding: '4px 8px'}}
+                            className={`brutalist-button cmd-btn ${blobOverlay ? 'active' : ''}`}
+                            style={{flex: '0 0 auto'}}
                             onClick={() => {
                                 const next = !blobOverlay;
                                 setBlobOverlay(next);
                                 if (blobTracker) blobTracker.setShowOverlay(next);
                             }}
-                        >OVL</button>
+                        >OVERLAY</button>
                         <button
-                            className={`brutalist-button ${humanEnabled ? 'active' : ''}`}
+                            className={`brutalist-button cmd-btn ${humanEnabled ? 'active' : ''}`}
                             style={{
-                                flex: '0 0 auto', fontSize: '0.6rem', padding: '4px 8px',
+                                flex: '0 0 auto',
                                 borderColor: humanEnabled ? '#00FF88' : undefined,
                                 color: humanEnabled ? '#00FF88' : undefined,
                             }}
@@ -1278,10 +1278,10 @@ function Dead4RatApp() {
 
                     {/* MEDIA */}
                     <div className="section-header">COMM_LINK // MEDIA</div>
-                    <div style={{display: 'flex', gap: '4px', marginBottom: '8px'}}>
-                        <button className="brutalist-button" style={{flex: 1, fontSize: '0.6rem', padding: '6px 4px'}} onClick={addImage}>+ IMAGE</button>
-                        <button className="brutalist-button" style={{flex: 1, fontSize: '0.6rem', padding: '6px 4px'}} onClick={addText}>+ TEXT</button>
-                        <button className="brutalist-button" style={{flex: 1, fontSize: '0.6rem', padding: '6px 4px'}} onClick={addVideo}>+ VIDEO</button>
+                    <div style={{display: 'flex', gap: '6px', marginBottom: '8px'}}>
+                        <button className="brutalist-button cmd-btn" style={{flex: 1}} onClick={addImage}>+ IMAGE</button>
+                        <button className="brutalist-button cmd-btn" style={{flex: 1}} onClick={addText}>+ TEXT</button>
+                        <button className="brutalist-button cmd-btn" style={{flex: 1}} onClick={addVideo}>+ VIDEO</button>
                     </div>
                     {layers.length > 0 && (
                         <div className="layer-list" style={{marginBottom: '8px'}}>
@@ -1381,7 +1381,7 @@ function Dead4RatApp() {
                     {/* PRESETS */}
                     <div className="section-header">// PRESETS</div>
                     <div className="section-hint">Click a preset to load it · SAVE stores current settings</div>
-                    <button className="brutalist-button primary" style={{width: '100%', marginBottom: '8px', fontSize: '0.7rem'}} onClick={savePreset}>+ SAVE CURRENT STATE</button>
+                    <button className="brutalist-button cmd-btn primary" style={{width: '100%', marginBottom: '8px'}} onClick={savePreset}>+ SAVE CURRENT STATE</button>
                     {/* Starter presets — always shown, non-deletable */}
                     <div style={{fontSize: '0.5rem', color: 'var(--text-muted)', marginBottom: '4px', letterSpacing: '1px'}}>── BUILT-IN ──</div>
                     <div className="preset-grid">
