@@ -99,7 +99,6 @@ class HumanEngine {
                 body: {
                     enabled: true,
                     maxDetected: 1,
-                    modelPath: 'movenet-multipose.json',
                 },
                 gesture: { enabled: true },
                 segmentation: { enabled: false },
@@ -233,9 +232,18 @@ class HumanEngine {
         this.handLeft = false;
         this.handRight = false;
         if (result.hand && result.hand.length > 0) {
+            let numHands = 0;
             result.hand.forEach(h => {
+                numHands++;
                 if (h.label === 'left')  this.handLeft  = true;
-                if (h.label === 'right') this.handRight = true;
+                else if (h.label === 'right') this.handRight = true;
+                else {
+                    // Fallback if no handedness label is provided by the engine
+                    if (numHands === 1) this.handLeft = true;
+                    if (numHands === 2) this.handRight = true;
+                }
+                
+                // Index finger tip (landmark 8)
                 if (h.landmarks && h.landmarks[8]) {
                     this.handTipX = h.landmarks[8][0] / this.videoWidth;
                     this.handTipY = h.landmarks[8][1] / this.videoHeight;
