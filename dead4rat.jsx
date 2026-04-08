@@ -1513,8 +1513,8 @@ function Dead4RatApp() {
                             'SOLAR CORONA', 'MANDELBULB',
                             'BIO ABYSS',   'FLOW FIELD',
                             'WAVE COLLAPSE','MYCELIUM',
-                            'VORONOI',     'JULIA DRIFT',
-                            'IFS TREE'
+                            'VORONOI',     'QUAT JULIA',
+                            'MANDELBOX'
                         ].map(m => (
                             <button 
                                 key={m} 

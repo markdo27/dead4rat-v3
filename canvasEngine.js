@@ -643,51 +643,89 @@ class CanvasEngine {
                     return edgeD - (0.018 + ABnd * 0.04 * u_genWarp);
                 }
                 else if (u_genMode < 10.5) {
-                    // ── MODE 10: JULIA DRIFT ─────────────────────────
-                    // 3D Julia set — complex iteration extruded along z
-                    // Slow spin so the set stays visible
-                    p.xz *= rot(u_time * u_genSpeed * 0.18);
-                    p.yz *= rot(u_time * u_genSpeed * 0.12 + ABnd * u_genWarp * 0.3);
-                    // Julia constant c — audio drives imaginary part
-                    float cReal = -0.7 + sin(u_time * u_genSpeed * 0.3) * 0.3 * u_genIter;
-                    float cImag =  0.27 + ABnd * u_genWarp * 0.3 + cos(u_time * u_genSpeed * 0.2) * 0.2;
-                    vec2 z2 = p.xy * 1.2;
-                    float dr2 = 1.0; float rr2 = 0.0;
-                    for (int i = 0; i < 8; i++) {
-                        rr2 = dot(z2, z2);
-                        if (rr2 > 4.0) break;
-                        dr2 = 2.0 * sqrt(rr2) * dr2 + 1.0;
-                        z2 = vec2(z2.x*z2.x - z2.y*z2.y + cReal,
-                                  2.0*z2.x*z2.y + cImag);
+                    // ── MODE 10: QUATERNION JULIA ────────────────────────
+                    // True 4D Quaternion Julia set sliced into 3D
+                    // Orbit camera around it for all-angle beauty
+                    p.xz *= rot(u_time * u_genSpeed * 0.15);
+                    p.yz *= rot(u_time * u_genSpeed * 0.09 + ABnd * u_genWarp * 0.35);
+                    p *= 1.1; // scale to fit nicely in view
+
+                    // Quaternion c — slowly orbit through beautiful Julia regions
+                    float ct = u_time * u_genSpeed * 0.12;
+                    vec4 qc = vec4(
+                        -0.2 + sin(ct * 0.7) * 0.32 * u_genIter,
+                        0.6 + cos(ct * 0.53) * 0.25,
+                        sin(ct * 0.37) * 0.15 + ABnd * u_genWarp * 0.2,
+                        cos(ct * 0.41) * 0.15
+                    );
+
+                    // Quaternion z starts from 3D point (w=0 slice of 4D)
+                    vec4 qz = vec4(p, 0.0);
+                    vec4 qdz = vec4(1.0, 0.0, 0.0, 0.0); // derivative
+                    float rr4 = 0.0;
+
+                    for (int i = 0; i < 10; i++) {
+                        rr4 = dot(qz, qz);
+                        if (rr4 > 8.0) break;
+                        // Derivative: dz' = 2 * z * dz (quaternion multiply)
+                        qdz = 2.0 * vec4(
+                            qz.x*qdz.x - qz.y*qdz.y - qz.z*qdz.z - qz.w*qdz.w,
+                            qz.x*qdz.y + qz.y*qdz.x + qz.z*qdz.w - qz.w*qdz.z,
+                            qz.x*qdz.z - qz.y*qdz.w + qz.z*qdz.x + qz.w*qdz.y,
+                            qz.x*qdz.w + qz.y*qdz.z - qz.z*qdz.y + qz.w*qdz.x
+                        );
+                        // z' = z² + c (quaternion square + add)
+                        qz = vec4(
+                            qz.x*qz.x - qz.y*qz.y - qz.z*qz.z - qz.w*qz.w + qc.x,
+                            2.0*qz.x*qz.y + qc.y,
+                            2.0*qz.x*qz.z + qc.z,
+                            2.0*qz.x*qz.w + qc.w
+                        );
                     }
-                    // 2D DE extruded into z slab
-                    float de2D = 0.5 * log(max(rr2, 1.0)) * sqrt(rr2) / max(dr2, 0.001);
-                    float zSlab = abs(p.z) - (0.4 + u_genIter * 0.4); // thin slab
-                    return max(de2D, zSlab);
+                    // True 4D→3D DE: |z| * log(|z|) / |dz|
+                    float lenZ = length(qz);
+                    float lenDZ = length(qdz);
+                    return max(0.5 * lenZ * log(max(lenZ, 1.0)) / max(lenDZ, 0.001), 0.0005);
                 }
                 else {
-                    // ── MODE 11: IFS FRACTAL TREE ──────────────────────
-                    // Iterated Function System branching fractal
-                    p.z -= u_time * u_genSpeed * 2.0;
-                    p.z = mod(p.z + 4.0, 8.0) - 4.0;
-                    p.xy *= rot(u_time * 0.07);
-                    vec3 qi = p;
-                    float sc = 1.0;
-                    float treeD = 1e10;
-                    float branchLen = 1.5 * u_genScale;
-                    for (int i = 0; i < 5; i++) {
-                        // Fold space for IFS branching
-                        qi = abs(qi);
-                        float twistA = 0.52 + u_genIter * 0.3 + ABnd * u_genWarp * 0.2;
-                        qi.xy *= rot(twistA);
-                        qi.y -= branchLen / sc;
-                        branchLen *= 0.6;
-                        sc *= 1.8;
-                        float segD = length(vec2(qi.x, min(qi.y, 0.0))) / sc
-                                     - (0.04 + ABnd * 0.03) * u_genDensity;
-                        treeD = min(treeD, segD);
+                    // ── MODE 11: KALEIDOSCOPIC IFS (MANDELBOX) ──────────
+                    // Box-fold + sphere-fold fractal — infinite recursive detail
+                    p.xz *= rot(u_time * u_genSpeed * 0.1);
+                    p.yz *= rot(u_time * u_genSpeed * 0.06);
+
+                    float mboxScale = -1.5 - u_genIter * 1.5 - ABnd * u_genWarp * 0.8;
+                    float fixedR2 = 1.0;
+                    float minR2 = 0.25 * u_genDensity;
+                    vec3 offset = p;
+                    float DEfactor = 1.0;
+
+                    for (int i = 0; i < 12; i++) {
+                        // Box fold: clamp each axis to [-1,1] then reflect
+                        p = clamp(p, -1.0, 1.0) * 2.0 - p;
+
+                        // Sphere fold: if inside minR sphere, push out; if inside fixedR, invert
+                        float r2 = dot(p, p);
+                        if (r2 < minR2) {
+                            float t2 = fixedR2 / minR2;
+                            p *= t2;
+                            DEfactor *= t2;
+                        } else if (r2 < fixedR2) {
+                            float t2 = fixedR2 / r2;
+                            p *= t2;
+                            DEfactor *= t2;
+                        }
+
+                        // Scale + translate
+                        p = p * mboxScale + offset;
+                        DEfactor = DEfactor * abs(mboxScale) + 1.0;
+
+                        // Audio-reactive twist between iterations
+                        if (ABnd > 0.15) {
+                            p.xy *= rot(ABnd * u_genWarp * 0.08);
+                        }
                     }
-                    return treeD;
+                    // DE = distance to origin / accumulated scale factor
+                    return max(length(p) / DEfactor, 0.0003);
                 }
             }
 
@@ -1583,8 +1621,8 @@ class CanvasEngine {
         else if (state.genMode === 'WAVE COLLAPSE')   genModeNum = 7.0;
         else if (state.genMode === 'MYCELIUM')        genModeNum = 8.0;
         else if (state.genMode === 'VORONOI')         genModeNum = 9.0;
-        else if (state.genMode === 'JULIA DRIFT')     genModeNum = 10.0;
-        else if (state.genMode === 'IFS TREE')        genModeNum = 11.0;
+        else if (state.genMode === 'QUAT JULIA')       genModeNum = 10.0;
+        else if (state.genMode === 'MANDELBOX')       genModeNum = 11.0;
         // Legacy name compat
         else if (state.genMode === 'RADIANT HORIZON') genModeNum = 3.0;
         else if (state.genMode === 'FRACTAL PYRAMID') genModeNum = 4.0;
