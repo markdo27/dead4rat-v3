@@ -128,6 +128,7 @@ let presetManager = null;
 let maskEngine = null;
 let blobTracker = null;
 let humanEngine = null;
+let wfglHost = null;
 
 // ═══════════════════════════════════════════
 // TERMINAL WINDOW — Uses component library
@@ -421,6 +422,7 @@ function Dead4RatApp() {
         signal: true,
         generators: true,
         human: false,
+        wfgl: false,
     });
 
     const togglePanel = (key) => setPanels(p => ({...p, [key]: !p[key]}));
@@ -438,6 +440,17 @@ function Dead4RatApp() {
         }
         // Init canvas transform in globalState
         globalState.canvasTransform = { flipH: false, flipV: false, rotation: 0 };
+
+        // === WFGL Plugin System Init ===
+        if (canvasEngine && canvasEngine.gl && !wfglHost) {
+            import('./wfgl/index.js').then(({ WFGLHost, registerStockPlugins }) => {
+                wfglHost = new WFGLHost(canvasEngine.gl);
+                registerStockPlugins(wfglHost);
+                wfglHost.resize(canvasEngine.canvas.width, canvasEngine.canvas.height);
+                canvasEngine.wfglHost = wfglHost;
+                setUiRefresh(r => r + 1);
+            }).catch(err => console.warn('WFGL init deferred:', err));
+        }
 
         // Mouse Tracker for GPGPU Interactions
         const updateMouse = (clientX, clientY) => {
@@ -1583,7 +1596,128 @@ function Dead4RatApp() {
                 </TerminalWindow>
             )}
 
-            {/* ═══════════════ HUMAN AI MATRIX ═══════════════ */}
+            {/* ═══════════════ WFGL EFFECT CHAIN ═══════════════ */}
+            {uiVisible && started && (
+                <TerminalWindow
+                    id="win-wfgl"
+                    title="WFGL_CHAIN"
+                    tag="FX"
+                    initialX={Math.max(16, window.innerWidth - 360)}
+                    initialY={16}
+                    width="320px"
+                    maxHeight="calc(100vh - 60px)"
+                    onClose={() => togglePanel('wfgl')}
+                    minimized={!panels.wfgl}
+                >
+                    {/* FPS Warning */}
+                    {wfglHost && wfglHost.fpsWarning && (
+                        <div style={{background: '#FF220033', border: '1px solid #FF2200', padding: '4px 8px', marginBottom: '8px', fontSize: '0.55rem', color: '#FF6644'}}>
+                            ⚠ WFGL CHAIN: HIGH GPU LOAD — CONSIDER REMOVING EFFECTS
+                        </div>
+                    )}
+
+                    {/* Add Plugin */}
+                    <div className="section-header">// ADD_PLUGIN</div>
+                    <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', marginBottom: '12px'}}>
+                        {wfglHost && wfglHost.getAvailable().map(P => (
+                            <button
+                                key={P.info.id}
+                                className="brutalist-button"
+                                style={{fontSize: '0.5rem', padding: '5px 4px', letterSpacing: '0.5px'}}
+                                onClick={() => {
+                                    wfglHost.addToChain(P.info.id);
+                                    wfglHost.resize(canvasEngine.canvas.width, canvasEngine.canvas.height);
+                                    setUiRefresh(r => r + 1);
+                                }}
+                                title={P.info.description}
+                            >
+                                + {P.info.name.toUpperCase()}
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* Active Chain */}
+                    <div className="section-header">// ACTIVE_CHAIN ({wfglHost ? wfglHost.activeCount : 0} FX)</div>
+                    {wfglHost && wfglHost.getChain().map((entry, idx) => (
+                        <div key={entry.instanceId} style={{
+                            border: `1px solid ${entry.enabled ? 'var(--accent)' : 'var(--border)'}`,
+                            marginBottom: '6px', padding: '6px 8px',
+                            background: entry.enabled ? 'rgba(255,34,0,0.04)' : 'transparent',
+                            transition: 'all 0.15s'
+                        }}>
+                            {/* Header row */}
+                            <div style={{display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px'}}>
+                                <button
+                                    className="brutalist-button"
+                                    style={{fontSize: '0.5rem', padding: '2px 5px', minWidth: 'auto',
+                                            background: entry.enabled ? 'var(--accent)' : 'transparent',
+                                            color: entry.enabled ? '#000' : 'var(--dim)'}}
+                                    onClick={() => { wfglHost.setEnabled(entry.instanceId, !entry.enabled); setUiRefresh(r => r+1); }}
+                                >{entry.enabled ? 'ON' : 'OFF'}</button>
+                                <span style={{flex: 1, fontSize: '0.55rem', letterSpacing: '1px', color: entry.enabled ? '#fff' : 'var(--dim)'}}>
+                                    {entry.info.name.toUpperCase()}
+                                </span>
+                                {/* Move up/down */}
+                                {idx > 0 && (
+                                    <button className="brutalist-button" style={{fontSize: '0.5rem', padding: '1px 4px', minWidth: 'auto'}}
+                                        onClick={() => { wfglHost.reorderChain(idx, idx-1); setUiRefresh(r => r+1); }}
+                                    >▲</button>
+                                )}
+                                {idx < (wfglHost.getChain().length - 1) && (
+                                    <button className="brutalist-button" style={{fontSize: '0.5rem', padding: '1px 4px', minWidth: 'auto'}}
+                                        onClick={() => { wfglHost.reorderChain(idx, idx+1); setUiRefresh(r => r+1); }}
+                                    >▼</button>
+                                )}
+                                <button
+                                    className="brutalist-button"
+                                    style={{fontSize: '0.5rem', padding: '1px 5px', minWidth: 'auto', color: '#FF4444'}}
+                                    onClick={() => { wfglHost.removeFromChain(entry.instanceId); setUiRefresh(r => r+1); }}
+                                >✕</button>
+                            </div>
+                            {/* Parameters */}
+                            {entry.enabled && entry.params.map(p => {
+                                if (p.type === 'bool') return (
+                                    <div key={p.name} style={{display: 'flex', alignItems: 'center', marginBottom: '2px'}}>
+                                        <span style={{flex: 1, fontSize: '0.5rem', color: 'var(--dim)'}}>{(p.displayName || p.name).toUpperCase()}</span>
+                                        <button
+                                            className="brutalist-button"
+                                            style={{fontSize: '0.45rem', padding: '1px 5px', minWidth: 'auto',
+                                                    background: entry.paramValues[p.name] ? 'var(--accent)' : 'transparent'}}
+                                            onClick={() => { wfglHost.setParam(entry.instanceId, p.name, !entry.paramValues[p.name]); setUiRefresh(r => r+1); }}
+                                        >{entry.paramValues[p.name] ? 'ON' : 'OFF'}</button>
+                                    </div>
+                                );
+                                return (
+                                    <div key={p.name} style={{display: 'flex', alignItems: 'center', marginBottom: '2px'}}>
+                                        <span style={{flex: '0 0 55px', fontSize: '0.5rem', color: 'var(--dim)'}}>{(p.displayName || p.name).toUpperCase()}</span>
+                                        <input type="range"
+                                            className="brutalist-slider"
+                                            style={{flex: 2}}
+                                            min={p.min} max={p.max} step={p.step || 0.01}
+                                            value={entry.paramValues[p.name] || p.default}
+                                            onChange={(e) => {
+                                                wfglHost.setParam(entry.instanceId, p.name, parseFloat(e.target.value));
+                                                setUiRefresh(r => r+1);
+                                            }}
+                                        />
+                                        <span style={{minWidth: '32px', textAlign: 'right', fontSize: '0.5rem', color: 'var(--text)'}}>
+                                            {(entry.paramValues[p.name] || p.default).toFixed(2)}
+                                        </span>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    ))}
+
+                    {/* Empty state */}
+                    {(!wfglHost || wfglHost.getChain().length === 0) && (
+                        <div style={{textAlign: 'center', padding: '16px 0', fontSize: '0.55rem', color: 'var(--dim)', letterSpacing: '1px'}}>
+                            NO EFFECTS IN CHAIN — ADD FROM ABOVE
+                        </div>
+                    )}
+                </TerminalWindow>
+            )}
+
             {uiVisible && started && (
                 <TerminalWindow
                     id="win-human"
