@@ -1,0 +1,35 @@
+<h2>Design: Safety-Core Fluid Engine</h2>
+<p class="subtitle">Summary of the architecture and visual goals</p>
+
+<div class="mockup">
+  <div class="mockup-header">ARCHITECTURE_OVERVIEW</div>
+  <div class="mockup-body">
+    <div class="section">
+      <h3>1. Data Flow</h3>
+      <p>Webcam -> <strong>Optical Flow Shader</strong> -> Velocity Texture -> <strong>Fluid Solver (Navier-Stokes)</strong> -> Density Texture -> <strong>Thermal Mapper</strong> -> Screen.</p>
+    </div>
+    <div class="section">
+      <h3>2. Components</h3>
+      <ul>
+        <li><code>fluidEngine.js</code>: The math-heavy GPGPU solver.</li>
+        <li><code>FLUID_MATRIX</code> Panel: Controls for Viscosity (thickness), Vorticity (swirls), and Decay (how fast the heat fades).</li>
+        <li><code>Audio Link</code>: Low frequencies increase fluid pressure; mids/highs add turbulence.</li>
+      </ul>
+    </div>
+    <div class="section">
+      <h3>3. Visual Identity</h3>
+      <p>High-contrast gradients (<code>#000</code> to <code>#900</code> to <code>#f60</code>). Motion creates trails that look like heat signatures or molten slag.</p>
+    </div>
+  </div>
+</div>
+
+<div class="pros-cons">
+  <div class="pros">
+    <h4>Success Criteria</h4>
+    <ul>
+      <li>Fluid reacts instantly to webcam motion.</li>
+      <li>Maintains 60FPS using GPGPU acceleration.</li>
+      <li>Fits seamlessly into the "Dead4rat" industrial tab system.</li>
+    </ul>
+  </div>
+</div>

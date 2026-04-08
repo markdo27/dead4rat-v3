@@ -5,6 +5,21 @@
       "source": "4444j99/a-i--skills",
       "sourceType": "github",
       "computedHash": "0b8d48d4e6ec31eb133608071e507a28adc71cd6fbad81e7a672d09da3ae666b"
+    },
+    "brainstorming": {
+      "source": "obra/superpowers",
+      "sourceType": "github",
+      "computedHash": "f483c304fcde060211ffae00f49bb728536e7e7613c99db45b5b924d9fc17243"
+    },
+    "generative-art-algorithms": {
+      "source": "4444j99/a-i--skills",
+      "sourceType": "github",
+      "computedHash": "e9d23b1cc1c60b255ece379103e58548e0a1689038ea6a0eba49988f0d650fa2"
+    },
+    "three-js-interactive-builder": {
+      "source": "4444j99/a-i--skills",
+      "sourceType": "github",
+      "computedHash": "06356f678b863d0761efd59c6bb5495a2add33cad04f554a44e17b89d800ba4e"
     }
   }
 }

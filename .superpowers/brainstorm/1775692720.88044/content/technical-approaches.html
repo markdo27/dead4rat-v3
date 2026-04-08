@@ -1,0 +1,70 @@
+<h2>Technical Approaches</h2>
+<p class="subtitle">How should we integrate the Fluid Engine into Dead4rat?</p>
+
+<div class="options">
+  <div class="option" data-choice="integrated" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Monolithic Integration</h3>
+      <p>Build directly into <code>canvasEngine.js</code> as a new "Generative Mode".</p>
+      <div class="pros-cons">
+        <div class="pros">
+          <ul>
+            <li>Highest performance</li>
+            <li>Seamless transition with other modes</li>
+          </ul>
+        </div>
+        <div class="cons">
+          <ul>
+            <li>Increases file complexity of the main engine</li>
+            <li>Harder to hot-swap or modularize</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="plugin" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>WFGL Source Plugin</h3>
+      <p>Extend the new WFGL system to support "Source" plugins that generate content.</p>
+      <div class="pros-cons">
+        <div class="pros">
+          <ul>
+            <li>Highly modular</li>
+            <li>Can be reordered in the FX chain</li>
+          </ul>
+        </div>
+        <div class="cons">
+          <ul>
+            <li>WFGL is currently built for filters, not generators</li>
+            <li>More architectural overhead</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="module" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Dedicated Sub-Engine</h3>
+      <p>Create <code>fluidEngine.js</code> as an independent module. Blit the result to the main canvas.</p>
+      <div class="pros-cons">
+        <div class="pros">
+          <ul>
+            <li>Easiest to develop and debug</li>
+            <li>Keeps the codebase clean and decoupled</li>
+          </ul>
+        </div>
+        <div class="cons">
+          <ul>
+            <li>Slightly more memory overhead (extra FBOs)</li>
+          <li>Requires a new blit hook in the main loop</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

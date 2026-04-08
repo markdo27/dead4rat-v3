@@ -118,7 +118,16 @@ const globalState = {
     genParams: JSON.parse(JSON.stringify(GEN_DEFAULTS)),
     videoElement: null,
     compositeSource: null,
-    mouse3d: { x: 0.0, y: 0.0, z: 0.0 }
+    mouse3d: { x: 0.0, y: 0.0, z: 0.0 },
+    fluidParams: {
+        viscosity: 0.99,
+        dissipation: 0.98,
+        opticalGain: 1.0,
+        audioDrive: 0.5,
+        gain: 1.0,
+        mix: 0.5,
+        enabled: false
+    }
 };
 
 let audioEngine = null;
@@ -129,6 +138,7 @@ let maskEngine = null;
 let blobTracker = null;
 let humanEngine = null;
 let wfglHost = null;
+let fluidEngine = null;
 
 // ═══════════════════════════════════════════
 // TERMINAL WINDOW — Uses component library
@@ -423,6 +433,7 @@ function Dead4RatApp() {
         generators: true,
         human: false,
         wfgl: false,
+        fluid: false,
     });
 
     const togglePanel = (key) => setPanels(p => ({...p, [key]: !p[key]}));
@@ -442,14 +453,17 @@ function Dead4RatApp() {
         globalState.canvasTransform = { flipH: false, flipV: false, rotation: 0 };
 
         // === WFGL Plugin System Init ===
-        if (canvasEngine && canvasEngine.gl && !wfglHost) {
-            import('./wfgl/index.js').then(({ WFGLHost, registerStockPlugins }) => {
-                wfglHost = new WFGLHost(canvasEngine.gl);
-                registerStockPlugins(wfglHost);
-                wfglHost.resize(canvasEngine.canvas.width, canvasEngine.canvas.height);
-                canvasEngine.wfglHost = wfglHost;
-                setUiRefresh(r => r + 1);
-            }).catch(err => console.warn('WFGL init deferred:', err));
+        if (canvasEngine && canvasEngine.gl && !wfglHost && window.WFGL) {
+            wfglHost = new window.WFGL.WFGLHost(canvasEngine.gl);
+            window.WFGL.registerStockPlugins(wfglHost);
+            wfglHost.resize(canvasEngine.canvas.width, canvasEngine.canvas.height);
+            canvasEngine.wfglHost = wfglHost;
+        }
+
+        // === Fluid Engine Init ===
+        if (canvasEngine && canvasEngine.gl && !fluidEngine && window.FluidEngine) {
+            fluidEngine = new window.FluidEngine(canvasEngine.gl);
+            canvasEngine.fluidEngine = fluidEngine;
         }
 
         // Mouse Tracker for GPGPU Interactions
@@ -1133,6 +1147,8 @@ function Dead4RatApp() {
                     </button>
                     <button onClick={() => canvasEngine.exportPNG(blobTracker)}>EXPORT</button>
                     <button className={panels.generators ? 'hud-active' : ''} onClick={() => togglePanel('generators')}>GENERATORS</button>
+                    <button className={panels.wfgl ? 'hud-active' : ''} onClick={() => togglePanel('wfgl')} style={{color: wfglHost && wfglHost.activeCount > 0 ? '#00CCFF' : undefined}}>WFGL</button>
+                    <button className={panels.fluid ? 'hud-active' : ''} onClick={() => togglePanel('fluid')} style={{color: globalState.fluidParams.enabled ? '#FF5500' : undefined}}>FLUID</button>
                     <button className={panels.human ? 'hud-active' : ''} onClick={() => togglePanel('human')} style={{color: humanEnabled ? '#00FF88' : undefined}}>HUMAN AI</button>
                     <button onClick={() => setUiVisible(false)}>HIDE UI</button>
                 </div>
@@ -1715,6 +1731,74 @@ function Dead4RatApp() {
                             NO EFFECTS IN CHAIN — ADD FROM ABOVE
                         </div>
                     )}
+                </TerminalWindow>
+            )}
+
+            {/* ═══════════════ FLUID ENGINE MATRIX ═══════════════ */}
+            {uiVisible && started && (
+                <TerminalWindow
+                    id="win-fluid"
+                    title="FLUID_MATRIX"
+                    tag="GPGPU"
+                    initialX={16}
+                    initialY={window.innerHeight - 380}
+                    width="320px"
+                    maxHeight="320px"
+                    onClose={() => togglePanel('fluid')}
+                    minimized={!panels.fluid}
+                >
+                    <div style={{marginBottom: '10px'}}>
+                        <button
+                            className={`brutalist-button ${globalState.fluidParams.enabled ? 'primary' : ''}`}
+                            style={{width: '100%', fontSize: '0.65rem', letterSpacing: '2px'}}
+                            onClick={() => {
+                                globalState.fluidParams.enabled = !globalState.fluidParams.enabled;
+                                setUiRefresh(r => r + 1);
+                            }}
+                        >
+                            {globalState.fluidParams.enabled ? '◉ FLUID CORE: ACTIVE' : '○ ENGAGE FLUID CORE'}
+                        </button>
+                    </div>
+
+                    <div className="section-header">// PHYSICS_STABILITY</div>
+                    {[
+                        { key: 'viscosity',   label: 'VISCOSITY',   min: 0.9,  max: 0.999, step: 0.001 },
+                        { key: 'dissipation', label: 'DISSIPATION', min: 0.9,  max: 0.999, step: 0.001 },
+                        { key: 'opticalGain', label: 'MOTION_GAIN', min: 0.1,  max: 5.0,   step: 0.1 },
+                    ].map(p => (
+                        <div key={p.key} className="param-row">
+                            <label>{p.label}</label>
+                            <input type="range" className="brutalist-slider" 
+                                min={p.min} max={p.max} step={p.step}
+                                value={globalState.fluidParams[p.key]}
+                                onChange={(e) => {
+                                    globalState.fluidParams[p.key] = parseFloat(e.target.value);
+                                    setUiRefresh(r => r + 1);
+                                }}
+                            />
+                            <span className="param-value">{globalState.fluidParams[p.key].toFixed(3)}</span>
+                        </div>
+                    ))}
+
+                    <div className="section-header">// VISUAL_DRIVE</div>
+                    {[
+                        { key: 'audioDrive', label: 'AUDIO_DRIVE', min: 0.0,  max: 2.0,   step: 0.1 },
+                        { key: 'gain',       label: 'THERMAL_GAIN', min: 0.1,  max: 4.0,   step: 0.1 },
+                        { key: 'mix',        label: 'FLUID_MIX',    min: 0.0,  max: 1.0,   step: 0.01 },
+                    ].map(p => (
+                        <div key={p.key} className="param-row">
+                            <label>{p.label}</label>
+                            <input type="range" className="brutalist-slider" 
+                                min={p.min} max={p.max} step={p.step}
+                                value={globalState.fluidParams[p.key]}
+                                onChange={(e) => {
+                                    globalState.fluidParams[p.key] = parseFloat(e.target.value);
+                                    setUiRefresh(r => r + 1);
+                                }}
+                            />
+                            <span className="param-value">{globalState.fluidParams[p.key].toFixed(2)}</span>
+                        </div>
+                    ))}
                 </TerminalWindow>
             )}
 

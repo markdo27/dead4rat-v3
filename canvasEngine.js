@@ -1410,6 +1410,11 @@ class CanvasEngine {
             this._videoInitialized = true;
         }
 
+        // --- Step 1.5: Fluid Engine Physics ---
+        if (this.fluidEngine && state.fluidParams && state.fluidParams.enabled) {
+            this.fluidEngine.update(this.videoTex, state.fluidParams, 0.016);
+        }
+
         // --- Step 2: Bind Feedback Source to TEXTURE1 ---
         gl.activeTexture(gl.TEXTURE1);
         gl.bindTexture(gl.TEXTURE_2D, this.feedbackSource.tex);
@@ -1729,6 +1734,19 @@ class CanvasEngine {
             gl.vertexAttribPointer(dpLoc, 2, gl.FLOAT, false, 0, 0);
             gl.drawArrays(gl.POINTS, 0, 512 * 512);
 
+            gl.disable(gl.BLEND);
+        }
+
+        // --- Step 3.2: Fluid Engine Render ---
+        if (this.fluidEngine && state.fluidParams && state.fluidParams.enabled) {
+            gl.bindFramebuffer(gl.FRAMEBUFFER, this.renderTarget.fbo);
+            gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+            gl.enable(gl.BLEND);
+            gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+            // Mix is handled by the fluid render shader if we want, 
+            // but here we can just pass it as a global alpha if needed.
+            // For now, the solver's render pass handles the gain.
+            this.fluidEngine.render(state.fluidParams.gain, state.fluidParams.mix);
             gl.disable(gl.BLEND);
         }
 
