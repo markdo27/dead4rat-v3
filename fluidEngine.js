@@ -9,7 +9,8 @@ class FluidEngine {
         this.gl = gl;
         this.width = 512; // Simulation resolution (upscaled for render)
         this.height = 512;
-
+        this.gl.getExtension("EXT_color_buffer_float");
+        
         this.initShaders();
         this.initBuffers();
         this.initFBOs();
@@ -160,6 +161,20 @@ class FluidEngine {
             }
         `, "Project");
 
+        // --- Add Pass (Splat accumulation) ---
+        this.progAdd = compile(vsh, `#version 300 es
+            precision highp float;
+            uniform sampler2D u_base;
+            uniform sampler2D u_add;
+            uniform float u_scale;
+            in vec2 v_uv;
+            out vec4 outColor;
+
+            void main() {
+                outColor = texture(u_base, v_uv) + texture(u_add, v_uv) * u_scale;
+            }
+        `, "Add");
+
         // --- 6. Render Pass (Thermal) ---
         this.progRender = compile(vsh, `#version 300 es
             precision highp float;
@@ -222,29 +237,45 @@ class FluidEngine {
         
         // For Optical Flow tracking
         this.fboHistory = createFBO();
+        this.fboFlow = createFBO();
     }
 
     update(webcamTex, params, dt = 0.016) {
         const gl = this.gl;
         gl.viewport(0, 0, this.width, this.height);
         
-        // Pass A: Optical Flow (Inject into Velocity + Density)
-        gl.bindFramebuffer(gl.FRAMEBUFFER, this.fboDenB.fbo);
+        // 1. Compute Optical Flow
+        gl.bindFramebuffer(gl.FRAMEBUFFER, this.fboFlow.fbo);
         gl.useProgram(this.progFlow);
         gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, webcamTex);
         gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, this.fboHistory.tex);
         gl.uniform1i(gl.getUniformLocation(this.progFlow, "u_curr"), 0);
         gl.uniform1i(gl.getUniformLocation(this.progFlow, "u_prev"), 1);
-        gl.uniform1f(gl.getUniformLocation(this.progFlow, "u_threshold"), 0.05);
+        gl.uniform1i(gl.getUniformLocation(this.progFlow, "u_threshold"), 0.01);
         gl.uniform1f(gl.getUniformLocation(this.progFlow, "u_strength"), params.opticalGain || 1.0);
         this.drawQuad(this.progFlow);
 
-        // Inject Flow into Velocity
+        // 2. Add Flow -> Density
+        this.swapDen();
+        gl.bindFramebuffer(gl.FRAMEBUFFER, this.fboDenB.fbo);
+        gl.useProgram(this.progAdd);
+        gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.fboDenA.tex);
+        gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, this.fboFlow.tex);
+        gl.uniform1i(gl.getUniformLocation(this.progAdd, "u_base"), 0);
+        gl.uniform1i(gl.getUniformLocation(this.progAdd, "u_add"), 1);
+        gl.uniform1f(gl.getUniformLocation(this.progAdd, "u_scale"), 1.0);
+        this.drawQuad(this.progAdd);
+
+        // 3. Add Flow -> Velocity
+        this.swapVel();
         gl.bindFramebuffer(gl.FRAMEBUFFER, this.fboVelB.fbo);
-        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); // Re-use Flow shader output
+        gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.fboVelA.tex);
+        // TEXTURE1 is still fboFlow.tex
+        this.drawQuad(this.progAdd);
 
         // Update History
         gl.bindFramebuffer(gl.FRAMEBUFFER, this.fboHistory.fbo);
+
         gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, webcamTex);
         this.blit(webcamTex);
 

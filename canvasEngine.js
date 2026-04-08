@@ -35,11 +35,6 @@ class CanvasEngine {
         this.initTextures();
         this.resizeCanvas(); // This will call initFBOs
 
-        // WFGL plugin system — initialized externally via initWFGL()
-        this.wfglHost = null;
-        this._wfglBlitFBO = null;
-        this._wfglBlitTex = null;
-
         window.addEventListener('resize', () => this.resizeCanvas());
     }
 
@@ -1750,26 +1745,12 @@ class CanvasEngine {
             gl.disable(gl.BLEND);
         }
 
-        // --- Step 3.5: WFGL Plugin Chain ---
-        // Process through the WFGL effect pipeline if active
-        let finalTex = this.renderTarget.tex;
-        if (this.wfglHost && this.wfglHost.activeCount > 0) {
-            const wfglOut = this.wfglHost.process(this.renderTarget.tex, {
-                time: performance.now() * 0.001,
-                bpm: state.bpm || 120,
-                beat: state.beat || 0,
-                audioData: state.audioData || null,
-            });
-            if (wfglOut && wfglOut !== this.renderTarget.tex) {
-                finalTex = wfglOut;
-            }
-        }
-
         // --- Step 4: Blit to Screen ---
+
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
         gl.useProgram(this.blitProgram);
         gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, finalTex);
+        gl.bindTexture(gl.TEXTURE_2D, this.renderTarget.tex);
         gl.uniform1i(this.blitTexLoc, 0);
         
         const blitPosLoc = gl.getAttribLocation(this.blitProgram, "a_position");
