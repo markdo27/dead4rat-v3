@@ -580,11 +580,9 @@ class CanvasEngine {
                     float nodal = abs(sin(length(p.xy)*f1*0.8 - u_time*u_genSpeed)) - 0.045;
                     return min(surface, nodal);
                 }
-                else {
+                else if (u_genMode < 8.5) {
                     // ── MODE 8: MYCELIUM ───────────────────────────────
-                    // Organic branching network — z-repeated for infinite tunnel
                     p.z -= u_time * u_genSpeed * 2.5;
-                    // Tile branches every 6 units along z
                     float period = 6.0;
                     p.z = mod(p.z + period * 0.5, period) - period * 0.5;
                     p.xy *= rot(u_time * 0.06);
@@ -602,7 +600,6 @@ class CanvasEngine {
                         vec3 pb = vec3(cos(angle), sin(angle)*0.8, snoise(vec2(bf, u_time*0.05))*0.4)
                                   * (0.9 + ABnd * 0.4 * u_genWarp) + warpB;
                         myc = smin(myc, sdCapsule(p, pa, pb, branchR), 0.15);
-                        // Sub-branch at midpoint
                         vec3 mid = (pa + pb) * 0.5;
                         float subAng = angle + 1.5707 + snoise(vec2(bf*5.1, u_time*0.07)) * 0.9;
                         vec3 subEnd = mid + vec3(cos(subAng), sin(subAng)*0.55, sin(subAng)*0.35)
@@ -610,6 +607,87 @@ class CanvasEngine {
                         myc = smin(myc, sdCapsule(p, mid, subEnd, branchR * 0.6), 0.08);
                     }
                     return myc;
+                }
+                else if (u_genMode < 9.5) {
+                    // ── MODE 9: VORONOI LATTICE ────────────────────────
+                    // Cellular noise lattice tunnel — Worley/Voronoi distance field
+                    p.z -= u_time * u_genSpeed * 4.0;
+                    p.xy *= rot(u_time * 0.1 + ABnd * u_genWarp * 0.3);
+                    // Tile the space
+                    vec3 ip = floor(p * u_genDensity * 0.6);
+                    vec3 fp = fract(p * u_genDensity * 0.6) - 0.5;
+                    float minD1 = 1e10; float minD2 = 1e10;
+                    for (int dz = -1; dz <= 1; dz++) {
+                        for (int dy = -1; dy <= 1; dy++) {
+                            for (int dx = -1; dx <= 1; dx++) {
+                                vec3 neighbor = vec3(float(dx), float(dy), float(dz));
+                                vec3 cellId = ip + neighbor;
+                                // Pseudo-random jitter per cell
+                                vec3 jitter = vec3(
+                                    snoise(vec2(cellId.x*127.1+cellId.y*311.7, cellId.z*74.7)),
+                                    snoise(vec2(cellId.y*269.5+cellId.z*183.3, cellId.x*246.1)),
+                                    snoise(vec2(cellId.z*113.5+cellId.x*271.9, cellId.y*141.7))
+                                ) * 0.45;
+                                // Animate jitter with time
+                                jitter.xy += vec2(sin(u_time*0.7+cellId.z), cos(u_time*0.5+cellId.x))
+                                             * ABnd * u_genWarp * 0.25;
+                                vec3 diff = neighbor + jitter - fp;
+                                float d = length(diff);
+                                if (d < minD1) { minD2 = minD1; minD1 = d; }
+                                else if (d < minD2) { minD2 = d; }
+                            }
+                        }
+                    }
+                    // Cell edge SDF: difference of two nearest distances
+                    float edgeD = (minD2 - minD1) / u_genDensity * 0.6;
+                    return edgeD - (0.018 + ABnd * 0.04 * u_genWarp);
+                }
+                else if (u_genMode < 10.5) {
+                    // ── MODE 10: JULIA DRIFT ─────────────────────────
+                    // 3D Julia set — complex iteration extruded along z
+                    // Slow spin so the set stays visible
+                    p.xz *= rot(u_time * u_genSpeed * 0.18);
+                    p.yz *= rot(u_time * u_genSpeed * 0.12 + ABnd * u_genWarp * 0.3);
+                    // Julia constant c — audio drives imaginary part
+                    float cReal = -0.7 + sin(u_time * u_genSpeed * 0.3) * 0.3 * u_genIter;
+                    float cImag =  0.27 + ABnd * u_genWarp * 0.3 + cos(u_time * u_genSpeed * 0.2) * 0.2;
+                    vec2 z2 = p.xy * 1.2;
+                    float dr2 = 1.0; float rr2 = 0.0;
+                    for (int i = 0; i < 8; i++) {
+                        rr2 = dot(z2, z2);
+                        if (rr2 > 4.0) break;
+                        dr2 = 2.0 * sqrt(rr2) * dr2 + 1.0;
+                        z2 = vec2(z2.x*z2.x - z2.y*z2.y + cReal,
+                                  2.0*z2.x*z2.y + cImag);
+                    }
+                    // 2D DE extruded into z slab
+                    float de2D = 0.5 * log(max(rr2, 1.0)) * sqrt(rr2) / max(dr2, 0.001);
+                    float zSlab = abs(p.z) - (0.4 + u_genIter * 0.4); // thin slab
+                    return max(de2D, zSlab);
+                }
+                else {
+                    // ── MODE 11: IFS FRACTAL TREE ──────────────────────
+                    // Iterated Function System branching fractal
+                    p.z -= u_time * u_genSpeed * 2.0;
+                    p.z = mod(p.z + 4.0, 8.0) - 4.0;
+                    p.xy *= rot(u_time * 0.07);
+                    vec3 qi = p;
+                    float sc = 1.0;
+                    float treeD = 1e10;
+                    float branchLen = 1.5 * u_genScale;
+                    for (int i = 0; i < 5; i++) {
+                        // Fold space for IFS branching
+                        qi = abs(qi);
+                        float twistA = 0.52 + u_genIter * 0.3 + ABnd * u_genWarp * 0.2;
+                        qi.xy *= rot(twistA);
+                        qi.y -= branchLen / sc;
+                        branchLen *= 0.6;
+                        sc *= 1.8;
+                        float segD = length(vec2(qi.x, min(qi.y, 0.0))) / sc
+                                     - (0.04 + ABnd * 0.03) * u_genDensity;
+                        treeD = min(treeD, segD);
+                    }
+                    return treeD;
                 }
             }
 
@@ -1504,6 +1582,9 @@ class CanvasEngine {
         else if (state.genMode === 'FLOW FIELD')      genModeNum = 6.0;
         else if (state.genMode === 'WAVE COLLAPSE')   genModeNum = 7.0;
         else if (state.genMode === 'MYCELIUM')        genModeNum = 8.0;
+        else if (state.genMode === 'VORONOI')         genModeNum = 9.0;
+        else if (state.genMode === 'JULIA DRIFT')     genModeNum = 10.0;
+        else if (state.genMode === 'IFS TREE')        genModeNum = 11.0;
         // Legacy name compat
         else if (state.genMode === 'RADIANT HORIZON') genModeNum = 3.0;
         else if (state.genMode === 'FRACTAL PYRAMID') genModeNum = 4.0;

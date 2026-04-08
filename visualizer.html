@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DEAD4RAT — COSMIC SYNTHESIZER</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --accent: #FF2200;
+    --text: #FFFFFF;
+    --dim: #888;
+    --bg: #000000;
+    --border: #333;
+    --panel: rgba(0,0,0,0.82);
+    font-family: 'Courier New', monospace;
+  }
+  body { background: #000; overflow: hidden; width: 100vw; height: 100vh; }
+  canvas { display: block; position: fixed; top: 0; left: 0; }
+
+  /* ── HUD ── */
+  #hud {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    pointer-events: none; z-index: 10;
+  }
+  .panel {
+    position: absolute; background: var(--panel); border: 1px solid var(--border);
+    padding: 10px 12px; pointer-events: all; user-select: none;
+    backdrop-filter: blur(6px);
+  }
+  .panel-title {
+    font-size: 0.6rem; letter-spacing: 3px; color: var(--accent);
+    text-transform: uppercase; border-bottom: 1px solid var(--border);
+    padding-bottom: 6px; margin-bottom: 8px;
+  }
+
+  /* ── Controls Panel ── */
+  #ctrl {
+    top: 16px; left: 16px; width: 210px;
+  }
+  .ctrl-row {
+    display: flex; align-items: center; margin-bottom: 6px; gap: 6px;
+  }
+  .ctrl-label { font-size: 0.55rem; color: var(--dim); flex: 1.2; text-transform: uppercase; letter-spacing: 1px; }
+  .ctrl-val { font-size: 0.6rem; color: var(--text); min-width: 32px; text-align: right; }
+  input[type=range] {
+    flex: 2; height: 3px; -webkit-appearance: none; appearance: none;
+    background: var(--border); outline: none; cursor: pointer;
+    border-radius: 2px;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 10px; height: 10px;
+    background: var(--accent); border-radius: 50%; cursor: pointer;
+  }
+
+  /* ── Mode Buttons ── */
+  #modes {
+    top: 16px; right: 16px; width: 170px;
+  }
+  .mode-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+  .mode-btn {
+    padding: 7px 4px; font-size: 0.5rem; letter-spacing: 1px;
+    text-transform: uppercase; color: var(--dim); border: 1px solid var(--border);
+    background: transparent; cursor: pointer; font-family: inherit;
+    transition: all 0.15s ease;
+  }
+  .mode-btn:hover { color: var(--text); border-color: #666; }
+  .mode-btn.active { color: #000; background: var(--accent); border-color: var(--accent); }
+
+  /* ── Info bar ── */
+  #info {
+    bottom: 16px; left: 50%; transform: translateX(-50%);
+    font-size: 0.5rem; letter-spacing: 2px; color: var(--dim);
+    white-space: nowrap; padding: 6px 14px;
+  }
+
+  /* ── Stats ── */
+  #stats {
+    bottom: 16px; right: 16px; width: 160px;
+  }
+  .stat-row { display: flex; justify-content: space-between; margin-bottom: 4px; }
+  .stat-key { font-size: 0.5rem; color: var(--dim); letter-spacing: 1px; }
+  .stat-val { font-size: 0.5rem; color: var(--accent); }
+
+  /* ── Logo ── */
+  #logo {
+    top: 16px; left: 50%; transform: translateX(-50%);
+    font-size: 0.6rem; letter-spacing: 6px; color: var(--accent);
+    padding: 6px 16px; pointer-events: none;
+  }
+</style>
+</head>
+<body>
+
+<div id="hud">
+  <!-- Logo -->
+  <div class="panel" id="logo">DEAD4RAT // COSMIC SYNTHESIZER</div>
+
+  <!-- Controls -->
+  <div class="panel" id="ctrl">
+    <div class="panel-title">// SYNTHESIS CONTROLS</div>
+    <div class="ctrl-row">
+      <span class="ctrl-label">SPEED</span>
+      <input type="range" id="s-speed" min="0" max="3" step="0.01" value="1">
+      <span class="ctrl-val" id="v-speed">1.00</span>
+    </div>
+    <div class="ctrl-row">
+      <span class="ctrl-label">DENSITY</span>
+      <input type="range" id="s-density" min="500" max="8000" step="100" value="3000">
+      <span class="ctrl-val" id="v-density">3000</span>
+    </div>
+    <div class="ctrl-row">
+      <span class="ctrl-label">SCALE</span>
+      <input type="range" id="s-scale" min="0.2" max="3" step="0.01" value="1">
+      <span class="ctrl-val" id="v-scale">1.00</span>
+    </div>
+    <div class="ctrl-row">
+      <span class="ctrl-label">CHAOS</span>
+      <input type="range" id="s-chaos" min="0" max="1" step="0.01" value="0.3">
+      <span class="ctrl-val" id="v-chaos">0.30</span>
+    </div>
+    <div class="ctrl-row">
+      <span class="ctrl-label">GLOW</span>
+      <input type="range" id="s-glow" min="0.1" max="5" step="0.01" value="2">
+      <span class="ctrl-val" id="v-glow">2.00</span>
+    </div>
+    <div class="ctrl-row">
+      <span class="ctrl-label">HUE</span>
+      <input type="range" id="s-hue" min="0" max="1" step="0.01" value="0">
+      <span class="ctrl-val" id="v-hue">0.00</span>
+    </div>
+    <div class="ctrl-row">
+      <span class="ctrl-label">SPIRAL P</span>
+      <input type="range" id="s-p" min="1" max="9" step="1" value="2">
+      <span class="ctrl-val" id="v-p">2</span>
+    </div>
+    <div class="ctrl-row">
+      <span class="ctrl-label">SPIRAL Q</span>
+      <input type="range" id="s-q" min="1" max="9" step="1" value="3">
+      <span class="ctrl-val" id="v-q">3</span>
+    </div>
+  </div>
+
+  <!-- Mode Selector -->
+  <div class="panel" id="modes">
+    <div class="panel-title">// GEOMETRY MODE</div>
+    <div class="mode-grid">
+      <button class="mode-btn active" data-mode="particles">PARTICLES</button>
+      <button class="mode-btn" data-mode="torus">TORUS KNOT</button>
+      <button class="mode-btn" data-mode="flower">FLOWER LIFE</button>
+      <button class="mode-btn" data-mode="spiral">GOLD SPIRAL</button>
+      <button class="mode-btn" data-mode="metatron">METATRON</button>
+      <button class="mode-btn" data-mode="lanes">SOUL LANES</button>
+      <button class="mode-btn" data-mode="lsystem">L-SYS TREE</button>
+      <button class="mode-btn" data-mode="voronoi">VORONOI</button>
+      <button class="mode-btn" data-mode="julia">JULIA SET</button>
+      <button class="mode-btn" data-mode="fibsphere">FIB SPHERE</button>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="panel" id="stats">
+    <div class="panel-title">// TELEMETRY</div>
+    <div class="stat-row"><span class="stat-key">FPS</span><span class="stat-val" id="st-fps">60</span></div>
+    <div class="stat-row"><span class="stat-key">VERTICES</span><span class="stat-val" id="st-verts">0</span></div>
+    <div class="stat-row"><span class="stat-key">DRAW CALLS</span><span class="stat-val" id="st-draws">0</span></div>
+    <div class="stat-row"><span class="stat-key">MODE</span><span class="stat-val" id="st-mode">PARTICLES</span></div>
+    <div class="stat-row"><span class="stat-key">TIME</span><span class="stat-val" id="st-time">0.00</span></div>
+  </div>
+
+  <!-- Info -->
+  <div class="panel" id="info">
+    DRAG TO ORBIT &nbsp;|&nbsp; SCROLL TO ZOOM &nbsp;|&nbsp; SHIFT+DRAG TO PAN
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.163.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.163.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+
+// ── Constants ──────────────────────────────────────────────────────
+const PHI = (1 + Math.sqrt(5)) / 2;
+
+// ── State ──────────────────────────────────────────────────────────
+const state = {
+  mode: 'particles',
+  speed: 1.0,
+  density: 3000,
+  scale: 1.0,
+  chaos: 0.3,
+  glow: 2.0,
+  hue: 0.0,
+  p: 2,
+  q: 3,
+};
+
+// ── Renderer ───────────────────────────────────────────────────────
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.2;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x000000);
+scene.fog = new THREE.FogExp2(0x000000, 0.015);
+
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.01, 1000);
+camera.position.set(0, 0, 8);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.05;
+controls.minDistance = 1;
+controls.maxDistance = 40;
+
+// ── Post-Processing ────────────────────────────────────────────────
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(
+  new THREE.Vector2(window.innerWidth, window.innerHeight),
+  state.glow, 0.4, 0.1
+);
+composer.addPass(bloom);
+
+// ── Shader Material Factory ────────────────────────────────────────
+function makeMat(hue = 0, opacity = 1) {
+  return new THREE.ShaderMaterial({
+    transparent: opacity < 1,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    uniforms: {
+      uTime: { value: 0 },
+      uHue:  { value: hue },
+      uGlow: { value: 1.0 },
+    },
+    vertexShader: `
+      uniform float uTime;
+      uniform float uHue;
+      varying vec3  vColor;
+      varying float vDist;
+
+      vec3 hsl2rgb(float h, float s, float l) {
+        vec3 c = clamp(abs(mod(h*6.0+vec3(0.,4.,2.),6.)-3.)-1., 0., 1.);
+        return l + s*(c-0.5)*(1.-abs(2.*l-1.));
+      }
+
+      void main() {
+        vec4 wpos = modelMatrix * vec4(position, 1.0);
+        vDist = length(wpos.xyz) * 0.12;
+        float norm = clamp(vDist, 0.0, 1.0);
+        float h = mod(uHue + norm * 0.4 + uTime * 0.04, 1.0);
+        vColor = hsl2rgb(h, 1.0, 0.55 + 0.2 * sin(uTime + norm * 6.28));
+        gl_Position = projectionMatrix * viewMatrix * wpos;
+        gl_PointSize = max(1.0, (4.0 - vDist * 10.0) * ${window.devicePixelRatio.toFixed(1)});
+      }
+    `,
+    fragmentShader: `
+      varying vec3 vColor;
+      varying float vDist;
+      void main() {
+        float d = length(gl_PointCoord - 0.5) * 2.0;
+        float a = 1.0 - smoothstep(0.4, 1.0, d);
+        gl_FragColor = vec4(vColor, a);
+      }
+    `,
+  });
+}
+
+function makeLineMat(hue = 0) {
+  return new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    uniforms: { uTime: { value: 0 }, uHue: { value: hue } },
+    vertexShader: `
+      uniform float uTime;
+      uniform float uHue;
+      varying vec3 vColor;
+      vec3 hsl2rgb(float h, float s, float l) {
+        vec3 c = clamp(abs(mod(h*6.0+vec3(0.,4.,2.),6.)-3.)-1., 0., 1.);
+        return l + s*(c-0.5)*(1.-abs(2.*l-1.));
+      }
+      void main() {
+        float h = mod(uHue + position.z * 0.08 + uTime * 0.035, 1.0);
+        vColor = hsl2rgb(h, 1.0, 0.6);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      varying vec3 vColor;
+      void main() { gl_FragColor = vec4(vColor, 0.7); }
+    `,
+  });
+}
+
+// ── Geometry Builders ──────────────────────────────────────────────
+let currentMesh = null;
+const mats = [];
+
+function clearScene() {
+  if (currentMesh) {
+    if (Array.isArray(currentMesh)) currentMesh.forEach(m => { scene.remove(m); m.geometry.dispose(); });
+    else { scene.remove(currentMesh); currentMesh.geometry && currentMesh.geometry.dispose(); }
+  }
+  mats.forEach(m => m.dispose());
+  mats.length = 0;
+  currentMesh = null;
+}
+
+// 1. PARTICLES — Noise-cloud orbiting sphere
+function buildParticles() {
+  const N = state.density;
+  const pos = new Float32Array(N * 3);
+  const phi2 = Math.PI * (3 - Math.sqrt(5));
+  for (let i = 0; i < N; i++) {
+    const y = 1 - (i / (N - 1)) * 2;
+    const r = Math.sqrt(1 - y * y);
+    const theta = phi2 * i;
+    const s = state.scale * (2.5 + (Math.random() - 0.5) * state.chaos * 3);
+    pos[i*3]   = Math.cos(theta) * r * s;
+    pos[i*3+1] = y * s;
+    pos[i*3+2] = Math.sin(theta) * r * s;
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const mat = makeMat(state.hue);
+  mats.push(mat);
+  currentMesh = new THREE.Points(geo, mat);
+  scene.add(currentMesh);
+}
+
+// 2. TORUS KNOT
+function buildTorusKnot() {
+  const N = Math.max(state.density, 2000);
+  const pos = new Float32Array(N * 3);
+  const p = state.p, q = state.q;
+  const s = state.scale * 2.5;
+  for (let i = 0; i < N; i++) {
+    const t = (i / N) * Math.PI * 2;
+    const r = Math.cos(q * t) + 2;
+    pos[i*3]   = r * Math.cos(p * t) * s;
+    pos[i*3+1] = -Math.sin(q * t) * s;
+    pos[i*3+2] = r * Math.sin(p * t) * s;
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setIndex([...Array(N-1).keys()].flatMap(i => [i, i+1]).concat([N-1, 0]));
+  const mat = makeLineMat(state.hue);
+  mats.push(mat);
+  currentMesh = new THREE.LineSegments(geo, mat);
+  scene.add(currentMesh);
+
+  // Particle overlay
+  const pmat = makeMat(state.hue);
+  mats.push(pmat);
+  const pts = new THREE.Points(geo, pmat);
+  scene.add(pts);
+  currentMesh = [currentMesh, pts];
+}
+
+// 3. FLOWER OF LIFE
+function buildFlowerOfLife() {
+  const objects = [];
+  const R = state.scale * 1.4;
+  const centers = [[0,0]];
+  for (let i = 0; i < 6; i++) {
+    const a = i * Math.PI / 3;
+    centers.push([Math.cos(a) * R, Math.sin(a) * R]);
+  }
+  // Second ring
+  for (let i = 0; i < 6; i++) {
+    const a = i * Math.PI / 3;
+    centers.push([Math.cos(a) * R * 2, Math.sin(a) * R * 2]);
+    const a2 = a + Math.PI / 6;
+    centers.push([Math.cos(a2) * R * Math.sqrt(3), Math.sin(a2) * R * Math.sqrt(3)]);
+  }
+  const segs = 64;
+  centers.forEach(([cx, cy], ci) => {
+    const pos = new Float32Array((segs + 1) * 3);
+    for (let i = 0; i <= segs; i++) {
+      const a = (i / segs) * Math.PI * 2;
+      pos[i*3]   = cx + Math.cos(a) * R;
+      pos[i*3+1] = cy + Math.sin(a) * R;
+      pos[i*3+2] = 0;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const mat = makeLineMat(state.hue + ci * 0.04);
+    mats.push(mat);
+    const line = new THREE.LineLoop(geo, mat);
+    objects.push(line);
+    scene.add(line);
+  });
+  currentMesh = objects;
+}
+
+// 4. GOLDEN SPIRAL
+function buildGoldenSpiral() {
+  const N = state.density;
+  const pos = new Float32Array(N * 3);
+  const b = Math.log(PHI) / (Math.PI / 2);
+  const loops = 8;
+  const s = state.scale;
+  for (let i = 0; i < N; i++) {
+    const t = (i / N) * loops * Math.PI * 2;
+    const r = s * Math.exp(b * t) * 0.03;
+    const noise = (Math.random() - 0.5) * state.chaos * 0.3;
+    pos[i*3]   = r * Math.cos(t) + noise;
+    pos[i*3+1] = r * Math.sin(t) + noise;
+    pos[i*3+2] = (t / (loops * Math.PI * 2) - 0.5) * s * 3;
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const mat = makeMat(state.hue);
+  mats.push(mat);
+  currentMesh = new THREE.Points(geo, mat);
+  scene.add(currentMesh);
+}
+
+// 5. METATRON'S CUBE
+function buildMetatron() {
+  const objects = [];
+  const R = state.scale * 1.8;
+  const allCenters = [[0, 0, 0]];
+  for (let i = 0; i < 6; i++) {
+    const a = i * Math.PI / 3;
+    allCenters.push([Math.cos(a) * R, Math.sin(a) * R, 0]);
+  }
+  for (let i = 0; i < 6; i++) {
+    const a = i * Math.PI / 3 + Math.PI / 6;
+    allCenters.push([Math.cos(a) * R * 2, Math.sin(a) * R * 2, 0]);
+  }
+  // Draw circles
+  const segs = 48;
+  allCenters.forEach(([cx, cy, cz], ci) => {
+    const rad = ci === 0 ? R : ci < 7 ? R : R;
+    const pos = new Float32Array((segs + 1) * 3);
+    for (let i = 0; i <= segs; i++) {
+      const a = (i / segs) * Math.PI * 2;
+      pos[i*3]   = cx + Math.cos(a) * R;
+      pos[i*3+1] = cy + Math.sin(a) * R;
+      pos[i*3+2] = cz;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const mat = makeLineMat(state.hue + ci * 0.035);
+    mats.push(mat);
+    objects.push(new THREE.LineLoop(geo, mat));
+    scene.add(objects[objects.length - 1]);
+  });
+  // Connect all centers with lines
+  for (let i = 0; i < allCenters.length; i++) {
+    for (let j = i + 1; j < allCenters.length; j++) {
+      const [x1,y1,z1] = allCenters[i], [x2,y2,z2] = allCenters[j];
+      const pos = new Float32Array([x1,y1,z1, x2,y2,z2]);
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      const mat = makeLineMat(state.hue + 0.15);
+      mat.uniforms.uHue.value = state.hue + 0.15;
+      mats.push(mat);
+      const line = new THREE.LineSegments(geo, mat);
+      objects.push(line);
+      scene.add(line);
+    }
+  }
+  currentMesh = objects;
+}
+
+// 6. SOUL LANES — multi-lane spiral tube system
+function buildLanes() {
+  const objects = [];
+  const laneCount = 7;
+  const N = 600;
+  for (let lane = 0; lane < laneCount; lane++) {
+    const laneR = state.scale * (1.5 + lane * 0.7);
+    const speed = 1 / (lane + 1);
+    const pos = new Float32Array(N * 3);
+    for (let i = 0; i < N; i++) {
+      const t = (i / N) * Math.PI * 2;
+      const warp = Math.sin(t * 3 + lane) * 0.2 * state.chaos;
+      pos[i*3]   = (laneR + warp) * Math.cos(t);
+      pos[i*3+1] = (laneR + warp) * Math.sin(t);
+      pos[i*3+2] = Math.sin(t * 2 + lane * 0.8) * state.scale * 0.6;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const mat = makeLineMat((state.hue + lane / laneCount) % 1);
+    mats.push(mat);
+    const line = new THREE.LineLoop(geo, mat);
+    objects.push(line);
+    scene.add(line);
+    // Particle dots per lane
+    const pN = 60;
+    const ppos = new Float32Array(pN * 3);
+    for (let i = 0; i < pN; i++) {
+      const t = (i / pN) * Math.PI * 2;
+      ppos[i*3]   = laneR * Math.cos(t);
+      ppos[i*3+1] = laneR * Math.sin(t);
+      ppos[i*3+2] = Math.sin(t * 2 + lane * 0.8) * state.scale * 0.6;
+    }
+    const pgeo = new THREE.BufferGeometry();
+    pgeo.setAttribute('position', new THREE.BufferAttribute(ppos, 3));
+    const pmat = makeMat((state.hue + lane / laneCount) % 1);
+    mats.push(pmat);
+    objects.push(new THREE.Points(pgeo, pmat));
+    scene.add(objects[objects.length - 1]);
+  }
+  currentMesh = objects;
+}
+
+// 7. L-SYSTEM 3D FRACTAL TREE (IFS branching geometry)
+function buildLSystem() {
+  const objects = [];
+  const depth = Math.round(3 + state.chaos * 3);
+  const s = state.scale;
+  const angle = (25 + state.chaos * 20) * Math.PI / 180;
+  const shrink = 0.62;
+
+  function branch(x, y, z, dx, dy, dz, len, lvl) {
+    if (lvl < 0 || len < 0.02) return;
+    const nx = x + dx * len;
+    const ny = y + dy * len;
+    const nz = z + dz * len;
+    const pos = new Float32Array([x, y, z, nx, ny, nz]);
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const hue = (state.hue + (1 - lvl / depth) * 0.3) % 1;
+    const mat = makeLineMat(hue);
+    mats.push(mat);
+    const line = new THREE.LineSegments(geo, mat);
+    objects.push(line); scene.add(line);
+
+    const nlen = len * shrink;
+    // Rotate around z: left/right, around x: forward/back
+    const cs = Math.cos(angle), sn = Math.sin(angle);
+    // Left branch (rotate around z)
+    branch(nx, ny, nz, dx*cs - dy*sn, dx*sn + dy*cs, dz, nlen, lvl-1);
+    // Right branch
+    branch(nx, ny, nz, dx*cs + dy*sn, -dx*sn + dy*cs, dz, nlen, lvl-1);
+    // Depth branch (rotate around x)
+    branch(nx, ny, nz, dx, dy*cs - dz*sn, dy*sn + dz*cs, nlen * 0.85, lvl-1);
+  }
+
+  branch(0, -s*2, 0, 0, 1, 0, s * 1.8, depth);
+  currentMesh = objects;
+}
+
+// 8. VORONOI POINT CLOUD — 3D Worley noise visualization
+function buildVoronoi() {
+  const N = Math.min(state.density, 5000);
+  const seeds = Array.from({length: 20}, () => new THREE.Vector3(
+    (Math.random()-0.5)*4*state.scale,
+    (Math.random()-0.5)*4*state.scale,
+    (Math.random()-0.5)*4*state.scale
+  ));
+  const pos = new Float32Array(N * 3);
+  const tmp = new THREE.Vector3();
+  for (let i = 0; i < N; i++) {
+    const px = (Math.random()-0.5)*5*state.scale;
+    const py = (Math.random()-0.5)*5*state.scale;
+    const pz = (Math.random()-0.5)*5*state.scale;
+    tmp.set(px, py, pz);
+    // Find 2 nearest seeds
+    const dists = seeds.map(s => tmp.distanceTo(s)).sort((a,b) => a-b);
+    // Only keep points near cell edges (low d2-d1)
+    const edge = dists[1] - dists[0];
+    if (edge < 0.18 * state.scale) {
+      pos[i*3] = px; pos[i*3+1] = py; pos[i*3+2] = pz;
+    } else {
+      // Scatter rest randomly near surface
+      pos[i*3] = px*0.1; pos[i*3+1] = py*0.1; pos[i*3+2] = pz*0.1;
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const mat = makeMat(state.hue);
+  mats.push(mat);
+  currentMesh = new THREE.Points(geo, mat);
+  scene.add(currentMesh);
+}
+
+// 9. JULIA SET — 3D particle surface on complex plane slices
+function buildJulia() {
+  const N = Math.min(state.density, 6000);
+  const pos = new Float32Array(N * 3);
+  const cReal = -0.7 + state.chaos * 0.3;
+  const cImag =  0.27 + (state.hue - 0.5) * 0.4;
+  const maxIter = 48;
+  let written = 0;
+  // Monte-Carlo sampling: fire random points, keep near-boundary ones
+  for (let attempt = 0; attempt < N * 20 && written < N; attempt++) {
+    let zx = (Math.random() - 0.5) * 3;
+    let zy = (Math.random() - 0.5) * 3;
+    const zz = (Math.random() - 0.5) * state.scale * 2;
+    let iter = 0;
+    for (; iter < maxIter; iter++) {
+      const tmp = zx*zx - zy*zy + cReal;
+      zy = 2*zx*zy + cImag;
+      zx = tmp;
+      if (zx*zx + zy*zy > 4) break;
+    }
+    // Keep points that escaped near the boundary (15-35 iters)
+    if (iter > 10 && iter < maxIter - 5) {
+      pos[written*3]   = zx * state.scale * 0.8;
+      pos[written*3+1] = zy * state.scale * 0.8;
+      pos[written*3+2] = zz;
+      written++;
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos.slice(0, written*3), 3));
+  const mat = makeMat(state.hue);
+  mats.push(mat);
+  currentMesh = new THREE.Points(geo, mat);
+  scene.add(currentMesh);
+}
+
+// 10. FIBONACCI SPHERE — golden ratio distribution on sphere + inner structure
+function buildFibSphere() {
+  const objects = [];
+  const N = state.density;
+  const R = state.scale * 3;
+  const goldenAngle = Math.PI * (3 - Math.sqrt(5));
+  const pos = new Float32Array(N * 3);
+  for (let i = 0; i < N; i++) {
+    const y = 1 - (i / (N-1)) * 2;
+    const r = Math.sqrt(1 - y*y);
+    const theta = goldenAngle * i;
+    pos[i*3]   = Math.cos(theta) * r * R;
+    pos[i*3+1] = y * R;
+    pos[i*3+2] = Math.sin(theta) * r * R;
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const mat = makeMat(state.hue);
+  mats.push(mat); objects.push(new THREE.Points(geo, mat)); scene.add(objects[objects.length-1]);
+
+  // Inner Fibonacci spirals — 3 family rings of lines
+  [0.55, 0.72, 0.88].forEach((rf, ri) => {
+    const nLine = 200;
+    const lpos = new Float32Array(nLine * 3);
+    for (let i = 0; i < nLine; i++) {
+      const y2 = 1 - (i / (nLine-1)) * 2;
+      const r2 = Math.sqrt(1 - y2*y2);
+      const theta2 = goldenAngle * i * (ri + 2);
+      lpos[i*3]   = Math.cos(theta2) * r2 * R * rf;
+      lpos[i*3+1] = y2 * R * rf;
+      lpos[i*3+2] = Math.sin(theta2) * r2 * R * rf;
+    }
+    const lgeo = new THREE.BufferGeometry();
+    lgeo.setAttribute('position', new THREE.BufferAttribute(lpos, 3));
+    const lmat = makeLineMat((state.hue + ri * 0.15) % 1);
+    mats.push(lmat); objects.push(new THREE.Line(lgeo, lmat)); scene.add(objects[objects.length-1]);
+  });
+  currentMesh = objects;
+}
+
+// ── Build current mode ─────────────────────────────────────────────
+function rebuild() {
+  clearScene();
+  const builders = {
+    particles:  buildParticles,
+    torus:      buildTorusKnot,
+    flower:     buildFlowerOfLife,
+    spiral:     buildGoldenSpiral,
+    metatron:   buildMetatron,
+    lanes:      buildLanes,
+    lsystem:    buildLSystem,
+    voronoi:    buildVoronoi,
+    julia:      buildJulia,
+    fibsphere:  buildFibSphere,
+  };
+  builders[state.mode]?.();
+  document.getElementById('st-mode').textContent = state.mode.toUpperCase();
+}
+rebuild();
+
+// ── UI Wiring ──────────────────────────────────────────────────────
+function bindSlider(id, key, valId, rebuild_after = false) {
+  const el = document.getElementById(id);
+  const vl = document.getElementById(valId);
+  el.addEventListener('input', () => {
+    state[key] = parseFloat(el.value);
+    vl.textContent = state[key].toFixed(key === 'density' || key === 'p' || key === 'q' ? 0 : 2);
+    if (rebuild_after) rebuild();
+    if (key === 'glow') bloom.strength = state.glow;
+    if (key === 'hue') mats.forEach(m => m.uniforms && m.uniforms.uHue && (m.uniforms.uHue.value = state.hue));
+  });
+}
+bindSlider('s-speed',   'speed',   'v-speed');
+bindSlider('s-density', 'density', 'v-density', true);
+bindSlider('s-scale',   'scale',   'v-scale',   true);
+bindSlider('s-chaos',   'chaos',   'v-chaos',   true);
+bindSlider('s-glow',    'glow',    'v-glow');
+bindSlider('s-hue',     'hue',     'v-hue');
+bindSlider('s-p',       'p',       'v-p',       true);
+bindSlider('s-q',       'q',       'v-q',       true);
+
+document.querySelectorAll('.mode-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    state.mode = btn.dataset.mode;
+    rebuild();
+  });
+});
+
+// ── Stats ──────────────────────────────────────────────────────────
+let fps = 60, lastTime = performance.now(), frames = 0;
+function updateStats(t) {
+  frames++;
+  const dt = t - lastTime;
+  if (dt > 500) {
+    fps = Math.round(frames / dt * 1000);
+    frames = 0; lastTime = t;
+    document.getElementById('st-fps').textContent = fps;
+    const info = renderer.info;
+    document.getElementById('st-verts').textContent = info.render.triangles;
+    document.getElementById('st-draws').textContent = info.render.calls;
+  }
+  document.getElementById('st-time').textContent = (t / 1000).toFixed(2);
+}
+
+// ── Animate ────────────────────────────────────────────────────────
+const clock = new THREE.Clock();
+function animate() {
+  requestAnimationFrame(animate);
+  const elapsed = clock.getElapsedTime();
+  const t = elapsed * state.speed;
+
+  // Update material time uniform
+  mats.forEach(m => {
+    if (m.uniforms?.uTime) m.uniforms.uTime.value = t;
+  });
+
+  // Rotate meshes
+  const meshes = Array.isArray(currentMesh) ? currentMesh : currentMesh ? [currentMesh] : [];
+  meshes.forEach((m, i) => {
+    if (!m) return;
+    if (state.mode === 'torus') {
+      m.rotation.x = t * 0.3;
+      m.rotation.y = t * 0.5;
+    } else if (state.mode === 'flower' || state.mode === 'metatron') {
+      m.rotation.z = t * 0.08 * (i % 2 === 0 ? 1 : -1);
+    } else if (state.mode === 'spiral') {
+      m.rotation.z = t * 0.15;
+      m.rotation.x = Math.sin(t * 0.2) * 0.3;
+    } else if (state.mode === 'particles') {
+      m.rotation.y = t * 0.12;
+      m.rotation.x = Math.sin(t * 0.08) * 0.2;
+    } else if (state.mode === 'lanes') {
+      m.rotation.z = t * (0.05 + i * 0.01);
+      m.rotation.x = Math.sin(t * 0.15 + i) * 0.1;
+    } else if (state.mode === 'lsystem') {
+      m.rotation.y = t * 0.1;
+      m.rotation.z = Math.sin(t * 0.07) * 0.08;
+    } else if (state.mode === 'voronoi') {
+      m.rotation.y = t * 0.18;
+      m.rotation.x = Math.sin(t * 0.12) * 0.25;
+    } else if (state.mode === 'julia') {
+      m.rotation.y = t * 0.2;
+      m.rotation.z = t * 0.08;
+    } else if (state.mode === 'fibsphere') {
+      m.rotation.y = t * (0.06 + i * 0.03);
+      m.rotation.x = Math.sin(t * 0.09 + i) * 0.15;
+    }
+  });
+
+  bloom.strength = state.glow;
+  controls.update();
+  updateStats(performance.now());
+  composer.render();
+}
+animate();
+
+// ── Resize ────────────────────────────────────────────────────────
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  composer.setSize(window.innerWidth, window.innerHeight);
+});
+</script>
+</body>
+</html>

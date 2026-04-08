@@ -1512,7 +1512,9 @@ function Dead4RatApp() {
                             'GRID TUNNEL', 'CUBE FIELD',
                             'SOLAR CORONA', 'MANDELBULB',
                             'BIO ABYSS',   'FLOW FIELD',
-                            'WAVE COLLAPSE','MYCELIUM'
+                            'WAVE COLLAPSE','MYCELIUM',
+                            'VORONOI',     'JULIA DRIFT',
+                            'IFS TREE'
                         ].map(m => (
                             <button 
                                 key={m} 
