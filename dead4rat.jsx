@@ -113,7 +113,8 @@ const globalState = {
     genAudioBand: 'MID',
     genParams: JSON.parse(JSON.stringify(GEN_DEFAULTS)),
     videoElement: null,
-    compositeSource: null
+    compositeSource: null,
+    mouse3d: { x: 0.0, y: 0.0, z: 0.0 }
 };
 
 let audioEngine = null;
@@ -122,6 +123,7 @@ let mediaManager = null;
 let presetManager = null;
 let maskEngine = null;
 let blobTracker = null;
+let humanEngine = null;
 
 // ═══════════════════════════════════════════
 // DRAGGABLE TERMINAL WINDOW
@@ -442,6 +444,21 @@ function Dead4RatApp() {
     const [midGain,  setMidGain]  = React.useState(1.0);
     const [highGain, setHighGain] = React.useState(1.0);
 
+    // ── Human AI Engine state ─────────────────────────────────────────
+    const [humanEnabled, setHumanEnabled] = React.useState(false);
+    const [humanLoading, setHumanLoading] = React.useState(false);
+    const [humanData, setHumanData] = React.useState(null);   // live display
+    // AI-drive: which shader params respond to face tracking
+    const [aiDriveEnabled, setAiDriveEnabled] = React.useState(false);
+    const [aiDriveMapping, setAiDriveMapping] = React.useState({
+        yawTo:         'vortexWarp.params.centerX',
+        pitchTo:       'barrelDistortion.params.centerY',
+        rollTo:        'videoFeedback.params.rotation',
+        gazeToCX:      '',
+        gazeToCY:      '',
+        emotionToHue:  true,
+    });
+
     const [genMode, setGenMode] = React.useState('OFF');
     const [genAudioBand, setGenAudioBand] = React.useState('MID');
     const [genAudioReactive, setGenAudioReactive] = React.useState(true);
@@ -458,6 +475,7 @@ function Dead4RatApp() {
         effects: true,
         signal: true,
         generators: true,
+        human: false,
     });
 
     const togglePanel = (key) => setPanels(p => ({...p, [key]: !p[key]}));
@@ -468,12 +486,32 @@ function Dead4RatApp() {
         if (!mediaManager)  mediaManager  = new MediaManager(window.innerWidth, window.innerHeight);
         if (!maskEngine)    maskEngine    = new MaskEngine(640, 480);
         if (!blobTracker)   blobTracker   = new BlobTracker();
+        if (!humanEngine)   humanEngine   = new HumanEngine();
         if (!presetManager) {
             presetManager = new PresetManager();
             setPresets(presetManager.presets);
         }
         // Init canvas transform in globalState
         globalState.canvasTransform = { flipH: false, flipV: false, rotation: 0 };
+
+        // Mouse Tracker for GPGPU Interactions
+        const updateMouse = (clientX, clientY) => {
+            globalState.mouse3d.x = (clientX / window.innerWidth) * 2.0 - 1.0;
+            globalState.mouse3d.y = -(clientY / window.innerHeight) * 2.0 + 1.0;
+        };
+        const onMouseMove = (e) => updateMouse(e.clientX, e.clientY);
+        const onTouchMove = (e) => {
+            if (e.touches.length > 0) updateMouse(e.touches[0].clientX, e.touches[0].clientY);
+        };
+        window.addEventListener('mousemove', onMouseMove);
+        window.addEventListener('touchmove', onTouchMove);
+        window.addEventListener('touchstart', onTouchMove);
+        
+        return () => {
+            window.removeEventListener('mousemove', onMouseMove);
+            window.removeEventListener('touchmove', onTouchMove);
+            window.removeEventListener('touchstart', onTouchMove);
+        };
     }, []);
 
     const resetSystem = () => {
@@ -611,6 +649,12 @@ function Dead4RatApp() {
 
         let lastTime = performance.now();
         let frames = 0;
+        // Stable refs so render loop closure always sees latest value
+        const aiDriveEnabledRef = { current: false };
+        const aiDriveMappingRef  = { current: {} };
+        // Keep refs in sync — we'll update them via a useEffect below
+        Object.defineProperty(aiDriveEnabledRef, 'current', { get: () => globalState._aiDriveEnabled || false, set: v => {} });
+        Object.defineProperty(aiDriveMappingRef,  'current', { get: () => globalState._aiDriveMapping  || {}, set: v => {} });
         const renderLoop = (time) => {
             requestAnimationFrame(renderLoop);
             frames++;
@@ -631,6 +675,34 @@ function Dead4RatApp() {
             liveAudio.current.bass = globalState.bass;
             liveAudio.current.mid  = globalState.mid;
             liveAudio.current.high = globalState.high;
+
+            // ── Human AI → globalState ────────────────────────────────
+            if (humanEngine && humanEngine.isRunning) {
+                const hd = humanEngine.getData();
+                globalState.human = hd;
+                // AI-drive: let face/hand data override shader params
+                if (aiDriveEnabledRef.current && hd.faceDetected) {
+                    humanEngine.applyToGlobalState(globalState, aiDriveMappingRef.current);
+                }
+                // Feed data + raw landmarks into blobTracker overlay
+                if (blobTracker) {
+                    blobTracker.setHumanData(hd, humanEngine._lastResult);
+                    // Ensure overlay canvas is visible whenever human AI is on
+                    if (blobTracker.showHuman && blobTracker.showOverlay) {
+                        blobTracker.overlayCanvas.style.display = 'block';
+                        // If blob detection is off, still redraw human layer each frame
+                        if (!blobTracker.enabled) {
+                            blobTracker.overlayCtx.clearRect(0, 0, blobTracker.overlayCanvas.width, blobTracker.overlayCanvas.height);
+                            blobTracker._drawHumanOverlay();
+                        }
+                    }
+                }
+                // Throttle React UI update to ~8fps to avoid excess re-renders
+                if (frames % 8 === 0) setHumanData({...hd});
+            } else if (humanEngine && !humanEngine.isRunning && blobTracker) {
+                // Human stopped — clear its data from overlay
+                blobTracker.setHumanData(null, null);
+            }
 
             // ── LFO Automation Pass ──────────────────────────────────
             const now = performance.now() * 0.001;
@@ -713,6 +785,31 @@ function Dead4RatApp() {
     React.useEffect(() => {
         globalState.lfoDepth = lfoDepth;
     }, [lfoDepth]);
+
+    // ── Sync AI Drive state into globalState for render loop ──────────────
+    React.useEffect(() => {
+        globalState._aiDriveEnabled = aiDriveEnabled;
+    }, [aiDriveEnabled]);
+
+    React.useEffect(() => {
+        globalState._aiDriveMapping = aiDriveMapping;
+    }, [aiDriveMapping]);
+
+    // ── Human Engine toggle ───────────────────────────────────────────────
+    const handleHumanToggle = async () => {
+        if (!humanEngine) return;
+        if (humanEnabled) {
+            humanEngine.stop();
+            setHumanEnabled(false);
+            setHumanData(null);
+        } else {
+            setHumanLoading(true);
+            const videoElement = document.getElementById('webcam-feed');
+            await humanEngine.start(videoElement);
+            setHumanLoading(false);
+            setHumanEnabled(true);
+        }
+    };
 
     // ── Media layers ──────────────────────────────────────────────────────
     const addImage = () => {
@@ -1078,6 +1175,7 @@ function Dead4RatApp() {
                     </button>
                     <button onClick={() => canvasEngine.exportPNG(blobTracker)}>EXPORT</button>
                     <button className={panels.generators ? 'hud-active' : ''} onClick={() => togglePanel('generators')}>GENERATORS</button>
+                    <button className={panels.human ? 'hud-active' : ''} onClick={() => togglePanel('human')} style={{color: humanEnabled ? '#00FF88' : undefined}}>HUMAN AI</button>
                     <button onClick={() => setUiVisible(false)}>HIDE UI</button>
                 </div>
             )}
@@ -1173,6 +1271,22 @@ function Dead4RatApp() {
                                 if (blobTracker) blobTracker.setShowOverlay(next);
                             }}
                         >OVL</button>
+                        <button
+                            className={`brutalist-button ${humanEnabled ? 'active' : ''}`}
+                            style={{
+                                flex: '0 0 auto', fontSize: '0.6rem', padding: '4px 8px',
+                                borderColor: humanEnabled ? '#00FF88' : undefined,
+                                color: humanEnabled ? '#00FF88' : undefined,
+                            }}
+                            title={humanEnabled ? 'Toggle Human AI skeleton overlay' : 'Start Human AI first'}
+                            disabled={!humanEnabled}
+                            onClick={() => {
+                                if (blobTracker) {
+                                    blobTracker.setShowHuman(!blobTracker.showHuman);
+                                    setUiRefresh(r => r + 1);
+                                }
+                            }}
+                        >AI OVL</button>
                     </div>
                     {blobEnabled && (
                         <div style={{marginBottom: '8px'}}>
@@ -1514,6 +1628,168 @@ function Dead4RatApp() {
                             );
                         })}
                     </div>
+                </TerminalWindow>
+            )}
+
+            {/* ═══════════════ HUMAN AI MATRIX ═══════════════ */}
+            {uiVisible && started && (
+                <TerminalWindow
+                    id="win-human"
+                    title="HUMAN_MATRIX"
+                    tag="AI"
+                    initialX={Math.max(16, window.innerWidth / 2 - 160)}
+                    initialY={16}
+                    width="320px"
+                    maxHeight="calc(100vh - 60px)"
+                    onClose={() => togglePanel('human')}
+                    minimized={!panels.human}
+                >
+                    {/* ── Master Toggle ──────────────────────────── */}
+                    <div style={{marginBottom: '10px'}}>
+                        <button
+                            className={`brutalist-button ${humanEnabled ? 'primary' : ''}`}
+                            style={{width: '100%', fontSize: '0.65rem', letterSpacing: '2px'}}
+                            onClick={handleHumanToggle}
+                            disabled={humanLoading}
+                        >
+                            {humanLoading ? '⏳ LOADING MODELS...' : humanEnabled ? '◉ HUMAN AI: ACTIVE' : '○ ENGAGE HUMAN AI'}
+                        </button>
+                    </div>
+
+                    {/* ── Detection Status ──────────────────────── */}
+                    <div className="section-header">// DETECTION_STATUS</div>
+                    <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', marginBottom: '8px'}}>
+                        {[
+                            { label: 'FACE',   val: humanData?.faceDetected, extra: humanData?.faceDetected ? ` ${Math.round((humanData?.faceScore||0)*100)}%` : '' },
+                            { label: 'HAND-L', val: humanData?.handLeft },
+                            { label: 'HAND-R', val: humanData?.handRight },
+                            { label: 'BODY',   val: humanData?.bodyDetected },
+                        ].map(({label, val, extra}) => (
+                            <div key={label} style={{
+                                display: 'flex', alignItems: 'center', gap: '6px',
+                                padding: '3px 6px',
+                                background: val ? 'var(--accent)10' : '#0a0a0a',
+                                border: `1px solid ${val ? 'var(--accent)' : 'var(--border)'}`,
+                                fontSize: '0.6rem',
+                            }}>
+                                <span style={{color: val ? 'var(--accent)' : 'var(--text-dim)', fontSize: '0.55rem'}}>◉</span>
+                                <span style={{color: 'var(--text-dim)', flex: 1}}>{label}</span>
+                                <span style={{color: val ? 'var(--accent)' : 'var(--text-muted)', fontVariantNumeric: 'tabular-nums'}}>
+                                    {val ? `ON${extra||''}` : 'OFF'}
+                                </span>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* ── Emotion ──────────────────────────────── */}
+                    {humanData?.faceDetected && (
+                        <>
+                            <div className="section-header">// EMOTION_DECODE</div>
+                            <div style={{marginBottom: '8px'}}>
+                                <div style={{
+                                    padding: '4px 8px', marginBottom: '6px',
+                                    background: 'var(--accent)10', border: '1px solid var(--accent)40',
+                                    fontSize: '0.65rem', letterSpacing: '2px',
+                                    color: 'var(--accent)', textAlign: 'center',
+                                }}>
+                                    ▶ {(humanData?.emotion || 'neutral').toUpperCase()}
+                                </div>
+                                {Object.entries(humanData?.emotions || {}).map(([emo, score]) => (
+                                    <div key={emo} style={{display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px'}}>
+                                        <span style={{fontSize: '0.55rem', color: 'var(--text-dim)', width: '60px'}}>{emo.toUpperCase()}</span>
+                                        <div style={{flex: 1, height: '4px', background: 'var(--bg-mid)', position: 'relative'}}>
+                                            <div style={{
+                                                position: 'absolute', left: 0, top: 0, height: '100%',
+                                                width: `${Math.round((score||0) * 100)}%`,
+                                                background: score > 0.5 ? 'var(--accent)' : 'var(--accent)88',
+                                                transition: 'width 0.12s ease',
+                                            }} />
+                                        </div>
+                                        <span style={{fontSize: '0.55rem', color: 'var(--text-bright)', width: '28px', textAlign: 'right'}}>
+                                            {Math.round((score||0)*100)}%
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* ── Head Rotation ─────────────────────── */}
+                            <div className="section-header">// HEAD_ROTATION</div>
+                            <div style={{marginBottom: '8px'}}>
+                                {[['YAW', humanData?.yaw], ['PITCH', humanData?.pitch], ['ROLL', humanData?.roll]].map(([label, val]) => {
+                                    const pct = ((val||0) + 1) * 50;
+                                    const deg = ((val||0) * 90).toFixed(0);
+                                    return (
+                                        <div key={label} style={{display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px'}}>
+                                            <span style={{fontSize: '0.55rem', color: 'var(--text-dim)', width: '36px'}}>{label}</span>
+                                            <div style={{flex: 1, height: '6px', background: 'var(--bg-mid)', position: 'relative'}}>
+                                                <div style={{position:'absolute',left:'50%',top:'-1px',width:'1px',height:'8px',background:'var(--border)'}} />
+                                                <div style={{
+                                                    position: 'absolute', top: 0, height: '100%',
+                                                    left: `${Math.min(pct, 50)}%`,
+                                                    width: `${Math.abs(pct - 50)}%`,
+                                                    background: pct > 50 ? 'var(--accent)' : '#0088FF',
+                                                    transition: 'left 0.08s linear, width 0.08s linear',
+                                                }} />
+                                            </div>
+                                            <span style={{fontSize: '0.55rem', color: 'var(--text-bright)', width: '32px', textAlign: 'right', fontVariantNumeric: 'tabular-nums'}}>
+                                                {deg}°
+                                            </span>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </>
+                    )}
+
+                    {/* ── Gesture ──────────────────────────────── */}
+                    {humanData?.handGesture && (
+                        <>
+                            <div className="section-header">// GESTURE</div>
+                            <div style={{
+                                padding: '4px 8px', marginBottom: '8px',
+                                border: '1px solid var(--accent)60', background: 'var(--accent)08',
+                                fontSize: '0.58rem', color: 'var(--accent)', letterSpacing: '1px',
+                                lineHeight: '1.5',
+                            }}>
+                                {humanData.handGesture.toUpperCase()}
+                            </div>
+                        </>
+                    )}
+
+                    <div className="hud-divider" />
+
+                    {/* ── Detection Modules ─────────────────────── */}
+                    <div className="section-header">// DETECTION_MODULES</div>
+                    <div style={{fontSize: '0.55rem', color: 'var(--text-muted)', marginBottom: '6px'}}>
+                        Toggle modules live
+                    </div>
+                    <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', marginBottom: '8px'}}>
+                        {[['FACE', 'enableFace'], ['HANDS', 'enableHands'], ['BODY', 'enableBody'], ['EMOTION', 'enableEmotion']].map(([label, cfgKey]) => {
+                            const active = humanEngine?.config[cfgKey] ?? true;
+                            return (
+                                <button
+                                    key={cfgKey}
+                                    className={`brutalist-button ${active ? 'active' : ''}`}
+                                    style={{fontSize: '0.6rem', padding: '5px'}}
+                                    onClick={() => {
+                                        if (humanEngine) {
+                                            humanEngine.setModule(cfgKey, !humanEngine.config[cfgKey]);
+                                            setUiRefresh(r => r + 1);
+                                        }
+                                    }}
+                                >
+                                    {active ? '◉' : '○'} {label}
+                                </button>
+                            );
+                        })}
+                    </div>
+
+                    {!humanEnabled && (
+                        <div style={{marginTop: '8px', fontSize: '0.55rem', color: 'var(--text-muted)', lineHeight: '1.6'}}>
+                            First run downloads ~15MB of model weights from CDN.<br/>
+                            Subsequent loads are instant (cached in browser).
+                        </div>
+                    )}
                 </TerminalWindow>
             )}
 

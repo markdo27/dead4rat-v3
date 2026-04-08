@@ -32,23 +32,34 @@ class BlobTracker {
         // State
         this.enabled      = false;
         this.showOverlay  = true;
-        this.threshold    = 30;    // frame-diff threshold (0–255)
-        this.minArea      = 15;    // minimum blob area in analysis-canvas pixels
-        this.maxBlobs     = 8;     // max tracked blobs per frame
+        this.threshold    = 30;
+        this.minArea      = 15;
+        this.maxBlobs     = 8;
 
-        // Output data (read by dead4rat.jsx)
-        this.blobs        = [];    // [{x, y, w, h, area, cx, cy}] — screen-space coords
+        // Output data
+        this.blobs        = [];
         this.blobCount    = 0;
 
-        // Persistence — blobs linger this many frames after motion stops
-        this.persistFrames = 45;   // ~0.75s at 60fps
-        this._persistBlobs = [];   // [{...blob, ttl, maxTtl}]
-
+        // Persistence
+        this.persistFrames = 45;
+        this._persistBlobs = [];
         this._prevPixels  = null;
+
+        // ── Human AI overlay ───────────────────────────────────
+        this.humanData    = null;   // latest result from humanEngine.getData()
+        this.showHuman    = true;   // toggle human overlay layer
+        // last raw Human result (full object with landmarks)
+        this._humanRaw    = null;
 
         // Resize overlay canvas to match window
         this._resizeOverlay();
         window.addEventListener('resize', () => this._resizeOverlay());
+    }
+
+    // ── Feed Human AI data in (called from render loop) ────────
+    setHumanData(data, rawResult) {
+        this.humanData = data;
+        this._humanRaw = rawResult || null;
     }
 
     _resizeOverlay() {
@@ -159,6 +170,10 @@ class BlobTracker {
         // ── Step 6: Draw overlay ─────────────────────────────
         if (this.showOverlay) {
             this._drawOverlay();
+        } else if (this.showHuman && this.humanData) {
+            // Human-only mode: clear blob layer but still draw human
+            this.overlayCtx.clearRect(0, 0, this.overlayCanvas.width, this.overlayCanvas.height);
+            this._drawHumanOverlay();
         } else {
             this.overlayCtx.clearRect(0, 0, this.overlayCanvas.width, this.overlayCanvas.height);
         }
@@ -265,6 +280,258 @@ class BlobTracker {
         ctx.fillStyle = 'rgba(255,85,0,0.85)';
         ctx.font = '10px "Share Tech Mono", monospace';
         ctx.fillText(`// BLOB_DETECT  COUNT: ${this.blobCount}`, 12, H - 14);
+
+        // Render human overlay on top of blobs
+        if (this.showHuman && this.humanData) {
+            this._drawHumanOverlay();
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // HUMAN AI OVERLAY — blob-tracker style (orange Safety-Core palette)
+    // ─────────────────────────────────────────────────────────────────
+    _drawHumanOverlay() {
+        const ctx = this.overlayCtx;
+        const W   = this.overlayCanvas.width;
+        const H   = this.overlayCanvas.height;
+        const hd  = this.humanData;
+        const raw = this._humanRaw;
+        if (!hd) return;
+
+        // Use actual video dimensions from humanData (not hardcoded)
+        const vw = hd.videoWidth  || 640;
+        const vh = hd.videoHeight || 480;
+        const sx = W / vw;
+        const sy = H / vh;
+
+        // Blob-tracker palette
+        const C_PRI  = '#FF5500';    // primary orange
+        const C_SEC  = '#FF8800';    // secondary amber
+        const C_DIM  = '#FF880066';  // dim
+        const C_TAG  = '#FF5500';    // tags
+        const MONO   = '"Share Tech Mono", monospace';
+
+        // Helper: draw corner ticks (identical to blob tracker style)
+        const drawCornerTicks = (x, y, w, h, isPrimary) => {
+            const tick = 12;
+            ctx.strokeStyle = isPrimary ? C_PRI : C_SEC;
+            ctx.lineWidth = isPrimary ? 3 : 1.5;
+            [
+                [x,     y,     tick, 0, 0, tick],
+                [x + w, y,    -tick, 0, 0, tick],
+                [x,     y + h, tick, 0, 0, -tick],
+                [x + w, y + h,-tick, 0, 0, -tick],
+            ].forEach(([ox, oy, hx, hy, vx, vy]) => {
+                ctx.beginPath();
+                ctx.moveTo(ox, oy); ctx.lineTo(ox + hx, oy + hy);
+                ctx.moveTo(ox, oy); ctx.lineTo(ox + vx, oy + vy);
+                ctx.stroke();
+            });
+        };
+
+        ctx.save();
+
+        // ── 1. FACE ─────────────────────────────────────────────
+        if (hd.faceDetected && raw?.face?.[0]) {
+            const face = raw.face[0];
+            const [bx, by, bw, bh] = face.box || [0,0,0,0];
+            const fx = bx * sx, fy = by * sy, fw = bw * sx, fh = bh * sy;
+
+            // Bounding box
+            ctx.strokeStyle = C_PRI;
+            ctx.lineWidth = 2;
+            ctx.strokeRect(fx, fy, fw, fh);
+
+            // Corner ticks
+            drawCornerTicks(fx, fy, fw, fh, true);
+
+            // Centre dot
+            const fcx = fx + fw / 2, fcy = fy + fh / 2;
+            ctx.fillStyle = C_PRI;
+            ctx.beginPath();
+            ctx.arc(fcx, fcy, 5, 0, Math.PI * 2);
+            ctx.fill();
+
+            // ID label (top-left inside box)
+            ctx.fillStyle = C_PRI;
+            ctx.font = `bold 11px ${MONO}`;
+            ctx.fillText(`FACE_00  ${Math.round(hd.faceScore * 100)}%`, fx + 6, fy + 14);
+
+            // Emotion tag (below box)
+            const emo = (hd.emotion || 'neutral').toUpperCase();
+            const emoPct = Math.round((hd.emotions?.[hd.emotion] || 0) * 100);
+            ctx.fillStyle = '#00000099';
+            const tagW = 130;
+            ctx.fillRect(fx, fy + fh + 4, tagW, 16);
+            ctx.fillStyle = C_TAG;
+            ctx.font = `bold 10px ${MONO}`;
+            ctx.fillText(`${emo} ${emoPct}%`, fx + 4, fy + fh + 16);
+
+            // ── Head rotation mini-bars (right of face box) ─────
+            const hudX = fx + fw + 8;
+            const hudY = fy;
+            const barW = 50;
+            [
+                ['YAW',   hd.yaw,   C_SEC],
+                ['PITCH', hd.pitch, C_PRI],
+                ['ROLL',  hd.roll,  C_SEC],
+            ].forEach(([label, val, col], i) => {
+                const rowY = hudY + i * 16;
+                ctx.fillStyle = '#00000088';
+                ctx.fillRect(hudX, rowY, barW + 40, 13);
+                // bar bg
+                ctx.fillStyle = '#333';
+                ctx.fillRect(hudX + 32, rowY + 3, barW, 7);
+                // bar fill (centre-out)
+                const pct = ((val || 0) + 1) * 0.5;
+                const mid = hudX + 32 + barW / 2;
+                const fill = (pct - 0.5) * barW;
+                ctx.fillStyle = col;
+                ctx.fillRect(fill >= 0 ? mid : mid + fill, rowY + 3, Math.abs(fill), 7);
+                // label
+                ctx.fillStyle = '#ffffff88';
+                ctx.font = `8px ${MONO}`;
+                ctx.fillText(label, hudX + 2, rowY + 10);
+                ctx.fillStyle = col;
+                ctx.fillText(`${((val||0)*90).toFixed(0)}°`, hudX + barW + 34, rowY + 10);
+            });
+
+            // Face mesh dots (very subtle)
+            if (face.mesh && face.mesh.length > 0) {
+                ctx.fillStyle = `${C_PRI}30`;
+                for (const [px, py] of face.mesh) {
+                    ctx.beginPath();
+                    ctx.arc(px * sx, py * sy, 1, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+        }
+
+        // ── 2. HANDS ────────────────────────────────────────────
+        if (raw?.hand && raw.hand.length > 0) {
+            raw.hand.forEach((hand, hi) => {
+                const isLeft = hand.label === 'left';
+                const col = isLeft ? C_PRI : C_SEC;
+                const colDim = isLeft ? `${C_PRI}88` : `${C_SEC}88`;
+
+                // Bounding box
+                if (hand.box) {
+                    const [bx, by, bw, bh] = hand.box;
+                    const hx = bx*sx, hy = by*sy, hw = bw*sx, hh = bh*sy;
+                    ctx.strokeStyle = col;
+                    ctx.lineWidth = 1.5;
+                    ctx.strokeRect(hx, hy, hw, hh);
+                    drawCornerTicks(hx, hy, hw, hh, false);
+                    // Label
+                    ctx.fillStyle = col;
+                    ctx.font = `bold 9px ${MONO}`;
+                    ctx.fillText(`${isLeft ? 'L' : 'R'}_HAND  ${hi}`, hx + 4, hy + 12);
+                }
+
+                // Skeleton
+                if (hand.landmarks && hand.landmarks.length >= 21) {
+                    const lm = hand.landmarks;
+                    const CONN = [
+                        [0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],
+                        [0,9],[9,10],[10,11],[11,12],[0,13],[13,14],[14,15],[15,16],
+                        [0,17],[17,18],[18,19],[19,20],[5,9],[9,13],[13,17],
+                    ];
+                    ctx.strokeStyle = colDim;
+                    ctx.lineWidth = 1.5;
+                    for (const [a, b] of CONN) {
+                        if (!lm[a] || !lm[b]) continue;
+                        ctx.beginPath();
+                        ctx.moveTo(lm[a][0]*sx, lm[a][1]*sy);
+                        ctx.lineTo(lm[b][0]*sx, lm[b][1]*sy);
+                        ctx.stroke();
+                    }
+                    lm.forEach((pt, idx) => {
+                        const tip = [4,8,12,16,20].includes(idx);
+                        ctx.fillStyle = tip ? col : colDim;
+                        ctx.beginPath();
+                        ctx.arc(pt[0]*sx, pt[1]*sy, tip ? 4 : 2, 0, Math.PI*2);
+                        ctx.fill();
+                    });
+                }
+            });
+        }
+
+        // ── 3. BODY ─────────────────────────────────────────────
+        if (raw?.body && raw.body.length > 0) {
+            const body = raw.body[0];
+            if (body.keypoints && body.keypoints.length > 0) {
+                const kps = body.keypoints;
+                const CONN = [
+                    [5,6],[5,7],[7,9],[6,8],[8,10],
+                    [5,11],[6,12],[11,12],
+                    [11,13],[13,15],[12,14],[14,16],
+                ];
+                ctx.strokeStyle = `${C_SEC}AA`;
+                ctx.lineWidth = 2;
+                for (const [a, b] of CONN) {
+                    const pa = kps[a], pb = kps[b];
+                    if (!pa || !pb || (pa.score||0) < 0.25 || (pb.score||0) < 0.25) continue;
+                    const pax = (pa.position?.[0] ?? pa.x) * sx;
+                    const pay = (pa.position?.[1] ?? pa.y) * sy;
+                    const pbx = (pb.position?.[0] ?? pb.x) * sx;
+                    const pby = (pb.position?.[1] ?? pb.y) * sy;
+                    ctx.beginPath();
+                    ctx.moveTo(pax, pay);
+                    ctx.lineTo(pbx, pby);
+                    ctx.stroke();
+                }
+                kps.forEach(kp => {
+                    if (!kp || (kp.score||0) < 0.25) return;
+                    const kx = (kp.position?.[0] ?? kp.x) * sx;
+                    const ky = (kp.position?.[1] ?? kp.y) * sy;
+                    ctx.fillStyle = C_SEC;
+                    ctx.beginPath();
+                    ctx.arc(kx, ky, 4, 0, Math.PI*2);
+                    ctx.fill();
+                });
+                // Body bbox
+                if (body.box) {
+                    const [bx, by, bw, bh] = body.box;
+                    ctx.strokeStyle = `${C_SEC}55`;
+                    ctx.lineWidth = 1;
+                    ctx.setLineDash([4, 4]);
+                    ctx.strokeRect(bx*sx, by*sy, bw*sx, bh*sy);
+                    ctx.setLineDash([]);
+                    ctx.fillStyle = C_SEC;
+                    ctx.font = `9px ${MONO}`;
+                    ctx.fillText('BODY_00', bx*sx + 4, by*sy - 4);
+                }
+            }
+        }
+
+        // ── 4. Gesture text (bottom of face box) ────────────────
+        if (hd.handGesture) {
+            ctx.fillStyle = '#00000099';
+            ctx.fillRect(W - 210, H - 44, 200, 16);
+            ctx.fillStyle = C_TAG;
+            ctx.font = `bold 9px ${MONO}`;
+            ctx.fillText(`GESTURE: ${hd.handGesture.toUpperCase().slice(0,30)}`, W - 206, H - 32);
+        }
+
+        // ── 5. Corner HUD ───────────────────────────────────────
+        const lines = [
+            `// HUMAN_DETECT`,
+            `FACE: ${hd.faceDetected ? `ON ${Math.round(hd.faceScore*100)}%` : 'OFF'}`,
+            `EMO: ${(hd.emotion||'neutral').toUpperCase()}`,
+            `HANDS: ${[hd.handLeft?'L':'',hd.handRight?'R':''].filter(Boolean).join('+')||'—'}`,
+            `BODY: ${hd.bodyDetected ? 'ON' : 'OFF'}`,
+        ];
+        const lineH = 13;
+        const padX = 12, padY = H - 14 - 28;
+        ctx.fillStyle = '#00000088';
+        ctx.fillRect(padX - 2, padY - (lines.length-1)*lineH - 4, 170, lines.length*lineH + 6);
+        lines.forEach((line, i) => {
+            ctx.fillStyle = i === 0 ? C_PRI : `${C_SEC}CC`;
+            ctx.font = `${i===0?'bold ':''}${i===0?10:9}px ${MONO}`;
+            ctx.fillText(line, padX, padY - (lines.length-1-i)*lineH);
+        });
+
+        ctx.restore();
     }
 
     // ─────────────────────────────────────────────────
@@ -277,16 +544,28 @@ class BlobTracker {
 
     setEnabled(val) {
         this.enabled = val;
-        this.overlayCanvas.style.display = (val && this.showOverlay) ? 'block' : 'none';
+        // Show overlay if blobs ON, or if human AI is active
+        const shouldShow = val || (this.showHuman && this.humanData);
+        this.overlayCanvas.style.display = (shouldShow && this.showOverlay) ? 'block' : 'none';
         if (!val) {
             this.blobs = [];
             this.blobCount = 0;
-            this.overlayCtx.clearRect(0, 0, this.overlayCanvas.width, this.overlayCanvas.height);
+            if (!this.showHuman) {
+                this.overlayCtx.clearRect(0, 0, this.overlayCanvas.width, this.overlayCanvas.height);
+            }
         }
     }
 
     setShowOverlay(val) {
         this.showOverlay = val;
-        this.overlayCanvas.style.display = (this.enabled && val) ? 'block' : 'none';
+        const active = this.enabled || (this.showHuman && !!this.humanData);
+        this.overlayCanvas.style.display = (active && val) ? 'block' : 'none';
+    }
+
+    // Toggle human layer independently of blob detection
+    setShowHuman(val) {
+        this.showHuman = val;
+        const active = this.enabled || (val && !!this.humanData);
+        this.overlayCanvas.style.display = (active && this.showOverlay) ? 'block' : 'none';
     }
 }

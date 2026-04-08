@@ -4,7 +4,12 @@ class CanvasEngine {
         // FBOs handle the feedback persistence, but we still need preserveDrawingBuffer
         // enabled so that asynchronous calls like canvas.toDataURL() (for PNG exports
         // and Preset Thumbnails) can read the final rendered image.
-        this.gl = this.canvas.getContext('webgl', { 
+        this.gl = this.canvas.getContext('webgl2', { 
+            preserveDrawingBuffer: true,
+            alpha: false,
+            antialias: false,
+            premultipliedAlpha: false
+        }) || this.canvas.getContext('webgl', { 
             preserveDrawingBuffer: true,
             alpha: false,
             antialias: false,
@@ -15,6 +20,9 @@ class CanvasEngine {
             console.error("WebGL not supported");
             return;
         }
+
+        // Setup float extensions explicitly for both WebGL1/2
+        this.gl.getExtension('EXT_color_buffer_float'); 
 
         this.fboA = null;
         this.fboB = null;
@@ -48,6 +56,44 @@ class CanvasEngine {
 
             return { fbo, tex };
         };
+        
+        this.particleFBOs = () => {
+            const size = 512; // 262,144 particles
+            const createFloatFBO = () => {
+                const tex = gl.createTexture();
+                gl.bindTexture(gl.TEXTURE_2D, tex);
+                
+                // Initialize default physics payload (center origin)
+                const data = new Float32Array(size * size * 4);
+                for(let i=0; i<data.length; i+=4){
+                    data[i] = (Math.random() - 0.5) * 10.0;
+                    data[i+1] = (Math.random() - 0.5) * 10.0;
+                    data[i+2] = (Math.random() - 0.5) * 10.0;
+                    data[i+3] = Math.random(); // Life
+                }
+
+                gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, size, size, 0, gl.RGBA, gl.FLOAT, data);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+                const fbo = gl.createFramebuffer();
+                gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+                gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+                return { fbo, tex };
+            }
+            if (this.fboPartA) {
+                gl.deleteFramebuffer(this.fboPartA.fbo);
+                gl.deleteTexture(this.fboPartA.tex);
+                gl.deleteFramebuffer(this.fboPartB.fbo);
+                gl.deleteTexture(this.fboPartB.tex);
+            }
+            this.fboPartA = createFloatFBO();
+            this.fboPartB = createFloatFBO();
+            this.particleSource = this.fboPartA;
+            this.particleTarget = this.fboPartB;
+        };
 
         // Cleanup old if resize
         if (this.fboA) {
@@ -62,6 +108,48 @@ class CanvasEngine {
         this.renderTarget = this.fboA;
         this.feedbackSource = this.fboB;
         
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    }
+
+    initParticleFBOs() {
+        const gl = this.gl;
+        const size = 512;
+        
+        let floatType = gl.FLOAT;
+        let internalFormat = gl.RGBA;
+        
+        // WebGL2 specific settings
+        const isWebGL2 = typeof WebGL2RenderingContext !== 'undefined' && gl instanceof WebGL2RenderingContext;
+        if (isWebGL2) {
+            internalFormat = gl.RGBA16F;
+            floatType = gl.HALF_FLOAT;
+        } else {
+            const extHalf = gl.getExtension('OES_texture_half_float');
+            if (extHalf) {
+                floatType = extHalf.HALF_FLOAT_OES;
+            }
+        }
+        
+        const createParticleFBO = () => {
+            const tex = gl.createTexture();
+            gl.bindTexture(gl.TEXTURE_2D, tex);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+
+            // Pass null to let WebGL allocate VRAM. Compute Shader handles initialization on first frame when life=0.
+            gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, size, size, 0, gl.RGBA, floatType, null);
+
+            const fbo = gl.createFramebuffer();
+            gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+            gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+            
+            return { fbo, tex, width: size, height: size };
+        };
+
+        this.particleSource = createParticleFBO();
+        this.particleTarget = createParticleFBO();
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     }
 
@@ -384,8 +472,7 @@ class CanvasEngine {
                         scale *= 1.8;
                     }
                     return sdOctahedron(q, 1.2) / scale;
-                }
-                else {
+                } else {
                     // MODE 5: NEON CAVES (Organic hollow tunnel)
                     p.z -= u_time * u_genSpeed * 5.0;
                     vec3 q = p;
@@ -1273,6 +1360,7 @@ class CanvasEngine {
         else if (state.genMode === 'RADIANT HORIZON') genModeNum = 3.0;
         else if (state.genMode === 'FRACTAL PYRAMID') genModeNum = 4.0;
         else if (state.genMode === 'NEON CAVES') genModeNum = 5.0;
+        else if (state.genMode === 'THE SPIRIT') genModeNum = 6.0;
 
         let bNum = 1.0; // MID
         if (state.genAudioBand === 'BASS') bNum = 0.0;
@@ -1308,6 +1396,66 @@ class CanvasEngine {
         gl.enableVertexAttribArray(posLoc);
         gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+        // --- GPGPU Particles Pass (THE SPIRIT) ---
+        if (state.genMode === 'THE SPIRIT' && this.hasFloatTexture) {
+            const time = performance.now() * 0.001;
+            const speed = (state.genParams ? state.genParams.speed.value : 1.0) * 1.5;
+            const curlSize = (state.genParams ? state.genParams.warp.value : 1.0) * 0.01;
+            const mx = state.mouse3d ? state.mouse3d.x : 0.0;
+            const my = state.mouse3d ? state.mouse3d.y : 0.0;
+
+            // 1. Compute Physics
+            gl.bindFramebuffer(gl.FRAMEBUFFER, this.particleTarget.fbo);
+            gl.viewport(0, 0, 512, 512);
+            gl.useProgram(this.progParticleCompute);
+
+            gl.activeTexture(gl.TEXTURE0);
+            gl.bindTexture(gl.TEXTURE_2D, this.particleSource.tex);
+            gl.uniform1i(this.locCompPos, 0);
+
+            gl.uniform1f(this.locCompTime, time);
+            gl.uniform1f(this.locCompSpeed, speed);
+            gl.uniform1f(this.locCompCurl, curlSize);
+            gl.uniform3f(this.locCompMouse, mx, my, 0.0);
+
+            gl.bindBuffer(gl.ARRAY_BUFFER, this.positionBuffer);
+            const cpLoc = gl.getAttribLocation(this.progParticleCompute, "a_position");
+            gl.enableVertexAttribArray(cpLoc);
+            gl.vertexAttribPointer(cpLoc, 2, gl.FLOAT, false, 0, 0);
+            gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+            // 2. Swap Particle Ping-Pong
+            const ptTmp = this.particleSource;
+            this.particleSource = this.particleTarget;
+            this.particleTarget = ptTmp;
+
+            // 3. Draw Particles over main renderTarget
+            gl.bindFramebuffer(gl.FRAMEBUFFER, this.renderTarget.fbo);
+            gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+            gl.useProgram(this.progParticleDraw);
+
+            gl.enable(gl.BLEND);
+            gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+            gl.activeTexture(gl.TEXTURE0);
+            gl.bindTexture(gl.TEXTURE_2D, this.particleSource.tex);
+            gl.uniform1i(this.locDrawPos, 0);
+
+            const zoom = state.genParams ? state.genParams.zoom.value : 1.5;
+            gl.uniform1f(this.locDrawZoom, zoom * 3.0);
+            gl.uniform1f(this.locDrawRotX, state.genParams ? state.genParams.rotateX.value : 0.0);
+            gl.uniform1f(this.locDrawRotY, state.genParams ? state.genParams.rotateY.value : 0.0);
+            gl.uniform1f(this.locDrawRotZ, state.genParams ? state.genParams.rotateZ.value : 0.0);
+
+            gl.bindBuffer(gl.ARRAY_BUFFER, this.particleUVBuffer);
+            const dpLoc = gl.getAttribLocation(this.progParticleDraw, "a_uv");
+            gl.enableVertexAttribArray(dpLoc);
+            gl.vertexAttribPointer(dpLoc, 2, gl.FLOAT, false, 0, 0);
+            gl.drawArrays(gl.POINTS, 0, 512 * 512);
+
+            gl.disable(gl.BLEND);
+        }
 
         // --- Step 4: Blit to Screen ---
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
