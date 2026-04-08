@@ -126,71 +126,12 @@ let blobTracker = null;
 let humanEngine = null;
 
 // ═══════════════════════════════════════════
-// DRAGGABLE TERMINAL WINDOW
+// TERMINAL WINDOW — Uses component library
 // ═══════════════════════════════════════════
 
-function TerminalWindow({ id, title, tag, initialX, initialY, width, children, maxHeight, onClose, minimized }) {
-    const ref = React.useRef(null);
-    const [pos, setPos] = React.useState({ x: initialX || 20, y: initialY || 20 });
-    const [isDragging, setIsDragging] = React.useState(false);
-    const dragOffset = React.useRef({ x: 0, y: 0 });
-    const zRef = React.useRef(10);
-
-    const bringToFront = () => {
-        TerminalWindow._globalZ = (TerminalWindow._globalZ || 10) + 1;
-        zRef.current = TerminalWindow._globalZ;
-        if (ref.current) ref.current.style.zIndex = zRef.current;
-    };
-
-    const handleMouseDown = (e) => {
-        if (e.target.closest('.sticker-body')) return;
-        if (e.target.closest('.win-close')) return;
-        e.preventDefault();
-        setIsDragging(true);
-        bringToFront();
-        const rect = ref.current.getBoundingClientRect();
-        dragOffset.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
-    };
-
-    React.useEffect(() => {
-        if (!isDragging) return;
-        const move = (e) => setPos({ x: e.clientX - dragOffset.current.x, y: e.clientY - dragOffset.current.y });
-        const up = () => setIsDragging(false);
-        window.addEventListener('mousemove', move);
-        window.addEventListener('mouseup', up);
-        return () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up); };
-    }, [isDragging]);
-
-    if (minimized) {
-        return (
-            <div className="minimized-indicator" style={{ left: pos.x + 'px', top: pos.y + 'px' }} onClick={onClose}>
-                {title}
-            </div>
-        );
-    }
-
-    return (
-        <div
-            ref={ref}
-            className={`sticker ${isDragging ? 'dragging' : ''}`}
-            style={{ left: pos.x + 'px', top: pos.y + 'px', width: width || '300px', zIndex: zRef.current }}
-            onMouseDown={handleMouseDown}
-            id={id}
-        >
-            <div className="sticker-header">
-                <span className="sticker-header-title">{title}</span>
-                <div style={{display: 'flex', alignItems: 'center', gap: '6px'}}>
-                    {tag && <span className="sticker-header-tag">{tag}</span>}
-                    {onClose && <button className="win-close" onClick={onClose} title="minimize">×</button>}
-                </div>
-            </div>
-            <div className="sticker-body" style={{ maxHeight: maxHeight || 'none', overflowY: maxHeight ? 'auto' : 'visible' }}>
-                {children}
-            </div>
-        </div>
-    );
-}
-TerminalWindow._globalZ = 10;
+// TerminalWindow is now provided by ui_components.jsx
+// Keep a local reference for convenience
+const TerminalWindow = window.TerminalWindow;
 
 // ═══════════════════════════════════════════
 // SIGNAL MONITOR — Live spectrum + band meters
