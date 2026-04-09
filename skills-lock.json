@@ -11,6 +11,11 @@
       "sourceType": "github",
       "computedHash": "f483c304fcde060211ffae00f49bb728536e7e7613c99db45b5b924d9fc17243"
     },
+    "fluidsim": {
+      "source": "davila7/claude-code-templates",
+      "sourceType": "github",
+      "computedHash": "d03c4fb7ff69b0a7f8e80c567d2ea8b7c515f74405f850aef3a002f879de9f52"
+    },
     "generative-art-algorithms": {
       "source": "4444j99/a-i--skills",
       "sourceType": "github",

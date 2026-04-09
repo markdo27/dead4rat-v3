@@ -1406,6 +1406,8 @@ class CanvasEngine {
         }
 
         // --- Step 1.5: Fluid Engine Physics ---
+        // Run the fluid simulation using the current webcam texture as motion input.
+        // Must be called BEFORE we rebind the render target FBO.
         if (this.fluidEngine && state.fluidParams && state.fluidParams.enabled) {
             this.fluidEngine.update(this.videoTex, state.fluidParams, 0.016);
         }
@@ -1733,16 +1735,13 @@ class CanvasEngine {
         }
 
         // --- Step 3.2: Fluid Engine Render ---
+        // The new FluidEngine.render() composites webcam + fluid itself (no external blend needed).
+        // It writes a full RGBA frame to whatever FBO is currently bound.
         if (this.fluidEngine && state.fluidParams && state.fluidParams.enabled) {
             gl.bindFramebuffer(gl.FRAMEBUFFER, this.renderTarget.fbo);
             gl.viewport(0, 0, this.canvas.width, this.canvas.height);
-            gl.enable(gl.BLEND);
-            gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-            // Mix is handled by the fluid render shader if we want, 
-            // but here we can just pass it as a global alpha if needed.
-            // For now, the solver's render pass handles the gain.
+            gl.disable(gl.BLEND); // FluidEngine render shader does its own compositing
             this.fluidEngine.render(state.fluidParams.gain, state.fluidParams.mix);
-            gl.disable(gl.BLEND);
         }
 
         // --- Step 4: Blit to Screen ---

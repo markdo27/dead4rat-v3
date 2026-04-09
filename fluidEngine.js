@@ -1,399 +1,562 @@
 /**
- * FluidEngine.js
- * High-performance GPGPU Navier-Stokes Fluid Solver for Dead4rat.
- * Based on the stable "Safety-Core" architectural principles.
+ * FluidEngine.js — GPGPU Navier-Stokes Fluid Solver for Dead4rat
+ * ---------------------------------------------------------------
+ * Based on Stable-Fluids algorithm (Jos Stam, 1999).
+ * Inspired by fluidsim pseudospectral principles — operator-split
+ * advection + Jacobi pressure projection on the GPU.
+ *
+ * Architecture:
+ *   - All passes run in #version 300 es (WebGL2)
+ *   - Shared GL context with CanvasEngine (same WebGL2 ctx)
+ *   - Composites fluid OVER webcam feed (webcam remains visible)
+ *   - Optical flow drives velocity splats from motion detection
  */
 
 class FluidEngine {
     constructor(gl) {
+        if (!gl) { console.error('[FluidEngine] No GL context provided'); return; }
         this.gl = gl;
-        this.width = 512; // Simulation resolution (upscaled for render)
-        this.height = 512;
-        this.gl.getExtension("EXT_color_buffer_float");
-        
-        this.initShaders();
-        this.initBuffers();
-        this.initFBOs();
-        
-        console.log("[FluidEngine] GPGPU Solver Initialized (512x512)");
+        this.SIM_W = 256;   // Simulation grid width
+        this.SIM_H = 256;   // Simulation grid height
+        this.JACOBI_ITER = 20; // Pressure solver iterations
+
+        // Runtime params (overridden by canvasEngine state)
+        this.params = {
+            enabled: false,
+            viscosity: 0.99,      // Velocity dissipation per frame
+            dissipation: 0.98,    // Dye/density dissipation per frame
+            opticalGain: 2.0,     // Optical flow → velocity scale
+            audioDrive: 0.5,      // Audio → splat intensity
+            gain: 1.5,            // Render brightness
+            mix: 0.7,             // Fluid overlay alpha (0=invisible, 1=full replace)
+            webcamAlpha: 1.0,     // Webcam passthrough alpha
+        };
+
+        try {
+            const ext = this.gl.getExtension('EXT_color_buffer_float');
+            if (!ext) {
+                console.warn('[FluidEngine] EXT_color_buffer_float not supported; using HALF_FLOAT fallback');
+            }
+            this._initShaders();
+            this._initBuffers();
+            this._initFBOs();
+            console.log('[FluidEngine] ✓ Initialized', this.SIM_W + 'x' + this.SIM_H, 'GPGPU solver');
+        } catch (e) {
+            console.error('[FluidEngine] Init failed:', e);
+        }
     }
 
-    initShaders() {
+    // ── Shader Compiler ──────────────────────────────────────────────
+    _compile(vert, frag, name) {
         const gl = this.gl;
+        const mkShader = (type, src) => {
+            const s = gl.createShader(type);
+            gl.shaderSource(s, src);
+            gl.compileShader(s);
+            if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+                console.error(`[FluidEngine] ${name} shader error:`, gl.getShaderInfoLog(s));
+            }
+            return s;
+        };
+        const prog = gl.createProgram();
+        gl.attachShader(prog, mkShader(gl.VERTEX_SHADER, vert));
+        gl.attachShader(prog, mkShader(gl.FRAGMENT_SHADER, frag));
+        gl.linkProgram(prog);
+        if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+            console.error(`[FluidEngine] ${name} link error:`, gl.getProgramInfoLog(prog));
+        }
+        return prog;
+    }
 
-        const vsh = `#version 300 es
-            precision highp float;
-            in vec2 a_position;
+    _initShaders() {
+        // Full-screen quad vertex shader (shared by all passes)
+        const VERT = `#version 300 es
+            in vec2 a_pos;
             out vec2 v_uv;
             void main() {
-                v_uv = a_position * 0.5 + 0.5;
-                gl_Position = vec4(a_position, 0.0, 1.0);
+                v_uv = a_pos * 0.5 + 0.5;
+                gl_Position = vec4(a_pos, 0.0, 1.0);
             }
         `;
 
-        const compile = (vs, fs, name) => {
-            const vShader = gl.createShader(gl.VERTEX_SHADER);
-            gl.shaderSource(vShader, vs);
-            gl.compileShader(vShader);
-            if (!gl.getShaderParameter(vShader, gl.COMPILE_STATUS)) {
-                console.error(`VS Compile Error [${name}]:`, gl.getShaderInfoLog(vShader));
-            }
-
-            const fShader = gl.createShader(gl.FRAGMENT_SHADER);
-            gl.shaderSource(fShader, fs);
-            gl.compileShader(fShader);
-            if (!gl.getShaderParameter(fShader, gl.COMPILE_STATUS)) {
-                console.error(`FS Compile Error [${name}]:`, gl.getShaderInfoLog(fShader));
-            }
-
-            const prog = gl.createProgram();
-            gl.attachShader(prog, vShader);
-            gl.attachShader(prog, fShader);
-            gl.linkProgram(prog);
-            return prog;
-        };
-
-        // --- 1. Optical Flow Pass ---
-        this.progFlow = compile(vsh, `#version 300 es
+        // ── 1. Optical Flow (motion detection from webcam frame delta) ──
+        this.progFlow = this._compile(VERT, `#version 300 es
             precision highp float;
             uniform sampler2D u_curr;
             uniform sampler2D u_prev;
             uniform float u_threshold;
             uniform float u_strength;
             in vec2 v_uv;
-            out vec4 outColor;
+            out vec4 fragColor;
 
             void main() {
+                vec2 texel = 1.0 / vec2(textureSize(u_curr, 0));
                 vec4 curr = texture(u_curr, v_uv);
                 vec4 prev = texture(u_prev, v_uv);
-                
-                // Simple intensity-based optical flow
-                float diff = length(curr.rgb - prev.rgb);
-                vec2 flow = vec2(0.0);
-                
-                if (diff > u_threshold) {
-                    // Sample neighbors to find motion direction
-                    float offset = 1.0 / 512.0;
-                    float nx = length(texture(u_curr, v_uv + vec2(offset, 0.0)).rgb - prev.rgb);
-                    float ny = length(texture(u_curr, v_uv + vec2(0.0, offset)).rgb - prev.rgb);
-                    flow = vec2(nx - diff, ny - diff) * u_strength;
-                }
-                
-                outColor = vec4(flow, diff, 1.0);
-            }
-        `, "OpticalFlow");
 
-        // --- 2. Advection Pass ---
-        this.progAdvect = compile(vsh, `#version 300 es
+                float lum_curr = dot(curr.rgb, vec3(0.299, 0.587, 0.114));
+                float lum_prev = dot(prev.rgb, vec3(0.299, 0.587, 0.114));
+                float diff = lum_curr - lum_prev;
+
+                // Horn-Schunck-inspired spatial gradient
+                float dx = dot(texture(u_curr, v_uv + vec2(texel.x, 0.0)).rgb - 
+                               texture(u_curr, v_uv - vec2(texel.x, 0.0)).rgb, vec3(0.333));
+                float dy = dot(texture(u_curr, v_uv + vec2(0.0, texel.y)).rgb - 
+                               texture(u_curr, v_uv - vec2(0.0, texel.y)).rgb, vec3(0.333));
+
+                float mag = sqrt(dx * dx + dy * dy) + 0.001;
+                vec2 flow = vec2(0.0);
+                float absDiff = abs(diff);
+                if (absDiff > u_threshold) {
+                    flow = -vec2(dx, dy) * (diff / mag) * u_strength;
+                }
+
+                // Pack: rg = velocity, b = motion magnitude
+                fragColor = vec4(flow, absDiff, 1.0);
+            }
+        `, 'OpticalFlow');
+
+        // ── 2. Advection (backtrace particle positions) ──
+        this.progAdvect = this._compile(VERT, `#version 300 es
             precision highp float;
             uniform sampler2D u_velocity;
             uniform sampler2D u_source;
             uniform float u_dt;
             uniform float u_dissipation;
             in vec2 v_uv;
-            out vec4 outColor;
+            out vec4 fragColor;
 
             void main() {
                 vec2 vel = texture(u_velocity, v_uv).xy;
-                vec2 coord = v_uv - u_dt * vel;
-                outColor = texture(u_source, coord) * u_dissipation;
+                // Backtrace: sample from where fluid came from
+                vec2 pos = v_uv - vel * u_dt;
+                pos = clamp(pos, 0.0, 1.0);
+                fragColor = texture(u_source, pos) * u_dissipation;
             }
-        `, "Advect");
+        `, 'Advect');
 
-        // --- 3. Divergence Pass ---
-        this.progDiverge = compile(vsh, `#version 300 es
+        // ── 3. Divergence ──
+        this.progDivergence = this._compile(VERT, `#version 300 es
             precision highp float;
             uniform sampler2D u_velocity;
             in vec2 v_uv;
-            out vec4 outColor;
+            out vec4 fragColor;
 
             void main() {
-                float h = 1.0 / 512.0;
-                float vL = texture(u_velocity, v_uv - vec2(h, 0)).x;
-                float vR = texture(u_velocity, v_uv + vec2(h, 0)).x;
-                float vB = texture(u_velocity, v_uv - vec2(0, h)).y;
-                float vT = texture(u_velocity, v_uv + vec2(0, h)).y;
-                
+                vec2 h = 1.0 / vec2(textureSize(u_velocity, 0));
+                float vL = texture(u_velocity, v_uv - vec2(h.x, 0.0)).x;
+                float vR = texture(u_velocity, v_uv + vec2(h.x, 0.0)).x;
+                float vB = texture(u_velocity, v_uv - vec2(0.0, h.y)).y;
+                float vT = texture(u_velocity, v_uv + vec2(0.0, h.y)).y;
                 float div = 0.5 * (vR - vL + vT - vB);
-                outColor = vec4(div, 0, 0, 1);
+                fragColor = vec4(div, 0.0, 0.0, 1.0);
             }
-        `, "Diverge");
+        `, 'Divergence');
 
-        // --- 4. Pressure (Jacobi) Pass ---
-        this.progPressure = compile(vsh, `#version 300 es
+        // ── 4. Pressure (Jacobi iteration) ──
+        this.progPressure = this._compile(VERT, `#version 300 es
             precision highp float;
             uniform sampler2D u_pressure;
             uniform sampler2D u_divergence;
             in vec2 v_uv;
-            out vec4 outColor;
+            out vec4 fragColor;
 
             void main() {
-                float h = 1.0 / 512.0;
-                float pL = texture(u_pressure, v_uv - vec2(h, 0)).x;
-                float pR = texture(u_pressure, v_uv + vec2(h, 0)).x;
-                float pB = texture(u_pressure, v_uv - vec2(0, h)).x;
-                float pT = texture(u_pressure, v_uv + vec2(0, h)).x;
+                vec2 h = 1.0 / vec2(textureSize(u_pressure, 0));
+                float pL = texture(u_pressure, v_uv - vec2(h.x, 0.0)).x;
+                float pR = texture(u_pressure, v_uv + vec2(h.x, 0.0)).x;
+                float pB = texture(u_pressure, v_uv - vec2(0.0, h.y)).x;
+                float pT = texture(u_pressure, v_uv + vec2(0.0, h.y)).x;
                 float div = texture(u_divergence, v_uv).x;
-                
-                float p = 0.25 * (pL + pR + pB + pT - div);
-                outColor = vec4(p, 0, 0, 1);
+                float p = (pL + pR + pB + pT - div) * 0.25;
+                fragColor = vec4(p, 0.0, 0.0, 1.0);
             }
-        `, "Pressure");
+        `, 'Pressure');
 
-        // --- 5. Project Pass ---
-        this.progProject = compile(vsh, `#version 300 es
+        // ── 5. Gradient Subtract (make velocity divergence-free) ──
+        this.progProject = this._compile(VERT, `#version 300 es
             precision highp float;
             uniform sampler2D u_velocity;
             uniform sampler2D u_pressure;
             in vec2 v_uv;
-            out vec4 outColor;
+            out vec4 fragColor;
 
             void main() {
-                float h = 1.0 / 512.0;
-                float pL = texture(u_pressure, v_uv - vec2(h, 0)).x;
-                float pR = texture(u_pressure, v_uv + vec2(h, 0)).x;
-                float pB = texture(u_pressure, v_uv - vec2(0, h)).x;
-                float pT = texture(u_pressure, v_uv + vec2(0, h)).x;
-                
+                vec2 h = 1.0 / vec2(textureSize(u_pressure, 0));
+                float pL = texture(u_pressure, v_uv - vec2(h.x, 0.0)).x;
+                float pR = texture(u_pressure, v_uv + vec2(h.x, 0.0)).x;
+                float pB = texture(u_pressure, v_uv - vec2(0.0, h.y)).x;
+                float pT = texture(u_pressure, v_uv + vec2(0.0, h.y)).x;
                 vec2 vel = texture(u_velocity, v_uv).xy;
                 vel -= 0.5 * vec2(pR - pL, pT - pB);
-                outColor = vec4(vel, 0, 1);
+                fragColor = vec4(vel, 0.0, 1.0);
             }
-        `, "Project");
+        `, 'Project');
 
-        // --- Add Pass (Splat accumulation) ---
-        this.progAdd = compile(vsh, `#version 300 es
+        // ── 6. Splat (inject velocity / dye into field) ──
+        this.progSplat = this._compile(VERT, `#version 300 es
             precision highp float;
             uniform sampler2D u_base;
-            uniform sampler2D u_add;
+            uniform sampler2D u_flow;
             uniform float u_scale;
+            uniform float u_motionThresh;
             in vec2 v_uv;
-            out vec4 outColor;
+            out vec4 fragColor;
 
             void main() {
-                outColor = texture(u_base, v_uv) + texture(u_add, v_uv) * u_scale;
+                vec4 base = texture(u_base, v_uv);
+                vec4 flow = texture(u_flow, v_uv);
+                // Only inject where there is sufficient motion
+                float motion = flow.b;
+                float mask = smoothstep(u_motionThresh, u_motionThresh + 0.05, motion);
+                fragColor = base + vec4(flow.xy * mask * u_scale, motion * mask * u_scale, 0.0);
             }
-        `, "Add");
+        `, 'Splat');
 
-        // --- 6. Render Pass (Thermal) ---
-        this.progRender = compile(vsh, `#version 300 es
+        // ── 7. Composite Render (webcam + fluid overlay) ──
+        this.progRender = this._compile(VERT, `#version 300 es
             precision highp float;
-            uniform sampler2D u_density;
-            uniform float u_gain;
-            uniform float u_mix;
+            uniform sampler2D u_webcam;      // Live webcam feed
+            uniform sampler2D u_density;     // Fluid density field
+            uniform float u_gain;            // Fluid brightness multiplier
+            uniform float u_mix;             // Fluid overlay strength (0-1)
+            uniform float u_webcamAlpha;     // Webcam visibility (1=full)
             in vec2 v_uv;
-            out vec4 outColor;
+            out vec4 fragColor;
 
-            vec3 thermal(float t) {
-                // Safety-Core Thermal: Black -> Red -> Orange -> White
-                t = clamp(t * u_gain, 0.0, 1.0);
-                vec3 c1 = vec3(0.0, 0.0, 0.0);
-                vec3 c2 = vec3(0.5, 0.0, 0.0);
-                vec3 c3 = vec3(1.0, 0.4, 0.0);
+            // Thermal color mapping: dark → red → orange → white
+            vec3 thermalRamp(float t) {
+                t = clamp(t, 0.0, 1.0);
+                vec3 c0 = vec3(0.0, 0.0, 0.0);
+                vec3 c1 = vec3(0.6, 0.0, 0.1);
+                vec3 c2 = vec3(1.0, 0.35, 0.0);
+                vec3 c3 = vec3(1.0, 0.85, 0.2);
                 vec3 c4 = vec3(1.0, 1.0, 1.0);
-                
-                if (t < 0.33) return mix(c1, c2, t * 3.0);
-                if (t < 0.66) return mix(c2, c3, (t - 0.33) * 3.0);
-                return mix(c3, c4, (t - 0.66) * 3.0);
+                if (t < 0.25) return mix(c0, c1, t * 4.0);
+                if (t < 0.5)  return mix(c1, c2, (t - 0.25) * 4.0);
+                if (t < 0.75) return mix(c2, c3, (t - 0.5)  * 4.0);
+                return mix(c3, c4, (t - 0.75) * 4.0);
+            }
+
+            // Electric plasma color: cyan → magenta → yellow
+            vec3 plasmaRamp(float t) {
+                t = clamp(t, 0.0, 1.0);
+                float h = t * 2.5; // wrap hue through colors
+                vec3 col;
+                col.r = 0.5 + 0.5 * sin(h * 3.14159 + 0.0);
+                col.g = 0.5 + 0.5 * sin(h * 3.14159 + 2.094);
+                col.b = 0.5 + 0.5 * sin(h * 3.14159 + 4.189);
+                return col * col; // gamma-like boost
             }
 
             void main() {
-                float d = texture(u_density, v_uv).z; // density stored in .z from Flow pass
-                outColor = vec4(thermal(d), d * u_mix);
+                // Webcam passthrough (flip V because webcam UV is inverted)
+                vec2 camUV = vec2(v_uv.x, 1.0 - v_uv.y);
+                vec4 cam = texture(u_webcam, camUV);
+
+                // Density field (rg = velocity, b = dye magnitude)
+                vec4 den = texture(u_density, v_uv);
+                float dye = clamp(den.b * u_gain, 0.0, 1.0);
+                float velMag = clamp(length(den.xy) * u_gain * 0.5, 0.0, 1.0);
+                float combined = max(dye, velMag);
+
+                // Color: thermal ramp blended with plasma based on velocity direction
+                vec3 thermal = thermalRamp(dye);
+                vec3 plasma   = plasmaRamp(velMag);
+                vec3 fluidCol = mix(thermal, plasma, velMag * 0.5);
+
+                // Composite: show webcam underneath, overlay fluid where it's bright
+                vec3 finalCol = cam.rgb * u_webcamAlpha;
+                finalCol = mix(finalCol, fluidCol, combined * u_mix);
+
+                fragColor = vec4(clamp(finalCol, 0.0, 1.0), 1.0);
             }
-        `, "Render");
-    }
+        `, 'Render');
 
-    initBuffers() {
-        const gl = this.gl;
-        this.quadBuffer = gl.createBuffer();
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.quadBuffer);
-        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
-    }
-
-    initFBOs() {
-        const gl = this.gl;
-        const createFBO = () => {
-            const tex = gl.createTexture();
-            gl.bindTexture(gl.TEXTURE_2D, tex);
-            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, this.width, this.height, 0, gl.RGBA, gl.FLOAT, null);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-            const fbo = gl.createFramebuffer();
-            gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
-            gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
-            return { fbo, tex };
-        };
-
-        this.fboVelA = createFBO();
-        this.fboVelB = createFBO();
-        this.fboDenA = createFBO();
-        this.fboDenB = createFBO();
-        this.fboPressureA = createFBO();
-        this.fboPressureB = createFBO();
-        this.fboDiverge = createFBO();
-        
-        // For Optical Flow tracking
-        this.fboHistory = createFBO();
-        this.fboFlow = createFBO();
-    }
-
-    update(webcamTex, params, dt = 0.016) {
-        const gl = this.gl;
-        gl.viewport(0, 0, this.width, this.height);
-        
-        // 1. Compute Optical Flow
-        gl.bindFramebuffer(gl.FRAMEBUFFER, this.fboFlow.fbo);
-        gl.useProgram(this.progFlow);
-        gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, webcamTex);
-        gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, this.fboHistory.tex);
-        gl.uniform1i(gl.getUniformLocation(this.progFlow, "u_curr"), 0);
-        gl.uniform1i(gl.getUniformLocation(this.progFlow, "u_prev"), 1);
-        gl.uniform1i(gl.getUniformLocation(this.progFlow, "u_threshold"), 0.01);
-        gl.uniform1f(gl.getUniformLocation(this.progFlow, "u_strength"), params.opticalGain || 1.0);
-        this.drawQuad(this.progFlow);
-
-        // 2. Add Flow -> Density
-        this.swapDen();
-        gl.bindFramebuffer(gl.FRAMEBUFFER, this.fboDenB.fbo);
-        gl.useProgram(this.progAdd);
-        gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.fboDenA.tex);
-        gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, this.fboFlow.tex);
-        gl.uniform1i(gl.getUniformLocation(this.progAdd, "u_base"), 0);
-        gl.uniform1i(gl.getUniformLocation(this.progAdd, "u_add"), 1);
-        gl.uniform1f(gl.getUniformLocation(this.progAdd, "u_scale"), 1.0);
-        this.drawQuad(this.progAdd);
-
-        // 3. Add Flow -> Velocity
-        this.swapVel();
-        gl.bindFramebuffer(gl.FRAMEBUFFER, this.fboVelB.fbo);
-        gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.fboVelA.tex);
-        // TEXTURE1 is still fboFlow.tex
-        this.drawQuad(this.progAdd);
-
-        // Update History
-        gl.bindFramebuffer(gl.FRAMEBUFFER, this.fboHistory.fbo);
-
-        gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, webcamTex);
-        this.blit(webcamTex);
-
-        // Step 1: Advection (Velocity)
-        this.swapVel();
-        gl.bindFramebuffer(gl.FRAMEBUFFER, this.fboVelB.fbo);
-        gl.useProgram(this.progAdvect);
-        gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.fboVelA.tex);
-        gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, this.fboVelA.tex);
-        gl.uniform1i(gl.getUniformLocation(this.progAdvect, "u_velocity"), 0);
-        gl.uniform1i(gl.getUniformLocation(this.progAdvect, "u_source"), 1);
-        gl.uniform1f(gl.getUniformLocation(this.progAdvect, "u_dt"), dt);
-        gl.uniform1f(gl.getUniformLocation(this.progAdvect, "u_dissipation"), params.viscosity || 0.99);
-        this.drawQuad(this.progAdvect);
-
-        // Step 2: Advection (Density)
-        this.swapDen();
-        gl.bindFramebuffer(gl.FRAMEBUFFER, this.fboDenB.fbo);
-        gl.useProgram(this.progAdvect);
-        gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.fboVelB.tex);
-        gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, this.fboDenA.tex);
-        gl.uniform1i(gl.getUniformLocation(this.progAdvect, "u_velocity"), 0);
-        gl.uniform1i(gl.getUniformLocation(this.progAdvect, "u_source"), 1);
-        gl.uniform1f(gl.getUniformLocation(this.progAdvect, "u_dt"), dt);
-        gl.uniform1f(gl.getUniformLocation(this.progAdvect, "u_dissipation"), params.dissipation || 0.98);
-        this.drawQuad(this.progAdvect);
-
-        // Step 3: Divergence
-        gl.bindFramebuffer(gl.FRAMEBUFFER, this.fboDiverge.fbo);
-        gl.useProgram(this.progDiverge);
-        gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.fboVelB.tex);
-        gl.uniform1i(gl.getUniformLocation(this.progDiverge, "u_velocity"), 0);
-        this.drawQuad(this.progDiverge);
-
-        // Step 4: Pressure (Jacobi)
-        gl.bindFramebuffer(gl.FRAMEBUFFER, this.fboPressureA.fbo);
-        gl.clear(gl.COLOR_BUFFER_BIT);
-        gl.useProgram(this.progPressure);
-        gl.uniform1i(gl.getUniformLocation(this.progPressure, "u_divergence"), 1);
-        gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, this.fboDiverge.tex);
-        for(let i=0; i<20; i++) {
-            gl.bindFramebuffer(gl.FRAMEBUFFER, this.fboPressureB.fbo);
-            gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.fboPressureA.tex);
-            gl.uniform1i(gl.getUniformLocation(this.progPressure, "u_pressure"), 0);
-            this.drawQuad(this.progPressure);
-            this.swapPressure();
-        }
-
-        // Step 5: Project
-        gl.bindFramebuffer(gl.FRAMEBUFFER, this.fboVelA.fbo); // Output to VelA
-        gl.useProgram(this.progProject);
-        gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.fboVelB.tex);
-        gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, this.fboPressureA.tex);
-        gl.uniform1i(gl.getUniformLocation(this.progProject, "u_velocity"), 0);
-        gl.uniform1i(gl.getUniformLocation(this.progProject, "u_pressure"), 1);
-        this.drawQuad(this.progProject);
-        this.swapVel(); // Keep VelB as the primary
-    }
-
-    render(gain = 1.0, mix = 0.5) {
-        const gl = this.gl;
-        gl.useProgram(this.progRender);
-        gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.fboDenB.tex);
-        gl.uniform1i(gl.getUniformLocation(this.progRender, "u_density"), 0);
-        gl.uniform1f(gl.getUniformLocation(this.progRender, "u_gain"), gain);
-        gl.uniform1f(gl.getUniformLocation(this.progRender, "u_mix"), mix);
-        this.drawQuad(this.progRender);
-    }
-
-    drawQuad(prog) {
-        const gl = this.gl;
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.quadBuffer);
-        const posLoc = gl.getAttribLocation(prog, "a_position");
-        gl.enableVertexAttribArray(posLoc);
-        gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
-        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-    }
-
-    blit(tex) {
-        // Simple internal blit helper
-        const gl = this.gl;
-        if (!this._blitProg) {
-            this._blitProg = this.initSimpleBlit();
-        }
-        gl.useProgram(this._blitProg);
-        gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, tex);
-        gl.uniform1i(gl.getUniformLocation(this._blitProg, "u_tex"), 0);
-        this.drawQuad(this._blitProg);
-    }
-
-    initSimpleBlit() {
-        const gl = this.gl;
-        const vs = `#version 300 es
-            in vec2 a_position;
-            out vec2 v_uv;
-            void main() { v_uv = a_position * 0.5 + 0.5; gl_Position = vec4(a_position, 0.0, 1.0); }
-        `;
-        const fs = `#version 300 es
+        // ── 8. Copy/Blit ──
+        this.progBlit = this._compile(VERT, `#version 300 es
             precision highp float;
             uniform sampler2D u_tex;
             in vec2 v_uv;
-            out vec4 color;
-            void main() { color = texture(u_tex, v_uv); }
-        `;
-        const vShader = gl.createShader(gl.VERTEX_SHADER);
-        gl.shaderSource(vShader, vs); gl.compileShader(vShader);
-        const fShader = gl.createShader(gl.FRAGMENT_SHADER);
-        gl.shaderSource(fShader, fs); gl.compileShader(fShader);
-        const prog = gl.createProgram();
-        gl.attachShader(prog, vShader); gl.attachShader(prog, fShader);
-        gl.linkProgram(prog);
-        return prog;
+            out vec4 fragColor;
+            void main() {
+                fragColor = texture(u_tex, v_uv);
+            }
+        `, 'Blit');
     }
 
-    swapVel() { let tmp = this.fboVelA; this.fboVelA = this.fboVelB; this.fboVelB = tmp; }
-    swapDen() { let tmp = this.fboDenA; this.fboDenA = this.fboDenB; this.fboDenB = tmp; }
-    swapPressure() { let tmp = this.fboPressureA; this.fboPressureA = this.fboPressureB; this.fboPressureB = tmp; }
+    _initBuffers() {
+        const gl = this.gl;
+        this.quadBuf = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.quadBuf);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+    }
+
+    _createFBO(w, h, internalFormat, format, type) {
+        const gl = this.gl;
+        const tex = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, tex);
+        gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, w, h, 0, format, type, null);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        const fbo = gl.createFramebuffer();
+        gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+        const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
+        if (status !== gl.FRAMEBUFFER_COMPLETE) {
+            console.warn('[FluidEngine] FBO incomplete:', status);
+        }
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        return { fbo, tex, w, h };
+    }
+
+    _initFBOs() {
+        const gl = this.gl;
+        const W = this.SIM_W, H = this.SIM_H;
+
+        // Try RGBA32F first, fall back to RGBA16F
+        let intFmt = gl.RGBA32F;
+        let type = gl.FLOAT;
+        let extCBF = gl.getExtension('EXT_color_buffer_float');
+        if (!extCBF) {
+            intFmt = gl.RGBA16F;
+            type = gl.HALF_FLOAT;
+            gl.getExtension('EXT_color_buffer_half_float');
+        }
+
+        this._floatType = type;
+        this._intFmt = intFmt;
+
+        const mk = () => this._createFBO(W, H, intFmt, gl.RGBA, type);
+
+        // Velocity ping-pong
+        this.velA = mk(); this.velB = mk();
+        // Density ping-pong (dye field driven by motion)
+        this.denA = mk(); this.denB = mk();
+        // Pressure ping-pong
+        this.prsA = mk(); this.prsB = mk();
+        // Divergence scratch
+        this.divFBO = mk();
+        // Optical flow output
+        this.flowFBO = mk();
+        // History frame (previous webcam frame for optical flow)
+        // Use RGBA + UNSIGNED_BYTE for webcam history (can't float-upload a video texture)
+        this.histFBO = this._createFBO(W, H, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE);
+    }
+
+    // ── Internal fullscreen draw ──────────────────────────────────────
+    _drawQuad(prog) {
+        const gl = this.gl;
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.quadBuf);
+        const loc = gl.getAttribLocation(prog, 'a_pos');
+        if (loc < 0) return; // attrib not found
+        gl.enableVertexAttribArray(loc);
+        gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    }
+
+    _bindTex(unit, tex) {
+        const gl = this.gl;
+        gl.activeTexture(gl.TEXTURE0 + unit);
+        gl.bindTexture(gl.TEXTURE_2D, tex);
+    }
+
+    _setFBO(fbo, w, h) {
+        const gl = this.gl;
+        gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+        gl.viewport(0, 0, w, h);
+    }
+
+    _swap(a, b) { return [b, a]; }
+
+    // ── Blit one texture to a framebuffer ────────────────────────────
+    _blit(srcTex, destFBO, w, h) {
+        const gl = this.gl;
+        this._setFBO(destFBO, w, h);
+        gl.useProgram(this.progBlit);
+        this._bindTex(0, srcTex);
+        gl.uniform1i(gl.getUniformLocation(this.progBlit, 'u_tex'), 0);
+        this._drawQuad(this.progBlit);
+    }
+
+    // ── Copy webcam texture to low-res history FBO ───────────────────
+    _captureHistory(webcamTex) {
+        const gl = this.gl;
+        this._setFBO(this.histFBO.fbo, this.SIM_W, this.SIM_H);
+        gl.useProgram(this.progBlit);
+        this._bindTex(0, webcamTex);
+        gl.uniform1i(gl.getUniformLocation(this.progBlit, 'u_tex'), 0);
+        this._drawQuad(this.progBlit);
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // PUBLIC: update(webcamTex, params, dt)
+    //   Called every frame by CanvasEngine before rendering.
+    //   webcamTex = GL texture ID of the current webcam frame.
+    //   params    = { viscosity, dissipation, opticalGain, audioDrive, gain, mix }
+    //   dt        = frame delta in seconds (typically 0.016)
+    // ─────────────────────────────────────────────────────────────────
+    update(webcamTex, params, dt = 0.016) {
+        const gl = this.gl;
+        if (!this.velA) return; // not initialised
+
+        // Merge params
+        if (params) Object.assign(this.params, params);
+        const p = this.params;
+
+        const W = this.SIM_W, H = this.SIM_H;
+
+        // ── Pass 1: Optical Flow ──────────────────────────────────────
+        this._setFBO(this.flowFBO.fbo, W, H);
+        gl.useProgram(this.progFlow);
+        this._bindTex(0, webcamTex);            // current frame
+        this._bindTex(1, this.histFBO.tex);     // previous frame
+        gl.uniform1i(gl.getUniformLocation(this.progFlow, 'u_curr'), 0);
+        gl.uniform1i(gl.getUniformLocation(this.progFlow, 'u_prev'), 1);
+        gl.uniform1f(gl.getUniformLocation(this.progFlow, 'u_threshold'), 0.01);
+        gl.uniform1f(gl.getUniformLocation(this.progFlow, 'u_strength'), p.opticalGain || 2.0);
+        this._drawQuad(this.progFlow);
+
+        // ── Pass 2: Splat flow into velocity & density ────────────────
+        // Velocity splat
+        this._setFBO(this.velB.fbo, W, H);
+        gl.useProgram(this.progSplat);
+        this._bindTex(0, this.velA.tex);
+        this._bindTex(1, this.flowFBO.tex);
+        gl.uniform1i(gl.getUniformLocation(this.progSplat, 'u_base'), 0);
+        gl.uniform1i(gl.getUniformLocation(this.progSplat, 'u_flow'), 1);
+        gl.uniform1f(gl.getUniformLocation(this.progSplat, 'u_scale'), 3.0);
+        gl.uniform1f(gl.getUniformLocation(this.progSplat, 'u_motionThresh'), 0.008);
+        this._drawQuad(this.progSplat);
+        [this.velA, this.velB] = this._swap(this.velA, this.velB);
+
+        // Density splat
+        this._setFBO(this.denB.fbo, W, H);
+        gl.useProgram(this.progSplat);
+        this._bindTex(0, this.denA.tex);
+        this._bindTex(1, this.flowFBO.tex);
+        gl.uniform1i(gl.getUniformLocation(this.progSplat, 'u_base'), 0);
+        gl.uniform1i(gl.getUniformLocation(this.progSplat, 'u_flow'), 1);
+        gl.uniform1f(gl.getUniformLocation(this.progSplat, 'u_scale'), 5.0);
+        gl.uniform1f(gl.getUniformLocation(this.progSplat, 'u_motionThresh'), 0.008);
+        this._drawQuad(this.progSplat);
+        [this.denA, this.denB] = this._swap(this.denA, this.denB);
+
+        // ── Pass 3: Advect velocity ───────────────────────────────────
+        this._setFBO(this.velB.fbo, W, H);
+        gl.useProgram(this.progAdvect);
+        this._bindTex(0, this.velA.tex);  // velocity field
+        this._bindTex(1, this.velA.tex);  // source = velocity itself
+        gl.uniform1i(gl.getUniformLocation(this.progAdvect, 'u_velocity'), 0);
+        gl.uniform1i(gl.getUniformLocation(this.progAdvect, 'u_source'), 1);
+        gl.uniform1f(gl.getUniformLocation(this.progAdvect, 'u_dt'), dt);
+        gl.uniform1f(gl.getUniformLocation(this.progAdvect, 'u_dissipation'), p.viscosity || 0.99);
+        this._drawQuad(this.progAdvect);
+        [this.velA, this.velB] = this._swap(this.velA, this.velB);
+
+        // ── Pass 4: Advect density ────────────────────────────────────
+        this._setFBO(this.denB.fbo, W, H);
+        gl.useProgram(this.progAdvect);
+        this._bindTex(0, this.velA.tex);  // use advected velocity
+        this._bindTex(1, this.denA.tex);  // source = density
+        gl.uniform1i(gl.getUniformLocation(this.progAdvect, 'u_velocity'), 0);
+        gl.uniform1i(gl.getUniformLocation(this.progAdvect, 'u_source'), 1);
+        gl.uniform1f(gl.getUniformLocation(this.progAdvect, 'u_dt'), dt);
+        gl.uniform1f(gl.getUniformLocation(this.progAdvect, 'u_dissipation'), p.dissipation || 0.97);
+        this._drawQuad(this.progAdvect);
+        [this.denA, this.denB] = this._swap(this.denA, this.denB);
+
+        // ── Pass 5: Compute divergence ────────────────────────────────
+        this._setFBO(this.divFBO.fbo, W, H);
+        gl.useProgram(this.progDivergence);
+        this._bindTex(0, this.velA.tex);
+        gl.uniform1i(gl.getUniformLocation(this.progDivergence, 'u_velocity'), 0);
+        this._drawQuad(this.progDivergence);
+
+        // ── Pass 6: Jacobi pressure solve ─────────────────────────────
+        // Clear pressure field
+        this._setFBO(this.prsA.fbo, W, H);
+        gl.clearColor(0, 0, 0, 1);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+
+        gl.useProgram(this.progPressure);
+        gl.uniform1i(gl.getUniformLocation(this.progPressure, 'u_divergence'), 1);
+        this._bindTex(1, this.divFBO.tex);
+
+        for (let i = 0; i < this.JACOBI_ITER; i++) {
+            this._setFBO(this.prsB.fbo, W, H);
+            this._bindTex(0, this.prsA.tex);
+            gl.uniform1i(gl.getUniformLocation(this.progPressure, 'u_pressure'), 0);
+            this._drawQuad(this.progPressure);
+            [this.prsA, this.prsB] = this._swap(this.prsA, this.prsB);
+        }
+
+        // ── Pass 7: Subtract pressure gradient ───────────────────────
+        this._setFBO(this.velB.fbo, W, H);
+        gl.useProgram(this.progProject);
+        this._bindTex(0, this.velA.tex);
+        this._bindTex(1, this.prsA.tex);
+        gl.uniform1i(gl.getUniformLocation(this.progProject, 'u_velocity'), 0);
+        gl.uniform1i(gl.getUniformLocation(this.progProject, 'u_pressure'), 1);
+        this._drawQuad(this.progProject);
+        [this.velA, this.velB] = this._swap(this.velA, this.velB);
+
+        // ── Update History (copy webcam to prev-frame buffer) ─────────
+        this._captureHistory(webcamTex);
+
+        // -- Store current webcam texture for render pass ---
+        this._webcamTex = webcamTex;
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // PUBLIC: render(gain, mix)
+    //   Called by CanvasEngine to composite fluid over webcam.
+    //   Renders to WHATEVER framebuffer is currently bound (renderTarget).
+    // ─────────────────────────────────────────────────────────────────
+    render(gain, mix) {
+        const gl = this.gl;
+        if (!this.velA || !this.denA) return;
+
+        const p = this.params;
+        const g = gain !== undefined ? gain : (p.gain || 1.5);
+        const m = mix  !== undefined ? mix  : (p.mix  || 0.7);
+
+        // Note: we DO NOT bind an FBO here. CanvasEngine sets up the
+        // correct destination FBO (renderTarget) before calling render().
+        gl.useProgram(this.progRender);
+
+        this._bindTex(0, this._webcamTex || this.histFBO.tex);  // webcam
+        this._bindTex(1, this.denA.tex);                         // density field
+
+        gl.uniform1i(gl.getUniformLocation(this.progRender, 'u_webcam'),  0);
+        gl.uniform1i(gl.getUniformLocation(this.progRender, 'u_density'), 1);
+        gl.uniform1f(gl.getUniformLocation(this.progRender, 'u_gain'), g);
+        gl.uniform1f(gl.getUniformLocation(this.progRender, 'u_mix'),  m);
+        gl.uniform1f(gl.getUniformLocation(this.progRender, 'u_webcamAlpha'), p.webcamAlpha || 1.0);
+
+        this._drawQuad(this.progRender);
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // PUBLIC: dispose()
+    //   Frees all GPU resources.
+    // ─────────────────────────────────────────────────────────────────
+    dispose() {
+        const gl = this.gl;
+        const fbos = [this.velA, this.velB, this.denA, this.denB,
+                      this.prsA, this.prsB, this.divFBO, this.flowFBO, this.histFBO];
+        fbos.forEach(f => {
+            if (f) { gl.deleteFramebuffer(f.fbo); gl.deleteTexture(f.tex); }
+        });
+        const progs = [this.progFlow, this.progAdvect, this.progDivergence,
+                       this.progPressure, this.progProject, this.progSplat,
+                       this.progRender, this.progBlit];
+        progs.forEach(p => { if (p) gl.deleteProgram(p); });
+        gl.deleteBuffer(this.quadBuf);
+        console.log('[FluidEngine] Disposed.');
+    }
 }
 
 window.FluidEngine = FluidEngine;
