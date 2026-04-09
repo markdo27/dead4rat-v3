@@ -44,50 +44,7 @@ const EFFECT_CATEGORIES = [
 const BLEND_MODE_NAMES = ['NORMAL', 'ADD', 'MULTIPLY', 'SCREEN', 'OVERLAY', 'DIFFER'];
 
 // ── Built-In Starter Presets ─────────────────────────────────────────
-const STARTER_PRESETS = [
-    {
-        id: 'starter_vhs', name: 'VHS RETRO', isStarter: true,
-        settings: (() => {
-            const s = JSON.parse(JSON.stringify(FACTORY_DEFAULTS));
-            s.scanLines.enabled = true; s.scanLines.params.density.value = 0.85; s.scanLines.params.opacity.value = 0.25;
-            s.vhsJitter.enabled = true; s.vhsJitter.params.vertical.value = 2.5; s.vhsJitter.params.horizontal.value = 1.8;
-            s.noise.enabled = true; s.noise.params.amount.value = 0.15;
-            s.colorDistortion.enabled = true; s.colorDistortion.params.saturation.value = 0.7;
-            return s;
-        })(),
-    },
-    {
-        id: 'starter_acid', name: 'ACID DREAM', isStarter: true,
-        settings: (() => {
-            const s = JSON.parse(JSON.stringify(FACTORY_DEFAULTS));
-            s.videoFeedback.enabled = true; s.videoFeedback.params.amount.value = 0.88; s.videoFeedback.params.zoom.value = 1.01; s.videoFeedback.params.rotation.value = 0.5; s.videoFeedback.params.hueShift.value = 8;
-            s.acidMelt.enabled = true; s.acidMelt.params.amount.value = 0.85; s.acidMelt.params.turbulence.value = 0.12;
-            s.chromaDelay.enabled = true; s.chromaDelay.params.amount.value = 0.7;
-            return s;
-        })(),
-    },
-    {
-        id: 'starter_clean', name: 'CLEAN EDGES', isStarter: true,
-        settings: (() => {
-            const s = JSON.parse(JSON.stringify(FACTORY_DEFAULTS));
-            s.edgeDetection.enabled = true; s.edgeDetection.params.threshold.value = 40; s.edgeDetection.params.glow.value = 0.6;
-            s.scanLines.enabled = true; s.scanLines.params.density.value = 0.5; s.scanLines.params.opacity.value = 0.08;
-            s.colorize.enabled = true; s.colorize.params.hue.value = 180; s.colorize.params.strength.value = 0.3;
-            return s;
-        })(),
-    },
-    {
-        id: 'starter_cyber', name: 'CYBER PUNK', isStarter: true,
-        settings: (() => {
-            const s = JSON.parse(JSON.stringify(FACTORY_DEFAULTS));
-            s.rgbShift.enabled = true; s.rgbShift.params.amount.value = 12;
-            s.glitchSlicer.enabled = true; s.glitchSlicer.params.slices.value = 12; s.glitchSlicer.params.offset.value = 60;
-            s.posterize.enabled = true; s.posterize.params.levels.value = 6;
-            s.scanLines.enabled = true; s.scanLines.params.density.value = 0.9; s.scanLines.params.opacity.value = 0.2;
-            return s;
-        })(),
-    },
-];
+const STARTER_PRESETS = [];
 
 const GEN_DEFAULTS = {
     speed:      { name: 'SPEED',      value: 1.0, min: 0,   max: 3,   step: 0.01 },
