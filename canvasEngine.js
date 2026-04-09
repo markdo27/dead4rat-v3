@@ -1253,6 +1253,60 @@ class CanvasEngine {
         this.gl.useProgram(this.program);
         this.getUniformLocations();
         this.blitTexLoc = this.gl.getUniformLocation(this.blitProgram, "u_tex");
+
+        // ── Fluid Bloom Post-Pass Program ────────────────────────────────────
+        // Same algorithm as wfgl/plugins/Bloom.js but compiled in WebGL1 GLSL
+        // (no #version 300 es) so it shares the canvasEngine GL context cleanly.
+        const bloomFs = `
+            precision highp float;
+            varying vec2 v_uv;
+            uniform sampler2D u_tex;
+            uniform vec2 u_resolution;
+            uniform float u_threshold;
+            uniform float u_intensity;
+            uniform float u_radius;
+            uniform float u_mix;
+
+            float luma(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
+
+            void main() {
+                vec4 orig = texture2D(u_tex, v_uv);
+                vec2 px = u_radius / u_resolution;
+
+                // 13-tap gaussian star blur on bright pixels
+                vec3 bloom = vec3(0.0);
+                float wsum = 0.0;
+                for (int x = -2; x <= 2; x++) {
+                    for (int y = -2; y <= 2; y++) {
+                        vec2 off = vec2(float(x), float(y)) * px;
+                        vec3 s = texture2D(u_tex, v_uv + off).rgb;
+                        float bright = max(0.0, luma(s) - u_threshold);
+                        float w = bright * exp(-float(x*x + y*y) * 0.35);
+                        bloom += s * w;
+                        wsum += w;
+                    }
+                }
+                if (wsum > 0.001) bloom /= wsum;
+                bloom *= u_intensity;
+
+                vec3 result = orig.rgb + bloom * u_mix;
+                gl_FragColor = vec4(clamp(result, 0.0, 1.0), 1.0);
+            }
+        `;
+        const bloomVs = this.compileShader(this.gl.VERTEX_SHADER, blitVs); // reuse blit vert
+        const bloomFsc = this.compileShader(this.gl.FRAGMENT_SHADER, bloomFs);
+        this.fluidBloomProgram = this.gl.createProgram();
+        this.gl.attachShader(this.fluidBloomProgram, bloomVs);
+        this.gl.attachShader(this.fluidBloomProgram, bloomFsc);
+        this.gl.linkProgram(this.fluidBloomProgram);
+        this._fluidBloomULoc = {
+            tex:        this.gl.getUniformLocation(this.fluidBloomProgram, 'u_tex'),
+            resolution: this.gl.getUniformLocation(this.fluidBloomProgram, 'u_resolution'),
+            threshold:  this.gl.getUniformLocation(this.fluidBloomProgram, 'u_threshold'),
+            intensity:  this.gl.getUniformLocation(this.fluidBloomProgram, 'u_intensity'),
+            radius:     this.gl.getUniformLocation(this.fluidBloomProgram, 'u_radius'),
+            mix:        this.gl.getUniformLocation(this.fluidBloomProgram, 'u_mix'),
+        };
     }
 
     compileShader(type, source) {
@@ -1412,6 +1466,11 @@ class CanvasEngine {
             const mouse = state.mouse3d || null;
             const audio = { bass: state.bass || 0, mid: state.mid || 0, high: state.high || 0 };
             this.fluidEngine.update(this.videoTex, state.fluidParams, 0.016, mouse, audio);
+
+            // --- Step 1.6: External Splat Sources (blobs / hands / audio transients) ---
+            if (state._fluidSplats && state._fluidSplats.length > 0) {
+                this.fluidEngine.splatPoints(state._fluidSplats);
+            }
         }
 
         // --- Step 2: Bind Feedback Source to TEXTURE1 ---
@@ -1744,6 +1803,41 @@ class CanvasEngine {
             gl.viewport(0, 0, this.canvas.width, this.canvas.height);
             gl.disable(gl.BLEND); // FluidEngine render shader does its own compositing
             this.fluidEngine.render(state.fluidParams.gain, state.fluidParams.mix);
+
+            // --- Step 3.3: Fluid Bloom Post-Pass ---
+            // Applies a single-pass glow on the fluid output using the feedbackTarget as ping-pong.
+            // Borrowed from wfgl/plugins/Bloom.js logic, run inline without ES module overhead.
+            if (this.fluidBloomProgram && state.fluidParams.bloomEnabled) {
+                // Blit renderTarget → feedbackTarget (swap)
+                gl.bindFramebuffer(gl.FRAMEBUFFER, this.feedbackTarget.fbo);
+                gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+                gl.useProgram(this.fluidBloomProgram);
+                gl.activeTexture(gl.TEXTURE0);
+                gl.bindTexture(gl.TEXTURE_2D, this.renderTarget.tex);
+                gl.uniform1i(this._fluidBloomULoc.tex,       0);
+                gl.uniform2f(this._fluidBloomULoc.resolution, this.canvas.width, this.canvas.height);
+                gl.uniform1f(this._fluidBloomULoc.threshold,  state.fluidParams.bloomThreshold || 0.35);
+                gl.uniform1f(this._fluidBloomULoc.intensity,  (state.fluidParams.bloomIntensity || 1.2) * (1.0 + (state.bass || 0) * 0.8));
+                gl.uniform1f(this._fluidBloomULoc.radius,     state.fluidParams.bloomRadius    || 4.0);
+                gl.uniform1f(this._fluidBloomULoc.mix,        state.fluidParams.bloomMix       || 0.6);
+                gl.bindBuffer(gl.ARRAY_BUFFER, this.positionBuffer);
+                const bpLoc = gl.getAttribLocation(this.fluidBloomProgram, 'a_position');
+                gl.enableVertexAttribArray(bpLoc);
+                gl.vertexAttribPointer(bpLoc, 2, gl.FLOAT, false, 0, 0);
+                gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+                // Blit bloomed result back into renderTarget
+                gl.bindFramebuffer(gl.FRAMEBUFFER, this.renderTarget.fbo);
+                gl.useProgram(this.blitProgram);
+                gl.activeTexture(gl.TEXTURE0);
+                gl.bindTexture(gl.TEXTURE_2D, this.feedbackTarget.tex);
+                gl.uniform1i(this.blitTexLoc, 0);
+                gl.bindBuffer(gl.ARRAY_BUFFER, this.positionBuffer);
+                const bpLoc2 = gl.getAttribLocation(this.blitProgram, 'a_position');
+                gl.enableVertexAttribArray(bpLoc2);
+                gl.vertexAttribPointer(bpLoc2, 2, gl.FLOAT, false, 0, 0);
+                gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+            }
         }
 
         // --- Step 4: Blit to Screen ---

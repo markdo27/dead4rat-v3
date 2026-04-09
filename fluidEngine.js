@@ -555,6 +555,34 @@ class FluidEngine {
     }
 
     // ─────────────────────────────────────────────────────────────
+    //  PUBLIC: splatPoints(points)
+    //   Inject multiple force/dye sources in one call.
+    //   points = Array of { x, y, fx, fy, dye, radius }
+    //     x,y     — position in [0,1] UV space
+    //     fx,fy   — velocity force to inject ([-1,1])
+    //     dye     — dye magnitude [0,1]
+    //     radius  — gaussian falloff radius [0.01–0.2]
+    // ─────────────────────────────────────────────────────────────
+    splatPoints(points) {
+        if (!points || points.length === 0 || !this.velA) return;
+        const gl = this.gl;
+        const u = this._u;
+        gl.useProgram(this.progMouse);
+
+        for (const pt of points) {
+            this._fbo(this.velB.fbo, this.W, this.H);
+            this._bindTex(0, this.velA.tex);
+            gl.uniform1i(u.mouse.field, 0);
+            gl.uniform2f(u.mouse.pos,   pt.x,  pt.y);
+            gl.uniform2f(u.mouse.force, pt.fx || 0, pt.fy || 0);
+            gl.uniform1f(u.mouse.dye,   pt.dye || 0.3);
+            gl.uniform1f(u.mouse.radius, pt.radius || 0.05);
+            this._quad(this.progMouse);
+            [this.velA, this.velB] = [this.velB, this.velA];
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────
     //  PUBLIC: render(gain, mix)
     //   Called by CanvasEngine. Renders webcam+fluid to whatever
     //   FBO is currently bound (canvasEngine.renderTarget.fbo).

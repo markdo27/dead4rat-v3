@@ -120,13 +120,19 @@ const globalState = {
     compositeSource: null,
     mouse3d: { x: 0.0, y: 0.0, z: 0.0 },
     fluidParams: {
-        viscosity: 0.99,
-        dissipation: 0.98,
-        opticalGain: 1.0,
-        audioDrive: 0.5,
-        gain: 1.0,
-        mix: 0.5,
-        enabled: false
+        enabled:        false,
+        viscosity:      0.995,
+        dissipation:    0.97,
+        opticalGain:    3.0,
+        audioDrive:     1.0,
+        gain:           2.0,
+        mix:            0.75,
+        // Bloom post-pass
+        bloomEnabled:   false,
+        bloomThreshold: 0.35,
+        bloomIntensity: 1.5,
+        bloomRadius:    5.0,
+        bloomMix:       0.6,
     }
 };
 
@@ -723,6 +729,62 @@ function Dead4RatApp() {
                 blobTracker.process(globalState.compositeSource);
                 // Update live blob count display (throttled to avoid excess re-renders)
                 if (frames % 6 === 0) setBlobCount(blobTracker.blobCount);
+            }
+
+            // ── Fluid Splat Sources → globalState ────────────────────────
+            // Aggregate all external splat sources so canvasEngine can forward
+            // them to fluidEngine.splatPoints() after the physics step.
+            if (globalState.fluidParams && globalState.fluidParams.enabled) {
+                const splats = [];
+
+                // 1. BlobTracker blobs → velocity splats at centroid of each blob
+                if (blobTracker && blobTracker.enabled && blobTracker.blobs.length > 0) {
+                    blobTracker.blobs.slice(0, 4).forEach((blob, i) => {
+                        const area = Math.min(1, blob.area / 400);
+                        splats.push({
+                            x: blob.cx,
+                            y: 1.0 - blob.cy, // flip Y: blob coords are top-down
+                            fx: (blob.cx - 0.5) * 0.1,
+                            fy: -(blob.cy - 0.5) * 0.1,
+                            dye: area * 0.5,
+                            radius: 0.04 + area * 0.06,
+                        });
+                    });
+                }
+
+                // 2. HumanEngine hand tip → precision splat at index finger tip
+                if (humanEngine && humanEngine.isRunning && humanEngine.handLeft || humanEngine && humanEngine.isRunning && humanEngine.handRight) {
+                    const hd = globalState.human;
+                    if (hd) {
+                        splats.push({
+                            x: hd.handTipX,
+                            y: 1.0 - hd.handTipY,
+                            fx: 0, fy: 0,
+                            dye: 0.6,
+                            radius: 0.035,
+                        });
+                    }
+                }
+
+                // 3. Audio transient → explosive radial burst at screen center
+                if (globalState.transient) {
+                    const bass = globalState.bass || 0;
+                    const drive = (globalState.fluidParams.audioDrive || 1.0);
+                    // Random burst angle for visual variety
+                    const angle = (Math.random() * Math.PI * 2);
+                    splats.push({
+                        x: 0.4 + Math.random() * 0.2,
+                        y: 0.4 + Math.random() * 0.2,
+                        fx: Math.cos(angle) * bass * drive * 0.3,
+                        fy: Math.sin(angle) * bass * drive * 0.3,
+                        dye: Math.min(1, bass * drive * 0.8 + 0.2),
+                        radius: 0.06 + bass * drive * 0.08,
+                    });
+                }
+
+                globalState._fluidSplats = splats;
+            } else {
+                globalState._fluidSplats = null;
             }
 
             canvasEngine.render(globalState);
@@ -1666,6 +1728,41 @@ function Dead4RatApp() {
                                 }}
                             />
                             <span className="param-value">{globalState.fluidParams[p.key].toFixed(2)}</span>
+                        </div>
+                    ))}
+
+                    <div className="hud-divider" />
+
+                    <div className="section-header">// BLOOM_GLOW</div>
+                    <div style={{marginBottom: '8px'}}>
+                        <button
+                            className={`brutalist-button cmd-btn ${globalState.fluidParams.bloomEnabled ? 'primary' : ''}`}
+                            style={{width: '100%', fontSize: '0.6rem'}}
+                            onClick={() => {
+                                globalState.fluidParams.bloomEnabled = !globalState.fluidParams.bloomEnabled;
+                                setUiRefresh(r => r + 1);
+                            }}
+                        >
+                            {globalState.fluidParams.bloomEnabled ? '◉ BLOOM: ON' : '○ BLOOM: OFF'}
+                        </button>
+                    </div>
+                    {globalState.fluidParams.bloomEnabled && [
+                        { key: 'bloomThreshold',  label: 'THRESHOLD', min: 0.0, max: 1.0, step: 0.01 },
+                        { key: 'bloomIntensity',  label: 'INTENSITY',  min: 0.1, max: 3.0, step: 0.1 },
+                        { key: 'bloomRadius',     label: 'RADIUS',     min: 1.0, max: 12.0, step: 0.5 },
+                        { key: 'bloomMix',        label: 'BLOOM_MIX',  min: 0.0, max: 1.0, step: 0.01 },
+                    ].map(p => (
+                        <div key={p.key} className="param-row">
+                            <label>{p.label}</label>
+                            <input type="range" className="brutalist-slider"
+                                min={p.min} max={p.max} step={p.step}
+                                value={globalState.fluidParams[p.key] || 0}
+                                onChange={(e) => {
+                                    globalState.fluidParams[p.key] = parseFloat(e.target.value);
+                                    setUiRefresh(r => r + 1);
+                                }}
+                            />
+                            <span className="param-value">{(globalState.fluidParams[p.key] || 0).toFixed(2)}</span>
                         </div>
                     ))}
                 </TerminalWindow>
