@@ -348,6 +348,9 @@ function Dead4RatApp() {
 
     const [isolatePerson, setIsolatePerson] = React.useState(false);
     const [maskLoading, setMaskLoading] = React.useState(false);
+    const [maskError,   setMaskError]   = React.useState(false);
+    const [humanError,  setHumanError]  = React.useState(false);
+    const [exportFlash, setExportFlash] = React.useState(false); // '✓ SAVED' flash
     const [camOn, setCamOn] = React.useState(true);
     const [canvasTransform, setCanvasTransform] = React.useState({ flipH: false, flipV: false, rotation: 0 });
     const [canvasScale, setCanvasScale] = React.useState('FIT');
@@ -389,10 +392,10 @@ function Dead4RatApp() {
 
     const [panels, setPanels] = React.useState({
         terminal: true,
-        command: true,
-        effects: true,
-        signal: true,
-        generators: true,
+        command: true,   // primary entry point — open by default
+        effects: false,  // default minimized (overloaded-screen fix)
+        signal: false,   // minimized — expand when audio needed
+        generators: false,
         human: false,
         fluid: false,
     });
@@ -525,9 +528,18 @@ function Dead4RatApp() {
         setIsolatePerson(nextState);
         globalState.isolatePerson = nextState;
         if (nextState && maskEngine && !maskEngine.initialized) {
-            setMaskLoading(true);
-            await maskEngine.init();
-            setMaskLoading(false);
+            try {
+                setMaskLoading(true);
+                setMaskError(false);
+                await maskEngine.init();
+            } catch (err) {
+                console.error('MaskEngine init failed', err);
+                setMaskError(true);
+                setIsolatePerson(false);
+                globalState.isolatePerson = false;
+            } finally {
+                setMaskLoading(false);
+            }
         }
         if (maskEngine) maskEngine.enabled = nextState;
     };
@@ -783,12 +795,20 @@ function Dead4RatApp() {
             humanEngine.stop();
             setHumanEnabled(false);
             setHumanData(null);
+            setHumanError(false);
         } else {
-            setHumanLoading(true);
-            const videoElement = document.getElementById('webcam-feed');
-            await humanEngine.start(videoElement);
-            setHumanLoading(false);
-            setHumanEnabled(true);
+            try {
+                setHumanLoading(true);
+                setHumanError(false);
+                const videoElement = document.getElementById('webcam-feed');
+                await humanEngine.start(videoElement);
+                setHumanEnabled(true);
+            } catch (err) {
+                console.error('HumanEngine start failed', err);
+                setHumanError(true);
+            } finally {
+                setHumanLoading(false);
+            }
         }
     };
 
@@ -1154,10 +1174,20 @@ function Dead4RatApp() {
                     <button className={isRecording ? 'hud-active' : ''} onClick={recordToggle}>
                         {isRecording ? '⏹ REC' : '⏺ REC'}
                     </button>
-                    <button onClick={() => canvasEngine.exportPNG(blobTracker)}>EXPORT</button>
+                    <button
+                        id="hud-export-btn"
+                        style={{ color: exportFlash ? '#00FF88' : undefined, transition: 'color 0.3s' }}
+                        onClick={() => {
+                            canvasEngine.exportPNG(blobTracker);
+                            setExportFlash(true);
+                            setTimeout(() => setExportFlash(false), 1500);
+                        }}
+                    >{exportFlash ? '✓ SAVED' : 'EXPORT'}</button>
                     <button className={panels.generators ? 'hud-active' : ''} onClick={() => togglePanel('generators')}>GENERATORS</button>
                     {/* FLUID button hidden at user request */}
                     <button className={panels.human ? 'hud-active' : ''} onClick={() => togglePanel('human')} style={{color: humanEnabled ? '#00FF88' : undefined}}>HUMAN AI</button>
+                    <button className={panels.signal ? 'hud-active' : ''} onClick={() => togglePanel('signal')}>AUDIO</button>
+                    <button className={panels.effects ? 'hud-active' : ''} onClick={() => togglePanel('effects')}>FX</button>
                     <button onClick={() => setUiVisible(false)}>HIDE UI</button>
                 </div>
             )}
@@ -1174,6 +1204,7 @@ function Dead4RatApp() {
                     onClose={() => togglePanel('signal')}
                     minimized={!panels.signal}
                 >
+                    <div className="section-hint" style={{marginBottom: '8px'}}>Audio input, spectrum &amp; band EQ</div>
                     <SignalMonitor
                         audioEngine={audioEngine}
                         audioGain={audioGain}
@@ -1206,7 +1237,7 @@ function Dead4RatApp() {
                     onClose={() => togglePanel('command')}
                     minimized={!panels.command}
                 >
-                    {/* OVERRIDES */}
+                    <div className="section-hint" style={{marginBottom: '8px'}}>Randomise, media layers, presets &amp; detect</div>
                     <div className="section-header">// RANDOMIZE</div>
                     <div className="section-hint">ENGINES = random on/off · PARAMS = random values · RESET = factory defaults</div>
                     <div style={{display: 'flex', gap: '6px', marginBottom: '12px'}}>
@@ -1218,14 +1249,19 @@ function Dead4RatApp() {
                     <div className="section-header">// ML OVERLAY</div>
                     <div className="section-hint">Cut out person from background using AI mask</div>
                     <div style={{display: 'flex', gap: '6px', marginBottom: '12px'}}>
-                        <button 
-                            className={`brutalist-button cmd-btn ${isolatePerson ? 'primary' : ''}`} 
-                            style={{flex: 1}} 
-                            onClick={handleIsolateToggle}
-                            disabled={maskLoading}
-                        >
-                            {maskLoading ? 'LOADING ML...' : (isolatePerson ? 'ISOLATE: ON' : 'ISOLATE PERSON')}
-                        </button>
+                        {maskLoading ? (
+                            <button className="brutalist-button cmd-btn" style={{flex: 1}} disabled>LOADING ML...</button>
+                        ) : maskError ? (
+                            <button className="brutalist-button cmd-btn danger" style={{flex: 1}} onClick={() => { setMaskError(false); handleIsolateToggle(); }}>LOAD FAILED — RETRY</button>
+                        ) : (
+                            <button
+                                className={`brutalist-button cmd-btn ${isolatePerson ? 'primary' : ''}`}
+                                style={{flex: 1}}
+                                onClick={handleIsolateToggle}
+                            >
+                                {isolatePerson ? '◉ ISOLATE: ON' : '○ ISOLATE PERSON'}
+                            </button>
+                        )}
                     </div>
 
 
@@ -1243,7 +1279,7 @@ function Dead4RatApp() {
                                 if (blobTracker) blobTracker.setEnabled(next);
                                 if (!next) setBlobCount(0);
                             }}
-                        >{blobEnabled ? 'DETECT: ON' : 'DETECT: OFF'}</button>
+                        >{blobEnabled ? '◉ DETECT: ON' : '○ DETECT: OFF'}</button>
                         <button
                             className={`brutalist-button cmd-btn ${blobOverlay ? 'active' : ''}`}
                             style={{flex: '0 0 auto'}}
@@ -1270,6 +1306,11 @@ function Dead4RatApp() {
                             }}
                         >AI OVL</button>
                     </div>
+                    {!humanEnabled && (
+                        <div className="section-hint" style={{marginBottom: '6px', color: 'var(--text-muted)'}}>
+                            AI OVL: enable Human AI panel first
+                        </div>
+                    )}
                     {blobEnabled && (
                         <div style={{marginBottom: '8px'}}>
                             <div className="param-row">
@@ -1334,7 +1375,7 @@ function Dead4RatApp() {
                                     {l.type === 'video' ? '▶ ' : l.type === 'image' ? '◼ ' : 'T '}{l.name.toUpperCase()}
                                 </span>
                                 <button style={{background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.55rem', fontFamily: 'var(--font-mono)'}}
-                                    onClick={(e) => { e.stopPropagation(); mediaManager.removeLayer(l.id); setLayers([...mediaManager.layers]); }}>[REM]</button>
+                                    onClick={(e) => { e.stopPropagation(); mediaManager.removeLayer(l.id); setLayers([...mediaManager.layers]); }}>✕</button>
                             </div>
                             ))}
                         </div>
@@ -1388,7 +1429,7 @@ function Dead4RatApp() {
                                     </div>
                                     <div className="param-row">
                                         <label>SPEED</label>
-                                        <input type="range" min="0.25" max="4" step="0.05"
+                                        <input type="range" className="brutalist-slider" min="0.25" max="4" step="0.05"
                                             value={selectedLayer.speed || 1.0}
                                             onChange={(e) => updateLayer(selectedLayer.id, 'speed', parseFloat(e.target.value))}
                                         />
@@ -1396,7 +1437,7 @@ function Dead4RatApp() {
                                     </div>
                                     <div className="param-row">
                                         <label>OPACITY</label>
-                                        <input type="range" min="0" max="1" step="0.01"
+                                        <input type="range" className="brutalist-slider" min="0" max="1" step="0.01"
                                             value={selectedLayer.opacity || 1.0}
                                             onChange={(e) => updateLayer(selectedLayer.id, 'opacity', parseFloat(e.target.value))}
                                         />
@@ -1404,9 +1445,9 @@ function Dead4RatApp() {
                                     </div>
                                 </React.Fragment>
                             )}
-                            <div className="param-row"><label>X</label> <input type="range" min="0" max={window.innerWidth} value={selectedLayer.x} onChange={(e) => updateLayer(selectedLayer.id, 'x', parseInt(e.target.value))} /></div>
-                            <div className="param-row"><label>Y</label> <input type="range" min="0" max={window.innerHeight} value={selectedLayer.y} onChange={(e) => updateLayer(selectedLayer.id, 'y', parseInt(e.target.value))} /></div>
-                            <div className="param-row"><label>Scale</label> <input type="range" min="0.1" max="5" step="0.1" value={selectedLayer.scale} onChange={(e) => updateLayer(selectedLayer.id, 'scale', parseFloat(e.target.value))} /></div>
+                            <div className="param-row"><label>X</label> <input type="range" className="brutalist-slider" min="0" max={window.innerWidth} value={selectedLayer.x} onChange={(e) => updateLayer(selectedLayer.id, 'x', parseInt(e.target.value))} /></div>
+                            <div className="param-row"><label>Y</label> <input type="range" className="brutalist-slider" min="0" max={window.innerHeight} value={selectedLayer.y} onChange={(e) => updateLayer(selectedLayer.id, 'y', parseInt(e.target.value))} /></div>
+                            <div className="param-row"><label>SCALE</label> <input type="range" className="brutalist-slider" min="0.1" max="5" step="0.1" value={selectedLayer.scale} onChange={(e) => updateLayer(selectedLayer.id, 'scale', parseFloat(e.target.value))} /></div>
                             <button className="brutalist-button secondary" style={{width: '100%', marginTop: '6px', fontSize: '0.6rem'}} onClick={() => {
                                 selectedLayer.x = window.innerWidth / 2;
                                 selectedLayer.y = window.innerHeight / 2;
@@ -1442,8 +1483,10 @@ function Dead4RatApp() {
                                     <div key={p.id} className="preset-card" onClick={() => loadPreset(p)}>
                                         <img src={p.thumbnail} alt={p.name} />
                                         <div className="preset-name">{p.name.toUpperCase()}</div>
-                                        <button style={{position: 'absolute', top: 2, right: 2, padding: '2px 5px', background: 'var(--accent)', color: '#000', border: 'none', fontSize: '8px', fontWeight: 'bold', cursor: 'pointer', fontFamily: 'var(--font-mono)'}}
-                                            onClick={(e) => { e.stopPropagation(); presetManager.deletePreset(p.id); setPresets([...presetManager.presets]); }}>DEL</button>
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); presetManager.deletePreset(p.id); setPresets([...presetManager.presets]); }}
+                                            style={{position: 'absolute', top: 2, right: 2, padding: '2px 5px', background: 'var(--accent)', color: '#000', border: 'none', fontSize: '8px', fontWeight: 'bold', cursor: 'pointer', fontFamily: 'var(--font-mono)'}}
+                                        >✕</button>
                                     </div>
                                 ))}
                             </div>
@@ -1464,7 +1507,7 @@ function Dead4RatApp() {
                     onClose={() => togglePanel('effects')}
                     minimized={!panels.effects}
                 >
-                    {/* Audio-reactive summary bar */}
+                    <div className="section-hint" style={{marginBottom: '8px'}}>Visual effects chain — toggle &amp; tune per-module</div>
                     {audioEngine?.isRunning && (
                         <div className="audio-status-bar">
                             <span className="audio-status-dot" />
@@ -1504,6 +1547,7 @@ function Dead4RatApp() {
                     onClose={() => togglePanel('generators')}
                     minimized={!panels.generators}
                 >
+                    <div className="section-hint" style={{marginBottom: '8px'}}>Procedural video generator — pick algorithm &amp; tune</div>
                     <div className="section-header" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
                         <span>// ALGORITHM: <span style={{color: genMode !== 'OFF' ? 'var(--accent)' : 'inherit', marginLeft: '4px'}}>{genMode}</span></span>
                         <span style={{display: 'flex', alignItems: 'center', gap: '3px'}}>
@@ -1653,16 +1697,25 @@ function Dead4RatApp() {
                     onClose={() => togglePanel('human')}
                     minimized={!panels.human}
                 >
+                    <div className="section-hint" style={{marginBottom: '8px'}}>Face, hand &amp; body AI tracking</div>
                     {/* ── Master Toggle ──────────────────────────── */}
                     <div style={{marginBottom: '10px'}}>
-                        <button
-                            className={`brutalist-button ${humanEnabled ? 'primary' : ''}`}
-                            style={{width: '100%', fontSize: '0.65rem', letterSpacing: '2px'}}
-                            onClick={handleHumanToggle}
-                            disabled={humanLoading}
-                        >
-                            {humanLoading ? '⏳ LOADING MODELS...' : humanEnabled ? '◉ HUMAN AI: ACTIVE' : '○ ENGAGE HUMAN AI'}
-                        </button>
+                        {humanError ? (
+                            <button
+                                className="brutalist-button danger"
+                                style={{width: '100%', fontSize: '0.65rem', letterSpacing: '2px'}}
+                                onClick={() => { setHumanError(false); handleHumanToggle(); }}
+                            >⚠ LOAD FAILED — RETRY</button>
+                        ) : (
+                            <button
+                                className={`brutalist-button ${humanEnabled ? 'primary' : ''}`}
+                                style={{width: '100%', fontSize: '0.65rem', letterSpacing: '2px'}}
+                                onClick={handleHumanToggle}
+                                disabled={humanLoading}
+                            >
+                                {humanLoading ? '⏳ LOADING MODELS...' : humanEnabled ? '◉ HUMAN AI: ACTIVE' : '○ ENGAGE HUMAN AI'}
+                            </button>
+                        )}
                     </div>
 
                     {/* ── Detection Status ──────────────────────── */}
