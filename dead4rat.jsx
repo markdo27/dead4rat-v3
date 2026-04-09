@@ -1199,7 +1199,7 @@ function Dead4RatApp() {
                     </button>
                     <button onClick={() => canvasEngine.exportPNG(blobTracker)}>EXPORT</button>
                     <button className={panels.generators ? 'hud-active' : ''} onClick={() => togglePanel('generators')}>GENERATORS</button>
-                    <button className={panels.fluid ? 'hud-active' : ''} onClick={() => togglePanel('fluid')} style={{color: globalState.fluidParams.enabled ? '#FF5500' : undefined}}>FLUID</button>
+                    {/* FLUID button hidden at user request */}
                     <button className={panels.human ? 'hud-active' : ''} onClick={() => togglePanel('human')} style={{color: humanEnabled ? '#00FF88' : undefined}}>HUMAN AI</button>
                     <button onClick={() => setUiVisible(false)}>HIDE UI</button>
                 </div>
@@ -1665,7 +1665,8 @@ function Dead4RatApp() {
 
 
 
-            {/* ═══════════════ FLUID ENGINE MATRIX ═══════════════ */}
+            {/* ═══════════════ FLUID ENGINE MATRIX (HIDDEN) ═══════════════ */}
+            {/* 
             {uiVisible && started && (
                 <TerminalWindow
                     id="win-fluid"
@@ -1678,95 +1679,10 @@ function Dead4RatApp() {
                     onClose={() => togglePanel('fluid')}
                     minimized={!panels.fluid}
                 >
-                    <div style={{marginBottom: '10px'}}>
-                        <button
-                            className={`brutalist-button ${globalState.fluidParams.enabled ? 'primary' : ''}`}
-                            style={{width: '100%', fontSize: '0.65rem', letterSpacing: '2px'}}
-                            onClick={() => {
-                                globalState.fluidParams.enabled = !globalState.fluidParams.enabled;
-                                setUiRefresh(r => r + 1);
-                            }}
-                        >
-                            {globalState.fluidParams.enabled ? '◉ FLUID CORE: ACTIVE' : '○ ENGAGE FLUID CORE'}
-                        </button>
-                    </div>
-
-                    <div className="section-header">// PHYSICS_STABILITY</div>
-                    {[
-                        { key: 'viscosity',   label: 'VISCOSITY',   min: 0.9,  max: 0.999, step: 0.001 },
-                        { key: 'dissipation', label: 'DISSIPATION', min: 0.9,  max: 0.999, step: 0.001 },
-                        { key: 'opticalGain', label: 'MOTION_GAIN', min: 0.1,  max: 5.0,   step: 0.1 },
-                    ].map(p => (
-                        <div key={p.key} className="param-row">
-                            <label>{p.label}</label>
-                            <input type="range" className="brutalist-slider" 
-                                min={p.min} max={p.max} step={p.step}
-                                value={globalState.fluidParams[p.key]}
-                                onChange={(e) => {
-                                    globalState.fluidParams[p.key] = parseFloat(e.target.value);
-                                    setUiRefresh(r => r + 1);
-                                }}
-                            />
-                            <span className="param-value">{globalState.fluidParams[p.key].toFixed(3)}</span>
-                        </div>
-                    ))}
-
-                    <div className="section-header">// VISUAL_DRIVE</div>
-                    {[
-                        { key: 'audioDrive', label: 'AUDIO_DRIVE', min: 0.0,  max: 2.0,   step: 0.1 },
-                        { key: 'gain',       label: 'THERMAL_GAIN', min: 0.1,  max: 4.0,   step: 0.1 },
-                        { key: 'mix',        label: 'FLUID_MIX',    min: 0.0,  max: 1.0,   step: 0.01 },
-                    ].map(p => (
-                        <div key={p.key} className="param-row">
-                            <label>{p.label}</label>
-                            <input type="range" className="brutalist-slider" 
-                                min={p.min} max={p.max} step={p.step}
-                                value={globalState.fluidParams[p.key]}
-                                onChange={(e) => {
-                                    globalState.fluidParams[p.key] = parseFloat(e.target.value);
-                                    setUiRefresh(r => r + 1);
-                                }}
-                            />
-                            <span className="param-value">{globalState.fluidParams[p.key].toFixed(2)}</span>
-                        </div>
-                    ))}
-
-                    <div className="hud-divider" />
-
-                    <div className="section-header">// BLOOM_GLOW</div>
-                    <div style={{marginBottom: '8px'}}>
-                        <button
-                            className={`brutalist-button cmd-btn ${globalState.fluidParams.bloomEnabled ? 'primary' : ''}`}
-                            style={{width: '100%', fontSize: '0.6rem'}}
-                            onClick={() => {
-                                globalState.fluidParams.bloomEnabled = !globalState.fluidParams.bloomEnabled;
-                                setUiRefresh(r => r + 1);
-                            }}
-                        >
-                            {globalState.fluidParams.bloomEnabled ? '◉ BLOOM: ON' : '○ BLOOM: OFF'}
-                        </button>
-                    </div>
-                    {globalState.fluidParams.bloomEnabled && [
-                        { key: 'bloomThreshold',  label: 'THRESHOLD', min: 0.0, max: 1.0, step: 0.01 },
-                        { key: 'bloomIntensity',  label: 'INTENSITY',  min: 0.1, max: 3.0, step: 0.1 },
-                        { key: 'bloomRadius',     label: 'RADIUS',     min: 1.0, max: 12.0, step: 0.5 },
-                        { key: 'bloomMix',        label: 'BLOOM_MIX',  min: 0.0, max: 1.0, step: 0.01 },
-                    ].map(p => (
-                        <div key={p.key} className="param-row">
-                            <label>{p.label}</label>
-                            <input type="range" className="brutalist-slider"
-                                min={p.min} max={p.max} step={p.step}
-                                value={globalState.fluidParams[p.key] || 0}
-                                onChange={(e) => {
-                                    globalState.fluidParams[p.key] = parseFloat(e.target.value);
-                                    setUiRefresh(r => r + 1);
-                                }}
-                            />
-                            <span className="param-value">{(globalState.fluidParams[p.key] || 0).toFixed(2)}</span>
-                        </div>
-                    ))}
+                    ... content commented out ...
                 </TerminalWindow>
             )}
+            */}
 
             {uiVisible && started && (
                 <TerminalWindow

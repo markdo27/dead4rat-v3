@@ -1459,6 +1459,7 @@ class CanvasEngine {
             this._videoInitialized = true;
         }
 
+        /* 
         // --- Step 1.5: Fluid Engine Physics ---
         // Run the fluid simulation using the current webcam texture as motion input.
         // Must be called BEFORE we rebind the render target FBO.
@@ -1472,6 +1473,7 @@ class CanvasEngine {
                 this.fluidEngine.splatPoints(state._fluidSplats);
             }
         }
+        */
 
         // --- Step 2: Bind Feedback Source to TEXTURE1 ---
         gl.activeTexture(gl.TEXTURE1);
@@ -1795,6 +1797,7 @@ class CanvasEngine {
             gl.disable(gl.BLEND);
         }
 
+        /*
         // --- Step 3.2: Fluid Engine Render ---
         // The new FluidEngine.render() composites webcam + fluid itself (no external blend needed).
         // It writes a full RGBA frame to whatever FBO is currently bound.
@@ -1839,6 +1842,7 @@ class CanvasEngine {
                 gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
             }
         }
+        */
 
         // --- Step 4: Blit to Screen ---
 
