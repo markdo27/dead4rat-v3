@@ -1409,7 +1409,9 @@ class CanvasEngine {
         // Run the fluid simulation using the current webcam texture as motion input.
         // Must be called BEFORE we rebind the render target FBO.
         if (this.fluidEngine && state.fluidParams && state.fluidParams.enabled) {
-            this.fluidEngine.update(this.videoTex, state.fluidParams, 0.016);
+            const mouse = state.mouse3d || null;
+            const audio = { bass: state.bass || 0, mid: state.mid || 0, high: state.high || 0 };
+            this.fluidEngine.update(this.videoTex, state.fluidParams, 0.016, mouse, audio);
         }
 
         // --- Step 2: Bind Feedback Source to TEXTURE1 ---
