@@ -1361,12 +1361,13 @@ input[type="range"]:active::-webkit-slider-thumb {
    ═══════════════════════════════════════════ */
 
 .section-hint {
-    font-size: 0.5rem;
-    color: var(--text-muted);
+    font-size: 0.55rem;
+    color: var(--accent);
     letter-spacing: 1px;
     margin-top: -6px;
     margin-bottom: 8px;
     font-style: normal;
+    opacity: 0.9;
 }
 
 /* ═══════════════════════════════════════════
