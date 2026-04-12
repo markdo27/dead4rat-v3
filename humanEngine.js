@@ -50,6 +50,30 @@ class HumanEngine {
         };
 
         this._lastResult = null;
+
+        // ── Gesture Control State ─────────────────────────────────────
+        // Per-hand pinch: distance between thumb tip (4) and index tip (8), normalised 0-1
+        this.pinchLeft  = 0;   // 0 = open, 1 = fully pinched
+        this.pinchRight = 0;
+        this.pinch      = 0;   // max of both hands
+
+        // Hand palm centroids (normalised 0-1 screen space, mirrored so right = right)
+        this.palmLeftX  = 0.5; this.palmLeftY  = 0.5;
+        this.palmRightX = 0.5; this.palmRightY = 0.5;
+        this.palmX      = 0.5; // dominant hand or average
+        this.palmY      = 0.5;
+
+        // Inter-hand distance: 0 = hands together, 1 = hands fully apart (theremin axis)
+        this.handSpan   = 0;
+
+        // Pinch-event (fires once per pinch gesture, resets when hand opens)
+        this.pinchTriggered = false;
+        this._pinchWasActive = false;
+
+        // Smoothing accumulators for gesture values
+        this._prevPinchL = 0; this._prevPinchR = 0;
+        this._prevPalmX  = 0.5; this._prevPalmY = 0.5;
+        this._prevSpan   = 0;
     }
 
     _lerp(prev, next) {
@@ -231,25 +255,91 @@ class HumanEngine {
         // ── Hands ─────────────────────────────────────────────
         this.handLeft = false;
         this.handRight = false;
+        this.pinchLeft = 0;
+        this.pinchRight = 0;
+        this.pinchTriggered = false;
+
+        let handCount = 0;
+        let palmXSum = 0, palmYSum = 0;
+        let leftPalmX = 0.5, leftPalmY = 0.5;
+        let rightPalmX = 0.5, rightPalmY = 0.5;
+
         if (result.hand && result.hand.length > 0) {
-            let numHands = 0;
             result.hand.forEach(h => {
-                numHands++;
-                if (h.label === 'left')  this.handLeft  = true;
-                else if (h.label === 'right') this.handRight = true;
-                else {
-                    // Fallback if no handedness label is provided by the engine
-                    if (numHands === 1) this.handLeft = true;
-                    if (numHands === 2) this.handRight = true;
-                }
-                
-                // Index finger tip (landmark 8)
-                if (h.landmarks && h.landmarks[8]) {
-                    this.handTipX = h.landmarks[8][0] / this.videoWidth;
-                    this.handTipY = h.landmarks[8][1] / this.videoHeight;
+                handCount++;
+                const isLeft = h.label === 'left' || (handCount === 1 && !h.label);
+                if (isLeft) this.handLeft = true; else this.handRight = true;
+
+                // Landmarks: 0=wrist, 4=thumb_tip, 8=index_tip, 9=middle_mcp (palm centre)
+                if (h.landmarks && h.landmarks.length >= 10) {
+                    const lm = h.landmarks;
+                    const thumbTip  = lm[4];
+                    const indexTip  = lm[8];
+                    const palmBase  = lm[9]; // middle MCP – good proxy for palm centre
+
+                    // Pinch distance: Euclidean distance between thumb and index fingertips,
+                    // normalised to hand size (wrist-to-middle-MCP baseline)
+                    const wrist = lm[0];
+                    const handSizeRef = Math.hypot(palmBase[0]-wrist[0], palmBase[1]-wrist[1]) || 1;
+                    const rawPinch = Math.hypot(thumbTip[0]-indexTip[0], thumbTip[1]-indexTip[1]) / (handSizeRef * 2.5);
+                    // Invert so 1 = pinched, 0 = open; clamp 0-1
+                    const pinchVal  = Math.max(0, Math.min(1, 1.0 - rawPinch));
+
+                    // Palm position (normalised, mirrored on X so right-hand = right side)
+                    const nx = 1.0 - (palmBase[0] / (this.videoWidth  || 640));
+                    const ny =        palmBase[1] / (this.videoHeight || 480);
+
+                    if (isLeft) {
+                        this.pinchLeft = this._lerp(this._prevPinchL, pinchVal);
+                        this._prevPinchL = this.pinchLeft;
+                        leftPalmX = nx; leftPalmY = ny;
+                    } else {
+                        this.pinchRight = this._lerp(this._prevPinchR, pinchVal);
+                        this._prevPinchR = this.pinchRight;
+                        rightPalmX = nx; rightPalmY = ny;
+                        // Also update legacy handTip with index fingertip
+                        this.handTipX = 1.0 - (indexTip[0] / (this.videoWidth  || 640));
+                        this.handTipY =        indexTip[1] / (this.videoHeight || 480);
+                    }
+
+                    palmXSum += nx;
+                    palmYSum += ny;
                 }
             });
+
+            // Dominant palm = right hand if present, else left hand, else average
+            if (this.handRight) {
+                this.palmX = this._lerp(this._prevPalmX, rightPalmX);
+                this.palmY = this._lerp(this._prevPalmY, rightPalmY);
+            } else {
+                this.palmX = this._lerp(this._prevPalmX, leftPalmX);
+                this.palmY = this._lerp(this._prevPalmY, leftPalmY);
+            }
+            this._prevPalmX = this.palmX;
+            this._prevPalmY = this.palmY;
+
+            // Theremin inter-hand span
+            if (handCount >= 2) {
+                const rawSpan = Math.hypot(rightPalmX - leftPalmX, rightPalmY - leftPalmY);
+                this.handSpan = this._lerp(this._prevSpan, Math.min(1, rawSpan * 1.5));
+            } else {
+                this.handSpan = this._lerp(this._prevSpan, 0);
+            }
+            this._prevSpan = this.handSpan;
+        } else {
+            // No hands – decay all values
+            this.pinchLeft  = this._lerp(this._prevPinchL, 0); this._prevPinchL = this.pinchLeft;
+            this.pinchRight = this._lerp(this._prevPinchR, 0); this._prevPinchR = this.pinchRight;
+            this.handSpan   = this._lerp(this._prevSpan, 0);   this._prevSpan   = this.handSpan;
         }
+
+        // Unified max pinch
+        this.pinch = Math.max(this.pinchLeft, this.pinchRight);
+
+        // Pinch trigger edge-detect (fires once crossing 0.7 threshold)
+        const pinchActive = this.pinch > 0.7;
+        this.pinchTriggered = pinchActive && !this._pinchWasActive;
+        this._pinchWasActive = pinchActive;
 
         // ── Gestures ──────────────────────────────────────────
         this.handGesture = '';
@@ -269,6 +359,10 @@ class HumanEngine {
         this.gazeX = this.gazeY = 0.5;
         this.handLeft = this.handRight = false;
         this.handGesture = '';
+        this.pinchLeft = this.pinchRight = this.pinch = 0;
+        this.palmX = this.palmY = 0.5;
+        this.handSpan = 0;
+        this.pinchTriggered = false;
         this.bodyDetected = false;
     }
 
@@ -282,6 +376,24 @@ class HumanEngine {
             handGesture: this.handGesture, handTipX: this.handTipX, handTipY: this.handTipY,
             bodyDetected: this.bodyDetected,
             videoWidth: this.videoWidth, videoHeight: this.videoHeight,
+            // Gesture control
+            pinch: this.pinch, pinchLeft: this.pinchLeft, pinchRight: this.pinchRight,
+            palmX: this.palmX, palmY: this.palmY,
+            handSpan: this.handSpan,
+            pinchTriggered: this.pinchTriggered,
+        };
+    }
+
+    // Returns just the gesture-critical values for low-latency access (no object copy overhead)
+    getGestureData() {
+        return {
+            pinch:    this.pinch,
+            palmX:    this.palmX,
+            palmY:    this.palmY,
+            span:     this.handSpan,
+            triggered: this.pinchTriggered,
+            handLeft: this.handLeft,
+            handRight: this.handRight,
         };
     }
 }

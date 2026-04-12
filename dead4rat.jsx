@@ -90,7 +90,22 @@ const globalState = {
         bloomIntensity: 1.5,
         bloomRadius:    5.0,
         bloomMix:       0.6,
-    }
+    },
+    // Gesture Control — populated from humanEngine every frame
+    gesture: {
+        enabled: false,   // master switch (toggled from GESTURE CTRL panel)
+        pinch:   0,       // 0-1, triggers modulation when > threshold
+        palmX:   0.5,     // 0-1 dominant hand X (mirrored)
+        palmY:   0.5,     // 0-1 dominant hand Y
+        span:    0,       // 0-1 inter-hand theremin distance
+        // Mapping: which params each axis controls
+        // 'pinch' → feedback amount, 'span' → gen warp, 'palmX' → gen rotY, 'palmY' → gen speed
+        mapPinch:  'feedback',  // 'feedback'|'warp'|'rgbShift'|'noise'|'none'
+        mapSpan:   'warp',
+        mapPalmX:  'rotY',
+        mapPalmY:  'speed',
+        sensitivity: 1.0,
+    },
 };
 
 let audioEngine = null;
@@ -397,6 +412,7 @@ function Dead4RatApp() {
         signal: false,   // minimized — expand when audio needed
         generators: false,
         human: false,
+        gesture: false,
         fluid: false,
     });
 
@@ -639,6 +655,57 @@ function Dead4RatApp() {
             } else if (humanEngine && !humanEngine.isRunning && blobTracker) {
                 // Human stopped — clear its data from overlay
                 blobTracker.setHumanData(null, null);
+            }
+
+            // ── Gesture Control → globalState ──────────────────────────
+            if (globalState.gesture.enabled && humanEngine && humanEngine.isRunning) {
+                const gd = humanEngine.getGestureData();
+                const gs = globalState.gesture;
+                gs.pinch = gd.pinch;
+                gs.palmX = gd.palmX;
+                gs.palmY = gd.palmY;
+                gs.span  = gd.span;
+
+                const sens = gs.sensitivity;
+
+                // ── Pinch → feedback amount ────────────────────────────
+                if (gs.mapPinch === 'feedback' && globalState.glitchez.videoFeedback.enabled) {
+                    const fb = globalState.glitchez.videoFeedback.params.amount;
+                    fb.value = Math.min(fb.max, fb.min + gd.pinch * (fb.max - fb.min) * sens);
+                } else if (gs.mapPinch === 'rgbShift' && globalState.glitchez.rgbShift.enabled) {
+                    const rgb = globalState.glitchez.rgbShift.params.amount;
+                    rgb.value = Math.min(rgb.max, gd.pinch * rgb.max * sens);
+                } else if (gs.mapPinch === 'noise' && globalState.glitchez.noise.enabled) {
+                    const ns = globalState.glitchez.noise.params.amount;
+                    ns.value = Math.min(ns.max, gd.pinch * ns.max * sens);
+                }
+
+                // ── Span (theremin) → gen warp ─────────────────────────
+                if (gs.mapSpan === 'warp' && globalState.genParams && globalState.genParams.warp) {
+                    const wp = globalState.genParams.warp;
+                    wp.value = Math.min(wp.max, wp.min + gd.span * (wp.max - wp.min) * sens);
+                } else if (gs.mapSpan === 'feedback' && globalState.glitchez.videoFeedback.enabled) {
+                    const fb = globalState.glitchez.videoFeedback.params.amount;
+                    fb.value = Math.min(fb.max, fb.min + gd.span * (fb.max - fb.min) * sens);
+                }
+
+                // ── Palm X → gen rotY / warp ───────────────────────────
+                if (gs.mapPalmX === 'rotY' && globalState.genParams && globalState.genParams.rotateY) {
+                    const ry = globalState.genParams.rotateY;
+                    ry.value = ry.min + gd.palmX * (ry.max - ry.min);
+                } else if (gs.mapPalmX === 'warp' && globalState.genParams && globalState.genParams.warp) {
+                    const wp = globalState.genParams.warp;
+                    wp.value = Math.min(wp.max, gd.palmX * wp.max * sens);
+                }
+
+                // ── Palm Y → gen speed ─────────────────────────────────
+                if (gs.mapPalmY === 'speed' && globalState.genParams && globalState.genParams.speed) {
+                    const sp = globalState.genParams.speed;
+                    sp.value = sp.min + gd.palmY * (sp.max - sp.min);
+                } else if (gs.mapPalmY === 'rotX' && globalState.genParams && globalState.genParams.rotateX) {
+                    const rx = globalState.genParams.rotateX;
+                    rx.value = rx.min + gd.palmY * (rx.max - rx.min);
+                }
             }
 
             // ── LFO Automation Pass ──────────────────────────────────
@@ -1684,6 +1751,120 @@ function Dead4RatApp() {
                 </TerminalWindow>
             )}
             */}
+
+            {/* ═══════════════ GESTURE CTRL PANEL ═══════════════ */}
+            {uiVisible && started && (() => {
+                const gs = globalState.gesture;
+                const PINCH_OPTS  = ['feedback','rgbShift','noise','warp','none'];
+                const SPAN_OPTS   = ['warp','feedback','speed','none'];
+                const PALMX_OPTS  = ['rotY','warp','rotX','none'];
+                const PALMY_OPTS  = ['speed','rotX','warp','none'];
+                return (
+                    <TerminalWindow
+                        id="win-gesture"
+                        title="GESTURE_CTRL"
+                        tag="HANDS"
+                        initialX={Math.max(16, window.innerWidth / 2 + 180)}
+                        initialY={16}
+                        width="280px"
+                        maxHeight="calc(100vh - 60px)"
+                        onClose={() => togglePanel('gesture')}
+                        minimized={!panels.gesture}
+                    >
+                        <div className="section-hint" style={{marginBottom:'8px'}}>Theremin-style hand gesture → shader control</div>
+
+                        {/* Master Toggle */}
+                        <button
+                            className={`brutalist-button ${gs.enabled ? 'primary' : ''}`}
+                            style={{width:'100%', fontSize:'0.65rem', letterSpacing:'2px', marginBottom:'10px'}}
+                            onClick={() => { gs.enabled = !gs.enabled; setUiRefresh(r=>r+1); }}
+                        >
+                            {gs.enabled ? '◉ GESTURE: ACTIVE' : '○ ENABLE GESTURE'}
+                        </button>
+
+                        {/* Requires Human AI warning */}
+                        {!humanEnabled && (
+                            <div style={{fontSize:'0.55rem',color:'var(--accent)',padding:'4px 6px',
+                                border:'1px solid var(--accent)40',marginBottom:'8px',lineHeight:'1.5'}}>
+                                ⚠ Requires Human AI (HUMAN_MATRIX panel)
+                            </div>
+                        )}
+
+                        {/* Live Meters */}
+                        <div className="section-header">// LIVE_INPUT</div>
+                        {[
+                            ['PINCH',   uiRefresh && Math.round((humanData?.pinch||0)*100)],
+                            ['SPAN',    uiRefresh && Math.round((humanData?.handSpan||0)*100)],
+                            ['PALM X',  uiRefresh && Math.round((humanData?.palmX||0.5)*100)],
+                            ['PALM Y',  uiRefresh && Math.round((humanData?.palmY||0.5)*100)],
+                        ].map(([label, pct]) => (
+                            <div key={label} style={{display:'flex',alignItems:'center',gap:'6px',marginBottom:'4px'}}>
+                                <span style={{fontSize:'0.5rem',color:'var(--text-dim)',width:'40px'}}>{label}</span>
+                                <div style={{flex:1,height:'5px',background:'var(--bg-mid)',position:'relative'}}>
+                                    <div style={{
+                                        position:'absolute',left:0,top:0,height:'100%',
+                                        width:`${pct||0}%`,
+                                        background: pct > 70 ? 'var(--accent)' : 'var(--accent)88',
+                                        transition:'width 0.06s linear',
+                                    }}/>
+                                </div>
+                                <span style={{fontSize:'0.5rem',color:'var(--text-bright)',width:'28px',textAlign:'right'}}>{pct||0}%</span>
+                            </div>
+                        ))}
+
+                        <div className="hud-divider" style={{margin:'8px 0'}}/>
+
+                        {/* Axis Mappings */}
+                        <div className="section-header">// AXIS_MAPPING</div>
+                        <div style={{fontSize:'0.5rem',color:'var(--text-muted)',marginBottom:'6px'}}>
+                            Select which shader param each axis controls
+                        </div>
+
+                        {[
+                            ['PINCH →',  'mapPinch',  PINCH_OPTS],
+                            ['SPAN →',   'mapSpan',   SPAN_OPTS],
+                            ['PALM X →', 'mapPalmX',  PALMX_OPTS],
+                            ['PALM Y →', 'mapPalmY',  PALMY_OPTS],
+                        ].map(([label, key, opts]) => (
+                            <div key={key} style={{display:'flex',alignItems:'center',gap:'6px',marginBottom:'5px'}}>
+                                <span style={{fontSize:'0.5rem',color:'var(--text-dim)',width:'52px',flexShrink:0}}>{label}</span>
+                                <div style={{display:'flex',gap:'3px',flexWrap:'wrap'}}>
+                                    {opts.map(opt => (
+                                        <button
+                                            key={opt}
+                                            className={`brutalist-button ${gs[key]===opt?'active':''}`}
+                                            style={{fontSize:'0.48rem',padding:'2px 5px',letterSpacing:'0.5px'}}
+                                            onClick={() => { gs[key]=opt; setUiRefresh(r=>r+1); }}
+                                        >
+                                            {opt.toUpperCase()}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        ))}
+
+                        <div className="hud-divider" style={{margin:'8px 0'}}/>
+
+                        {/* Sensitivity */}
+                        <div className="section-header">// SENSITIVITY</div>
+                        <div className="param-row" style={{marginTop:'4px'}}>
+                            <span className="param-label">SENS</span>
+                            <input
+                                type="range" className="brutalist-slider" min="0.1" max="3" step="0.05"
+                                value={gs.sensitivity}
+                                onChange={e => { gs.sensitivity = parseFloat(e.target.value); setUiRefresh(r=>r+1); }}
+                            />
+                            <span className="param-value">{gs.sensitivity.toFixed(2)}</span>
+                        </div>
+
+                        <div style={{marginTop:'8px',fontSize:'0.5rem',color:'var(--text-muted)',lineHeight:'1.6'}}>
+                            Pinch = close thumb+index.<br/>
+                            Span = spread both hands apart.<br/>
+                            Palm = dominant hand position.
+                        </div>
+                    </TerminalWindow>
+                );
+            })()}
 
             {uiVisible && started && (
                 <TerminalWindow

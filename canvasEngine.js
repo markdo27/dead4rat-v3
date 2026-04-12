@@ -319,6 +319,14 @@ class CanvasEngine {
             uniform float u_flipV;       // 0 or 1
             uniform float u_rotation;    // 0=0deg 1=90deg 2=180deg 3=270deg
 
+            // --- Gesture Control ---
+            // Live values from HumanEngine hand tracking
+            uniform float u_gesturePinch;   // 0=open 1=fully pinched (max of both hands)
+            uniform float u_gesturePalmX;   // dominant palm X position 0-1 (mirrored)
+            uniform float u_gesturePalmY;   // dominant palm Y position 0-1
+            uniform float u_gestureSpan;    // inter-hand distance 0-1 (theremin axis)
+            uniform float u_gestureEnabled; // 1=gesture control active, 0=passthrough
+
             // --- Utility Functions ---
             float rand(vec2 co) {
                 return fract(sin(dot(co.xy, vec2(12.9898, 78.233))) * 43758.5453);
@@ -1407,6 +1415,13 @@ class CanvasEngine {
         this.locFlipH    = loc("u_flipH");
         this.locFlipV    = loc("u_flipV");
         this.locRotation = loc("u_rotation");
+
+        // Gesture Control
+        this.locGesturePinch   = loc("u_gesturePinch");
+        this.locGesturePalmX   = loc("u_gesturePalmX");
+        this.locGesturePalmY   = loc("u_gesturePalmY");
+        this.locGestureSpan    = loc("u_gestureSpan");
+        this.locGestureEnabled = loc("u_gestureEnabled");
     }
 
     initTextures() {
@@ -1729,6 +1744,15 @@ class CanvasEngine {
         this.gl.uniform1f(this.locFlipH,    ct.flipH    ? 1.0 : 0.0);
         this.gl.uniform1f(this.locFlipV,    ct.flipV    ? 1.0 : 0.0);
         this.gl.uniform1f(this.locRotation, ct.rotation || 0.0);
+
+        // --- Gesture Control ---
+        const gest = state.gesture || {};
+        const gestEnabled = gest.enabled ? 1.0 : 0.0;
+        this.gl.uniform1f(this.locGestureEnabled, gestEnabled);
+        this.gl.uniform1f(this.locGesturePinch,   gest.pinch  || 0.0);
+        this.gl.uniform1f(this.locGesturePalmX,   gest.palmX  !== undefined ? gest.palmX : 0.5);
+        this.gl.uniform1f(this.locGesturePalmY,   gest.palmY  !== undefined ? gest.palmY : 0.5);
+        this.gl.uniform1f(this.locGestureSpan,    gest.span   || 0.0);
 
         // Draw main quad to FBO
         gl.bindBuffer(gl.ARRAY_BUFFER, this.positionBuffer);
