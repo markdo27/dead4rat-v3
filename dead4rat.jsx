@@ -93,18 +93,17 @@ const globalState = {
     },
     // Gesture Control — populated from humanEngine every frame
     gesture: {
-        enabled: false,   // master switch (toggled from GESTURE CTRL panel)
-        pinch:   0,       // 0-1, triggers modulation when > threshold
-        palmX:   0.5,     // 0-1 dominant hand X (mirrored)
-        palmY:   0.5,     // 0-1 dominant hand Y
-        span:    0,       // 0-1 inter-hand theremin distance
-        // Mapping: which params each axis controls
-        // 'pinch' → feedback amount, 'span' → gen warp, 'palmX' → gen rotY, 'palmY' → gen speed
-        mapPinch:  'feedback',  // 'feedback'|'warp'|'rgbShift'|'noise'|'none'
-        mapSpan:   'warp',
+        enabled: false,
+        pinch:   0,
+        palmX:   0.5,
+        palmY:   0.5,
+        span:    0,
+        mapPinch:  'rgbShift',
+        mapSpan:   'feedback',
         mapPalmX:  'rotY',
         mapPalmY:  'speed',
-        sensitivity: 1.0,
+        sensitivity: 1.5,
+        _debugFrames: 0,
     },
 };
 
@@ -663,60 +662,76 @@ function Dead4RatApp() {
                 gs.palmY = gd.palmY;
                 gs.span  = gd.span;
 
+                // Throttled debug log every ~1s when active
+                gs._debugFrames = (gs._debugFrames || 0) + 1;
+                if (gs.enabled && gs._debugFrames % 60 === 0) {
+                    console.log('[GESTURE] pinch=' + gd.pinch.toFixed(3)
+                        + ' palmX=' + gd.palmX.toFixed(3)
+                        + ' palmY=' + gd.palmY.toFixed(3)
+                        + ' span=' + gd.span.toFixed(3)
+                        + ' L=' + gd.handLeft + ' R=' + gd.handRight
+                        + ' map=' + gs.mapPinch
+                        + ' rgbAmt=' + globalState.glitchez.rgbShift.params.amount.value.toFixed(3));
+                }
+
                 if (gs.enabled) {
                     const sens = gs.sensitivity;
 
-                    // ── Pinch → mapped param (auto-enables effect) ─────────
-                    if (gs.mapPinch === 'feedback') {
-                        globalState.glitchez.videoFeedback.enabled = true;
-                        const fb = globalState.glitchez.videoFeedback.params.amount;
-                        fb.value = Math.min(fb.max, fb.min + gd.pinch * (fb.max - fb.min) * sens);
-                    } else if (gs.mapPinch === 'rgbShift') {
+                    // ── Pinch → mapped param ───────────────────────────────
+                    if (gs.mapPinch === 'rgbShift') {
                         globalState.glitchez.rgbShift.enabled = true;
                         const rgb = globalState.glitchez.rgbShift.params.amount;
                         rgb.value = Math.min(rgb.max, gd.pinch * rgb.max * sens);
+                    } else if (gs.mapPinch === 'feedback') {
+                        globalState.glitchez.videoFeedback.enabled = true;
+                        const fb = globalState.glitchez.videoFeedback.params.amount;
+                        fb.value = Math.min(fb.max, fb.min + gd.pinch * (fb.max - fb.min) * sens);
                     } else if (gs.mapPinch === 'noise') {
                         globalState.glitchez.noise.enabled = true;
                         const ns = globalState.glitchez.noise.params.amount;
                         ns.value = Math.min(ns.max, gd.pinch * ns.max * sens);
-                    } else if (gs.mapPinch === 'warp' && globalState.genParams && globalState.genParams.warp) {
+                    } else if (gs.mapPinch === 'warp' && globalState.genParams?.warp) {
                         const wp = globalState.genParams.warp;
                         wp.value = Math.min(wp.max, wp.min + gd.pinch * (wp.max - wp.min) * sens);
                     }
 
                     // ── Span → mapped param ────────────────────────────────
-                    if (gs.mapSpan === 'warp' && globalState.genParams && globalState.genParams.warp) {
-                        const wp = globalState.genParams.warp;
-                        wp.value = Math.min(wp.max, wp.min + gd.span * (wp.max - wp.min) * sens);
-                    } else if (gs.mapSpan === 'feedback') {
+                    if (gs.mapSpan === 'feedback') {
                         globalState.glitchez.videoFeedback.enabled = true;
                         const fb = globalState.glitchez.videoFeedback.params.amount;
                         fb.value = Math.min(fb.max, fb.min + gd.span * (fb.max - fb.min) * sens);
-                    } else if (gs.mapSpan === 'speed' && globalState.genParams && globalState.genParams.speed) {
+                    } else if (gs.mapSpan === 'warp' && globalState.genParams?.warp) {
+                        const wp = globalState.genParams.warp;
+                        wp.value = Math.min(wp.max, wp.min + gd.span * (wp.max - wp.min) * sens);
+                    } else if (gs.mapSpan === 'noise') {
+                        globalState.glitchez.noise.enabled = true;
+                        const ns = globalState.glitchez.noise.params.amount;
+                        ns.value = Math.min(ns.max, gd.span * ns.max * sens);
+                    } else if (gs.mapSpan === 'speed' && globalState.genParams?.speed) {
                         const sp = globalState.genParams.speed;
                         sp.value = Math.min(sp.max, sp.min + gd.span * (sp.max - sp.min) * sens);
                     }
 
                     // ── Palm X → mapped param ──────────────────────────────
-                    if (gs.mapPalmX === 'rotY' && globalState.genParams && globalState.genParams.rotateY) {
+                    if (gs.mapPalmX === 'rotY' && globalState.genParams?.rotateY) {
                         const ry = globalState.genParams.rotateY;
                         ry.value = ry.min + gd.palmX * (ry.max - ry.min);
-                    } else if (gs.mapPalmX === 'rotX' && globalState.genParams && globalState.genParams.rotateX) {
+                    } else if (gs.mapPalmX === 'rotX' && globalState.genParams?.rotateX) {
                         const rx = globalState.genParams.rotateX;
                         rx.value = rx.min + gd.palmX * (rx.max - rx.min);
-                    } else if (gs.mapPalmX === 'warp' && globalState.genParams && globalState.genParams.warp) {
+                    } else if (gs.mapPalmX === 'warp' && globalState.genParams?.warp) {
                         const wp = globalState.genParams.warp;
                         wp.value = Math.min(wp.max, gd.palmX * wp.max * sens);
                     }
 
                     // ── Palm Y → mapped param ──────────────────────────────
-                    if (gs.mapPalmY === 'speed' && globalState.genParams && globalState.genParams.speed) {
+                    if (gs.mapPalmY === 'speed' && globalState.genParams?.speed) {
                         const sp = globalState.genParams.speed;
                         sp.value = sp.min + gd.palmY * (sp.max - sp.min);
-                    } else if (gs.mapPalmY === 'rotX' && globalState.genParams && globalState.genParams.rotateX) {
+                    } else if (gs.mapPalmY === 'rotX' && globalState.genParams?.rotateX) {
                         const rx = globalState.genParams.rotateX;
                         rx.value = rx.min + gd.palmY * (rx.max - rx.min);
-                    } else if (gs.mapPalmY === 'warp' && globalState.genParams && globalState.genParams.warp) {
+                    } else if (gs.mapPalmY === 'warp' && globalState.genParams?.warp) {
                         const wp = globalState.genParams.warp;
                         wp.value = Math.min(wp.max, gd.palmY * wp.max * sens);
                     }

@@ -267,7 +267,7 @@ class HumanEngine {
         if (result.hand && result.hand.length > 0) {
             result.hand.forEach(h => {
                 handCount++;
-                const isLeft = h.label === 'left' || (handCount === 1 && !h.label);
+                const isLeft = h.label?.toLowerCase() === 'left' || (handCount === 1 && !h.label);
                 if (isLeft) this.handLeft = true; else this.handRight = true;
 
                 // Landmarks: 0=wrist, 4=thumb_tip, 8=index_tip, 9=middle_mcp (palm centre)
