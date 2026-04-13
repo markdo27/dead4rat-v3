@@ -326,6 +326,8 @@ class CanvasEngine {
             uniform float u_gesturePalmY;   // dominant palm Y position 0-1
             uniform float u_gestureSpan;    // inter-hand distance 0-1 (theremin axis)
             uniform float u_gestureEnabled; // 1=gesture control active, 0=passthrough
+            uniform float u_gestureMode;    // 1=lens 2=energy 3=shock 4=theremin 5=all
+            uniform float u_gestureShockT;  // shockwave time accumulator (0-1 cycle)
 
             // --- Utility Functions ---
             float rand(vec2 co) {
@@ -1217,6 +1219,118 @@ class CanvasEngine {
                     baseColor.rgb = baseColor.rgb * maskColor.r;
                 }
 
+                // =============================================================
+                // STAGE 7: GESTURE VISUAL EFFECTS (hand-driven GPU art)
+                // =============================================================
+                if (u_gestureEnabled > 0.5) {
+                    float gMode = u_gestureMode;
+                    vec2 palm = vec2(u_gesturePalmX, u_gesturePalmY);
+                    float pinch = u_gesturePinch;
+                    float span  = u_gestureSpan;
+                    float aspect = u_resolution.x / u_resolution.y;
+
+                    // ── 1. PALM LENS — radial UV distortion vortex ──────────
+                    if (gMode == 1.0 || gMode == 5.0) {
+                        vec2 delta = uv - palm;
+                        delta.x *= aspect;
+                        float dist = length(delta);
+                        float radius = 0.15 + pinch * 0.25;
+                        if (dist < radius) {
+                            float strength = pinch * 2.5;
+                            float falloff = 1.0 - smoothstep(0.0, radius, dist);
+                            float angle = falloff * falloff * strength;
+                            // Swirl rotation
+                            float s = sin(angle);
+                            float c = cos(angle);
+                            vec2 centered = uv - palm;
+                            vec2 rotated = vec2(
+                                centered.x * c - centered.y * s,
+                                centered.x * s + centered.y * c
+                            );
+                            // Magnification
+                            float mag = 1.0 - falloff * pinch * 0.5;
+                            vec2 lensUV = palm + rotated * mag;
+                            baseColor.rgb = texture2D(u_videoTex, clamp(lensUV, 0.0, 1.0)).rgb;
+                            // Subtle chromatic edge
+                            float edgeGlow = falloff * pinch * 0.6;
+                            baseColor.rgb += vec3(
+                                edgeGlow * 0.3 * sin(u_time * 2.0),
+                                edgeGlow * 0.15,
+                                edgeGlow * 0.3 * cos(u_time * 1.7)
+                            );
+                        }
+                    }
+
+                    // ── 2. ENERGY FIELD — chromatic glow aura ───────────────
+                    if (gMode == 2.0 || gMode == 5.0) {
+                        vec2 delta = uv - palm;
+                        delta.x *= aspect;
+                        float dist = length(delta);
+                        float glowRadius = 0.08 + pinch * 0.35;
+                        float glow = exp(-dist * dist / (glowRadius * glowRadius * 0.5));
+                        // Shifting hue over time
+                        float hue = fract(u_time * 0.1 + pinch * 0.5);
+                        vec3 glowCol;
+                        // HSV-ish to RGB
+                        glowCol.r = abs(hue * 6.0 - 3.0) - 1.0;
+                        glowCol.g = 2.0 - abs(hue * 6.0 - 2.0);
+                        glowCol.b = 2.0 - abs(hue * 6.0 - 4.0);
+                        glowCol = clamp(glowCol, 0.0, 1.0);
+                        float intensity = glow * (0.4 + pinch * 1.2);
+                        baseColor.rgb += glowCol * intensity;
+                        // Pulsing ring at outer edge
+                        float ring = smoothstep(glowRadius - 0.02, glowRadius, dist)
+                                   * smoothstep(glowRadius + 0.04, glowRadius, dist);
+                        baseColor.rgb += glowCol * ring * (0.5 + 0.5 * sin(u_time * 8.0)) * pinch;
+                    }
+
+                    // ── 3. SHOCKWAVE — expanding ring distortion ────────────
+                    if (gMode == 3.0 || gMode == 5.0) {
+                        float shockT = u_gestureShockT;
+                        if (shockT > 0.01 && shockT < 1.0) {
+                            vec2 delta = uv - palm;
+                            delta.x *= aspect;
+                            float dist = length(delta);
+                            // Expanding ring radius
+                            float ringR = shockT * 1.2;
+                            float ringW = 0.04 + shockT * 0.06;
+                            float ringMask = smoothstep(ringR - ringW, ringR - ringW * 0.3, dist)
+                                           * smoothstep(ringR + ringW * 0.3, ringR - ringW * 0.3, dist);
+                            // Fade out over time
+                            float fade = 1.0 - smoothstep(0.0, 1.0, shockT);
+                            // Distort UVs along the ring
+                            vec2 dir = normalize(delta + 0.001);
+                            float strength = ringMask * fade * 0.08;
+                            vec2 shockUV = uv + dir * strength;
+                            vec3 shockCol = texture2D(u_videoTex, clamp(shockUV, 0.0, 1.0)).rgb;
+                            baseColor.rgb = mix(baseColor.rgb, shockCol, ringMask * fade);
+                            // Bright ring edge
+                            baseColor.rgb += vec3(1.0, 0.6, 0.2) * ringMask * fade * 0.5;
+                        }
+                    }
+
+                    // ── 4. THEREMIN GRID — two-hand interference pattern ────
+                    if (gMode == 4.0 || gMode == 5.0) {
+                        if (span > 0.05) {
+                            // Standing wave frequency based on hand distance
+                            float freq = 10.0 + span * 60.0;
+                            float wave1 = sin((uv.x + uv.y) * freq + u_time * 3.0);
+                            float wave2 = sin((uv.x - uv.y) * freq * 0.7 + u_time * -2.3);
+                            float wave3 = sin(length(uv - 0.5) * freq * 1.3 + u_time * 1.7);
+                            float pattern = (wave1 + wave2 + wave3) / 3.0;
+                            // Intensity scales with span
+                            float intensity = span * 0.5;
+                            // Colour shift
+                            vec3 gridCol = vec3(
+                                0.5 + 0.5 * sin(pattern * 3.14 + 0.0),
+                                0.5 + 0.5 * sin(pattern * 3.14 + 2.09),
+                                0.5 + 0.5 * sin(pattern * 3.14 + 4.19)
+                            );
+                            baseColor.rgb = mix(baseColor.rgb, gridCol, intensity * abs(pattern));
+                        }
+                    }
+                }
+
                 gl_FragColor = vec4(clamp(baseColor.rgb, 0.0, 1.0), 1.0);
             }
         `;
@@ -1422,6 +1536,8 @@ class CanvasEngine {
         this.locGesturePalmY   = loc("u_gesturePalmY");
         this.locGestureSpan    = loc("u_gestureSpan");
         this.locGestureEnabled = loc("u_gestureEnabled");
+        this.locGestureMode    = loc("u_gestureMode");
+        this.locGestureShockT  = loc("u_gestureShockT");
     }
 
     initTextures() {
@@ -1753,6 +1869,8 @@ class CanvasEngine {
         this.gl.uniform1f(this.locGesturePalmX,   gest.palmX  !== undefined ? gest.palmX : 0.5);
         this.gl.uniform1f(this.locGesturePalmY,   gest.palmY  !== undefined ? gest.palmY : 0.5);
         this.gl.uniform1f(this.locGestureSpan,    gest.span   || 0.0);
+        this.gl.uniform1f(this.locGestureMode,    gest.mode   || 5.0);
+        this.gl.uniform1f(this.locGestureShockT,  gest.shockT || 0.0);
 
         // Draw main quad to FBO
         gl.bindBuffer(gl.ARRAY_BUFFER, this.positionBuffer);

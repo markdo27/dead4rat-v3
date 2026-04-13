@@ -98,11 +98,9 @@ const globalState = {
         palmX:   0.5,
         palmY:   0.5,
         span:    0,
-        mapPinch:  'rgbShift',
-        mapSpan:   'feedback',
-        mapPalmX:  'rotY',
-        mapPalmY:  'speed',
-        sensitivity: 1.5,
+        mode:    5,           // 1=lens 2=energy 3=shock 4=theremin 5=all
+        shockT:  0,           // shockwave timer 0-1
+        _shockActive: false,  // edge-detect for pinch trigger
         _debugFrames: 0,
     },
 };
@@ -635,14 +633,18 @@ function Dead4RatApp() {
                 // Feed data + raw landmarks into blobTracker overlay
                 if (blobTracker) {
                     blobTracker.setHumanData(hd, humanEngine._lastResult);
-                    // Ensure overlay canvas is visible whenever human AI is on
-                    if (blobTracker.showHuman && blobTracker.showOverlay) {
+                    // Suppress human overlay when gesture mode is active (clean visuals)
+                    const showOverlay = !globalState.gesture.enabled;
+                    if (showOverlay && blobTracker.showHuman && blobTracker.showOverlay) {
                         blobTracker.overlayCanvas.style.display = 'block';
                         // If blob detection is off, still redraw human layer each frame
                         if (!blobTracker.enabled) {
                             blobTracker.overlayCtx.clearRect(0, 0, blobTracker.overlayCanvas.width, blobTracker.overlayCanvas.height);
                             blobTracker._drawHumanOverlay();
                         }
+                    } else if (!showOverlay) {
+                        // Gesture active — hide overlay canvas and clear it
+                        blobTracker.overlayCanvas.style.display = 'none';
                     }
                 }
                 // Throttle React UI update to ~8fps to avoid excess re-renders
@@ -670,70 +672,23 @@ function Dead4RatApp() {
                         + ' palmY=' + gd.palmY.toFixed(3)
                         + ' span=' + gd.span.toFixed(3)
                         + ' L=' + gd.handLeft + ' R=' + gd.handRight
-                        + ' map=' + gs.mapPinch
-                        + ' rgbAmt=' + globalState.glitchez.rgbShift.params.amount.value.toFixed(3));
+                        + ' mode=' + gs.mode
+                        + ' shockT=' + (gs.shockT || 0).toFixed(3));
                 }
 
+                // ── Shockwave timer management ─────────────────────────────
                 if (gs.enabled) {
-                    const sens = gs.sensitivity;
-
-                    // ── Pinch → mapped param ───────────────────────────────
-                    if (gs.mapPinch === 'rgbShift') {
-                        globalState.glitchez.rgbShift.enabled = true;
-                        const rgb = globalState.glitchez.rgbShift.params.amount;
-                        rgb.value = Math.min(rgb.max, gd.pinch * rgb.max * sens);
-                    } else if (gs.mapPinch === 'feedback') {
-                        globalState.glitchez.videoFeedback.enabled = true;
-                        const fb = globalState.glitchez.videoFeedback.params.amount;
-                        fb.value = Math.min(fb.max, fb.min + gd.pinch * (fb.max - fb.min) * sens);
-                    } else if (gs.mapPinch === 'noise') {
-                        globalState.glitchez.noise.enabled = true;
-                        const ns = globalState.glitchez.noise.params.amount;
-                        ns.value = Math.min(ns.max, gd.pinch * ns.max * sens);
-                    } else if (gs.mapPinch === 'warp' && globalState.genParams?.warp) {
-                        const wp = globalState.genParams.warp;
-                        wp.value = Math.min(wp.max, wp.min + gd.pinch * (wp.max - wp.min) * sens);
+                    // Fire shockwave on pinch threshold crossing
+                    const pinchActive = gd.pinch > 0.7;
+                    if (pinchActive && !gs._shockActive) {
+                        gs.shockT = 0.001; // Start shockwave
                     }
+                    gs._shockActive = pinchActive;
 
-                    // ── Span → mapped param ────────────────────────────────
-                    if (gs.mapSpan === 'feedback') {
-                        globalState.glitchez.videoFeedback.enabled = true;
-                        const fb = globalState.glitchez.videoFeedback.params.amount;
-                        fb.value = Math.min(fb.max, fb.min + gd.span * (fb.max - fb.min) * sens);
-                    } else if (gs.mapSpan === 'warp' && globalState.genParams?.warp) {
-                        const wp = globalState.genParams.warp;
-                        wp.value = Math.min(wp.max, wp.min + gd.span * (wp.max - wp.min) * sens);
-                    } else if (gs.mapSpan === 'noise') {
-                        globalState.glitchez.noise.enabled = true;
-                        const ns = globalState.glitchez.noise.params.amount;
-                        ns.value = Math.min(ns.max, gd.span * ns.max * sens);
-                    } else if (gs.mapSpan === 'speed' && globalState.genParams?.speed) {
-                        const sp = globalState.genParams.speed;
-                        sp.value = Math.min(sp.max, sp.min + gd.span * (sp.max - sp.min) * sens);
-                    }
-
-                    // ── Palm X → mapped param ──────────────────────────────
-                    if (gs.mapPalmX === 'rotY' && globalState.genParams?.rotateY) {
-                        const ry = globalState.genParams.rotateY;
-                        ry.value = ry.min + gd.palmX * (ry.max - ry.min);
-                    } else if (gs.mapPalmX === 'rotX' && globalState.genParams?.rotateX) {
-                        const rx = globalState.genParams.rotateX;
-                        rx.value = rx.min + gd.palmX * (rx.max - rx.min);
-                    } else if (gs.mapPalmX === 'warp' && globalState.genParams?.warp) {
-                        const wp = globalState.genParams.warp;
-                        wp.value = Math.min(wp.max, gd.palmX * wp.max * sens);
-                    }
-
-                    // ── Palm Y → mapped param ──────────────────────────────
-                    if (gs.mapPalmY === 'speed' && globalState.genParams?.speed) {
-                        const sp = globalState.genParams.speed;
-                        sp.value = sp.min + gd.palmY * (sp.max - sp.min);
-                    } else if (gs.mapPalmY === 'rotX' && globalState.genParams?.rotateX) {
-                        const rx = globalState.genParams.rotateX;
-                        rx.value = rx.min + gd.palmY * (rx.max - rx.min);
-                    } else if (gs.mapPalmY === 'warp' && globalState.genParams?.warp) {
-                        const wp = globalState.genParams.warp;
-                        wp.value = Math.min(wp.max, gd.palmY * wp.max * sens);
+                    // Advance shockwave timer
+                    if (gs.shockT > 0 && gs.shockT < 1.0) {
+                        gs.shockT += 0.018; // ~1s cycle at 60fps
+                        if (gs.shockT >= 1.0) gs.shockT = 0;
                     }
                 }
             }
@@ -1952,14 +1907,17 @@ function Dead4RatApp() {
                         </div>
                     )}
 
-                    {/* ═══ GESTURE CTRL (inline) ═══════════════════ */}
+                                {/* ═══ GESTURE CTRL (inline) ═══════════════════ */}
                     <div className="hud-divider" style={{margin: '12px 0 8px'}}/>
                     {(() => {
                         const gs = globalState.gesture;
-                        const PINCH_OPTS = ['feedback','rgbShift','noise','warp','none'];
-                        const SPAN_OPTS  = ['warp','feedback','speed','none'];
-                        const PALMX_OPTS = ['rotY','rotX','warp','none'];
-                        const PALMY_OPTS = ['speed','rotX','warp','none'];
+                        const MODES = [
+                            { id: 1, label: 'LENS',     icon: '🔮' },
+                            { id: 2, label: 'ENERGY',   icon: '✨' },
+                            { id: 3, label: 'SHOCK',    icon: '💥' },
+                            { id: 4, label: 'THEREMIN', icon: '🎵' },
+                            { id: 5, label: 'ALL',      icon: '◉' },
+                        ];
                         return (
                             <>
                                 <div className="section-header" style={{marginBottom:'6px'}}>// GESTURE_CTRL</div>
@@ -1968,10 +1926,36 @@ function Dead4RatApp() {
                                 <button
                                     className={`brutalist-button ${gs.enabled ? 'primary' : ''}`}
                                     style={{width:'100%', fontSize:'0.6rem', letterSpacing:'2px', marginBottom:'8px'}}
-                                    onClick={() => { gs.enabled = !gs.enabled; setUiRefresh(r=>r+1); }}
+                                    onClick={() => {
+                                        gs.enabled = !gs.enabled;
+                                        // Immediately toggle overlay visibility
+                                        if (blobTracker) {
+                                            if (gs.enabled) {
+                                                blobTracker.overlayCanvas.style.display = 'none';
+                                            } else if (blobTracker.showHuman && blobTracker.showOverlay) {
+                                                blobTracker.overlayCanvas.style.display = 'block';
+                                            }
+                                        }
+                                        setUiRefresh(r=>r+1);
+                                    }}
                                 >
                                     {gs.enabled ? '◉ GESTURE: ACTIVE' : '○ ENABLE GESTURE CTRL'}
                                 </button>
+
+                                {/* Mode selector */}
+                                <div className="section-header">// GESTURE_MODE</div>
+                                <div style={{display:'flex',gap:'3px',flexWrap:'wrap',marginBottom:'8px'}}>
+                                    {MODES.map(m => (
+                                        <button
+                                            key={m.id}
+                                            className={`brutalist-button ${gs.mode===m.id?'primary':''}`}
+                                            style={{fontSize:'0.5rem',padding:'3px 6px',flex:'1 1 auto',minWidth:'0'}}
+                                            onClick={() => { gs.mode=m.id; setUiRefresh(r=>r+1); }}
+                                        >
+                                            {m.icon} {m.label}
+                                        </button>
+                                    ))}
+                                </div>
 
                                 {/* Live meters */}
                                 <div className="section-header">// LIVE_INPUT</div>
@@ -1994,46 +1978,6 @@ function Dead4RatApp() {
                                         <span style={{fontSize:'0.5rem',color:'var(--text-bright)',width:'28px',textAlign:'right'}}>{pct}%</span>
                                     </div>
                                 ))}
-
-                                <div className="hud-divider" style={{margin:'6px 0'}}/>
-
-                                {/* Axis mapping */}
-                                <div className="section-header">// AXIS_MAPPING</div>
-                                {[
-                                    ['PINCH →',  'mapPinch',  PINCH_OPTS],
-                                    ['SPAN →',   'mapSpan',   SPAN_OPTS],
-                                    ['PALM X →', 'mapPalmX',  PALMX_OPTS],
-                                    ['PALM Y →', 'mapPalmY',  PALMY_OPTS],
-                                ].map(([label, key, opts]) => (
-                                    <div key={key} style={{display:'flex',alignItems:'center',gap:'4px',marginBottom:'4px'}}>
-                                        <span style={{fontSize:'0.48rem',color:'var(--text-dim)',width:'50px',flexShrink:0}}>{label}</span>
-                                        <div style={{display:'flex',gap:'2px',flexWrap:'wrap'}}>
-                                            {opts.map(opt => (
-                                                <button
-                                                    key={opt}
-                                                    className={`brutalist-button ${gs[key]===opt?'active':''}`}
-                                                    style={{fontSize:'0.45rem',padding:'2px 4px'}}
-                                                    onClick={() => { gs[key]=opt; setUiRefresh(r=>r+1); }}
-                                                >
-                                                    {opt.toUpperCase()}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-                                ))}
-
-                                <div className="hud-divider" style={{margin:'6px 0'}}/>
-
-                                {/* Sensitivity */}
-                                <div className="param-row">
-                                    <span className="param-label">SENS</span>
-                                    <input
-                                        type="range" className="brutalist-slider" min="0.1" max="3" step="0.05"
-                                        value={gs.sensitivity}
-                                        onChange={e => { gs.sensitivity=parseFloat(e.target.value); setUiRefresh(r=>r+1); }}
-                                    />
-                                    <span className="param-value">{gs.sensitivity.toFixed(2)}</span>
-                                </div>
                             </>
                         );
                     })()}
