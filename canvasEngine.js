@@ -328,6 +328,7 @@ class CanvasEngine {
             uniform float u_gestureEnabled; // 1=gesture control active, 0=passthrough
             uniform float u_gestureMode;    // 1=lens 2=energy 3=shock 4=theremin 5=all
             uniform float u_gestureShockT;  // shockwave time accumulator (0-1 cycle)
+            uniform float u_gestureModeExt; // 0=off 1=wave 2=pulse 3=ripple 4=gravity 5=freeze
 
             // --- Utility Functions ---
             float rand(vec2 co) {
@@ -1331,6 +1332,119 @@ class CanvasEngine {
                     }
                 }
 
+                // =============================================================
+                // STAGE 8: EXTENDED GESTURE EFFECTS (modeExt)
+                // =============================================================
+                if (u_gestureEnabled > 0.5 && u_gestureModeExt > 0.5) {
+                    float geMode = u_gestureModeExt;
+                    vec2 gpalm = vec2(u_gesturePalmX, u_gesturePalmY);
+                    float gpinch = u_gesturePinch;
+                    float gaspect = u_resolution.x / u_resolution.y;
+
+                    // ── EXT 1. WAVE — sine wave distortion from palm ────────────
+                    if (geMode == 1.0) {
+                        vec2 delta = uv - gpalm;
+                        delta.x *= gaspect;
+                        float dist = length(delta);
+                        float freq = 15.0 + gpinch * 25.0;
+                        float amp = 0.03 * gpinch * (1.0 - smoothstep(0.0, 0.5, dist));
+                        float wave = sin(dist * freq - u_time * 5.0) * amp;
+                        vec2 waveDir = normalize(delta + 0.001);
+                        vec2 waveUV = uv + waveDir * wave;
+                        baseColor.rgb = texture2D(u_videoTex, clamp(waveUV, 0.0, 1.0)).rgb;
+                        // Color fringe
+                        float fringe = wave * 2.0;
+                        baseColor.r += texture2D(u_videoTex, clamp(waveUV + vec2(fringe * 0.01, 0.0), 0.0, 1.0)).r * 0.5;
+                        baseColor.b += texture2D(u_videoTex, clamp(waveUV - vec2(fringe * 0.01, 0.0), 0.0, 1.0)).b * 0.5;
+                    }
+
+                    // ── EXT 2. PULSE — radial pulse rings from palm ───────────
+                    if (geMode == 2.0) {
+                        vec2 delta = uv - gpalm;
+                        delta.x *= gaspect;
+                        float dist = length(delta);
+                        float pulseFreq = 8.0 + gpinch * 12.0;
+                        float pulse = sin(dist * pulseFreq - u_time * 8.0) * 0.5 + 0.5;
+                        float radius = 0.1 + gpinch * 0.3;
+                        float falloff = 1.0 - smoothstep(0.0, radius, dist);
+                        float intensity = pulse * falloff * gpinch * 1.5;
+                        vec3 pulseCol = vec3(
+                            0.5 + 0.5 * sin(u_time * 3.0),
+                            0.5 + 0.5 * sin(u_time * 3.0 + 2.09),
+                            0.5 + 0.5 * sin(u_time * 3.0 + 4.19)
+                        );
+                        baseColor.rgb = mix(baseColor.rgb, pulseCol, intensity * 0.7);
+                    }
+
+                    // ── EXT 3. RIPPLE — concentric water ripple distortion ─────
+                    if (geMode == 3.0) {
+                        vec2 delta = uv - gpalm;
+                        delta.x *= gaspect;
+                        float dist = length(delta);
+                        float rippleRings = 12.0 + gpinch * 20.0;
+                        float rippleSpeed = 4.0 + gpinch * 6.0;
+                        float ripple = sin(dist * rippleRings - u_time * rippleSpeed) * 0.5 + 0.5;
+                        float rippleFalloff = 1.0 - smoothstep(0.0, 0.6, dist);
+                        float rippleAmt = 0.02 * gpinch * rippleFalloff;
+                        vec2 rippleDir = normalize(delta + 0.001);
+                        vec2 rippleUV = uv + rippleDir * rippleAmt * ripple;
+                        baseColor.rgb = texture2D(u_videoTex, clamp(rippleUV, 0.0, 1.0)).rgb;
+                        // Foam highlight at peaks
+                        float foam = smoothstep(0.7, 1.0, ripple) * rippleFalloff * gpinch;
+                        baseColor.rgb += vec3(foam * 0.3);
+                    }
+
+                    // ── EXT 4. GRAVITY — black hole warping ───────────────────
+                    if (geMode == 4.0) {
+                        vec2 delta = uv - gpalm;
+                        delta.x *= gaspect;
+                        float dist = length(delta);
+                        float eventHorizon = 0.08 + gpinch * 0.12;
+                        if (dist < eventHorizon) {
+                            // Inside event horizon — pull colors inward
+                            float strength = (1.0 - dist / eventHorizon) * gpinch * 0.5;
+                            vec2 gravUV = gpalm + delta * (1.0 - strength);
+                            baseColor.rgb = texture2D(u_videoTex, clamp(gravUV, 0.0, 1.0)).rgb;
+                            baseColor.rgb *= 1.0 - strength * 0.7;
+                        } else {
+                            // Outside — lensing warp
+                            float lensStrength = gpinch * 0.15 / (dist * dist + 0.01);
+                            vec2 gravUV = uv - normalize(delta) * lensStrength * 0.05;
+                            baseColor.rgb = texture2D(u_videoTex, clamp(gravUV, 0.0, 1.0)).rgb;
+                            // Accretion disk glow
+                            float diskR = eventHorizon * 1.5;
+                            float diskW = 0.03;
+                            float disk = smoothstep(diskR - diskW, diskR, dist) * smoothstep(diskR + diskW, diskR, dist);
+                            vec3 diskCol = vec3(1.0, 0.5, 0.2) * disk * gpinch * 0.8;
+                            baseColor.rgb += diskCol;
+                        }
+                    }
+
+                    // ── EXT 5. FREEZE — time-stop blur around palm ───────────
+                    if (geMode == 5.0) {
+                        vec2 delta = uv - gpalm;
+                        delta.x *= gaspect;
+                        float dist = length(delta);
+                        float freezeR = 0.15 + gpinch * 0.25;
+                        float freezeAmt = 1.0 - smoothstep(0.0, freezeR, dist);
+                        freezeAmt = pow(freezeAmt, 1.5) * gpinch;
+                        if (freezeAmt > 0.01) {
+                            // Radial blur samples toward palm center
+                            vec2 blurDir = normalize(gpalm - uv);
+                            float blurSamples = 8.0;
+                            vec3 frozenCol = vec3(0.0);
+                            for (float i = 0.0; i < 8.0; i++) {
+                                float t = i / blurSamples;
+                                float weight = 1.0 - t;
+                                vec2 sampleUV = uv + blurDir * freezeAmt * t * 0.1;
+                                frozenCol += texture2D(u_videoTex, clamp(sampleUV, 0.0, 1.0)).rgb * weight;
+                            }
+                            frozenCol /= 4.0;
+                            baseColor.rgb = mix(baseColor.rgb, frozenCol, freezeAmt);
+                        }
+                    }
+                }
+
                 gl_FragColor = vec4(clamp(baseColor.rgb, 0.0, 1.0), 1.0);
             }
         `;
@@ -1538,6 +1652,7 @@ class CanvasEngine {
         this.locGestureEnabled = loc("u_gestureEnabled");
         this.locGestureMode    = loc("u_gestureMode");
         this.locGestureShockT  = loc("u_gestureShockT");
+        this.locGestureModeExt = loc("u_gestureModeExt");
     }
 
     initTextures() {
@@ -1871,6 +1986,7 @@ class CanvasEngine {
         this.gl.uniform1f(this.locGestureSpan,    gest.span   || 0.0);
         this.gl.uniform1f(this.locGestureMode,    gest.mode   || 5.0);
         this.gl.uniform1f(this.locGestureShockT,  gest.shockT || 0.0);
+        this.gl.uniform1f(this.locGestureModeExt, gest.modeExt || 0.0);
 
         // Draw main quad to FBO
         gl.bindBuffer(gl.ARRAY_BUFFER, this.positionBuffer);

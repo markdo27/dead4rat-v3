@@ -102,6 +102,8 @@ const globalState = {
         shockT:  0,           // shockwave timer 0-1
         _shockActive: false,  // edge-detect for pinch trigger
         _debugFrames: 0,
+        // Extended gesture modes
+        modeExt: 0,           // 0=off, 1=wave, 2=pulse, 3=ripple, 4=gravity, 5=freezes
     },
 };
 
@@ -690,6 +692,95 @@ function Dead4RatApp() {
                         gs.shockT += 0.018; // ~1s cycle at 60fps
                         if (gs.shockT >= 1.0) gs.shockT = 0;
                     }
+                }
+
+                // ── Draw Gesture Tracker Canvas ──────────────────────
+                const trackerCanvas = document.getElementById('gesture-tracker-canvas');
+                if (trackerCanvas && humanEngine && humanEngine.isRunning) {
+                    const tctx = trackerCanvas.getContext('2d');
+                    const tcW = trackerCanvas.width;
+                    const tcH = trackerCanvas.height;
+                    tctx.fillStyle = '#0a0a0a';
+                    tctx.fillRect(0, 0, tcW, tcH);
+
+                    // Grid lines
+                    tctx.strokeStyle = 'rgba(255,85,0,0.1)';
+                    tctx.lineWidth = 0.5;
+                    for (let i = 0; i <= 4; i++) {
+                        const x = (tcW / 4) * i;
+                        const y = (tcH / 4) * i;
+                        tctx.beginPath();
+                        tctx.moveTo(x, 0);
+                        tctx.lineTo(x, tcH);
+                        tctx.stroke();
+                        tctx.beginPath();
+                        tctx.moveTo(0, y);
+                        tctx.lineTo(tcW, y);
+                        tctx.stroke();
+                    }
+
+                    // Draw hand positions
+                    const palmX = gs.palmX * tcW;
+                    const palmY = (1 - gs.palmY) * tcH;
+                    const spanX = gs.span * tcW * 0.5;
+
+                    // Left palm (if detected)
+                    if (humanData?.handLeft) {
+                        tctx.fillStyle = '#FF5500';
+                        tctx.beginPath();
+                        tctx.arc(palmX - spanX, palmY, 8, 0, Math.PI * 2);
+                        tctx.fill();
+                        tctx.strokeStyle = '#FF5500';
+                        tctx.lineWidth = 2;
+                        tctx.stroke();
+                    }
+
+                    // Right palm (if detected)
+                    if (humanData?.handRight) {
+                        tctx.fillStyle = '#FF8800';
+                        tctx.beginPath();
+                        tctx.arc(palmX + spanX, palmY, 8, 0, Math.PI * 2);
+                        tctx.fill();
+                        tctx.strokeStyle = '#FF8800';
+                        tctx.lineWidth = 2;
+                        tctx.stroke();
+                    }
+
+                    // Draw dominant palm position
+                    tctx.fillStyle = gs.enabled ? 'var(--accent)' : '#FF5500';
+                    tctx.beginPath();
+                    tctx.arc(palmX, palmY, 6, 0, Math.PI * 2);
+                    tctx.fill();
+
+                    // Draw pinch indicator ring
+                    const pinchR = 10 + gs.pinch * 20;
+                    tctx.strokeStyle = `rgba(255,85,0,${0.3 + gs.pinch * 0.7})`;
+                    tctx.lineWidth = 2;
+                    tctx.beginPath();
+                    tctx.arc(palmX, palmY, pinchR, 0, Math.PI * 2);
+                    tctx.stroke();
+
+                    // Draw line connecting hands (theremin axis)
+                    if (humanData?.handLeft && humanData?.handRight) {
+                        tctx.strokeStyle = 'rgba(255,85,0,0.5)';
+                        tctx.lineWidth = 1;
+                        tctx.setLineDash([4, 4]);
+                        tctx.beginPath();
+                        tctx.moveTo(palmX - spanX, palmY);
+                        tctx.lineTo(palmX + spanX, palmY);
+                        tctx.stroke();
+                        tctx.setLineDash([]);
+                    }
+
+                    // Crosshair at center
+                    tctx.strokeStyle = 'rgba(255,85,0,0.3)';
+                    tctx.lineWidth = 1;
+                    tctx.beginPath();
+                    tctx.moveTo(tcW / 2 - 10, tcH / 2);
+                    tctx.lineTo(tcW / 2 + 10, tcH / 2);
+                    tctx.moveTo(tcW / 2, tcH / 2 - 10);
+                    tctx.lineTo(tcW / 2, tcH / 2 + 10);
+                    tctx.stroke();
                 }
             }
 
@@ -1773,132 +1864,140 @@ function Dead4RatApp() {
                     </div>
 
                     {/* ── Detection Status ──────────────────────── */}
-                    <div className="section-header">// DETECTION_STATUS</div>
-                    <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', marginBottom: '8px'}}>
-                        {[
-                            { label: 'FACE',   val: humanData?.faceDetected, extra: humanData?.faceDetected ? ` ${Math.round((humanData?.faceScore||0)*100)}%` : '' },
-                            { label: 'HAND-L', val: humanData?.handLeft },
-                            { label: 'HAND-R', val: humanData?.handRight },
-                            { label: 'BODY',   val: humanData?.bodyDetected },
-                        ].map(({label, val, extra}) => (
-                            <div key={label} style={{
-                                display: 'flex', alignItems: 'center', gap: '6px',
-                                padding: '3px 6px',
-                                background: val ? 'var(--accent)10' : '#0a0a0a',
-                                border: `1px solid ${val ? 'var(--accent)' : 'var(--border)'}`,
-                                fontSize: '0.6rem',
-                            }}>
-                                <span style={{color: val ? 'var(--accent)' : 'var(--text-dim)', fontSize: '0.55rem'}}>◉</span>
-                                <span style={{color: 'var(--text-dim)', flex: 1}}>{label}</span>
-                                <span style={{color: val ? 'var(--accent)' : 'var(--text-muted)', fontVariantNumeric: 'tabular-nums'}}>
-                                    {val ? `ON${extra||''}` : 'OFF'}
-                                </span>
-                            </div>
-                        ))}
-                    </div>
-
-                    {/* ── Emotion ──────────────────────────────── */}
-                    {humanData?.faceDetected && (
+                    {!globalState.gesture.enabled && (
                         <>
-                            <div className="section-header">// EMOTION_DECODE</div>
-                            <div style={{marginBottom: '8px'}}>
-                                <div style={{
-                                    padding: '4px 8px', marginBottom: '6px',
-                                    background: 'var(--accent)10', border: '1px solid var(--accent)40',
-                                    fontSize: '0.65rem', letterSpacing: '2px',
-                                    color: 'var(--accent)', textAlign: 'center',
-                                }}>
-                                    ▶ {(humanData?.emotion || 'neutral').toUpperCase()}
-                                </div>
-                                {Object.entries(humanData?.emotions || {}).map(([emo, score]) => (
-                                    <div key={emo} style={{display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px'}}>
-                                        <span style={{fontSize: '0.55rem', color: 'var(--text-dim)', width: '60px'}}>{emo.toUpperCase()}</span>
-                                        <div style={{flex: 1, height: '4px', background: 'var(--bg-mid)', position: 'relative'}}>
-                                            <div style={{
-                                                position: 'absolute', left: 0, top: 0, height: '100%',
-                                                width: `${Math.round((score||0) * 100)}%`,
-                                                background: score > 0.5 ? 'var(--accent)' : 'var(--accent)88',
-                                                transition: 'width 0.12s ease',
-                                            }} />
-                                        </div>
-                                        <span style={{fontSize: '0.55rem', color: 'var(--text-bright)', width: '28px', textAlign: 'right'}}>
-                                            {Math.round((score||0)*100)}%
+                            <div className="section-header">// DETECTION_STATUS</div>
+                            <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', marginBottom: '8px'}}>
+                                {[
+                                    { label: 'FACE',   val: humanData?.faceDetected, extra: humanData?.faceDetected ? ` ${Math.round((humanData?.faceScore||0)*100)}%` : '' },
+                                    { label: 'HAND-L', val: humanData?.handLeft },
+                                    { label: 'HAND-R', val: humanData?.handRight },
+                                    { label: 'BODY',   val: humanData?.bodyDetected },
+                                ].map(({label, val, extra}) => (
+                                    <div key={label} style={{
+                                        display: 'flex', alignItems: 'center', gap: '6px',
+                                        padding: '3px 6px',
+                                        background: val ? 'var(--accent)10' : '#0a0a0a',
+                                        border: `1px solid ${val ? 'var(--accent)' : 'var(--border)'}`,
+                                        fontSize: '0.6rem',
+                                    }}>
+                                        <span style={{color: val ? 'var(--accent)' : 'var(--text-dim)', fontSize: '0.55rem'}}>◉</span>
+                                        <span style={{color: 'var(--text-dim)', flex: 1}}>{label}</span>
+                                        <span style={{color: val ? 'var(--accent)' : 'var(--text-muted)', fontVariantNumeric: 'tabular-nums'}}>
+                                            {val ? `ON${extra||''}` : 'OFF'}
                                         </span>
                                     </div>
                                 ))}
                             </div>
 
-                            {/* ── Head Rotation ─────────────────────── */}
-                            <div className="section-header">// HEAD_ROTATION</div>
-                            <div style={{marginBottom: '8px'}}>
-                                {[['YAW', humanData?.yaw], ['PITCH', humanData?.pitch], ['ROLL', humanData?.roll]].map(([label, val]) => {
-                                    const pct = ((val||0) + 1) * 50;
-                                    const deg = ((val||0) * 90).toFixed(0);
-                                    return (
-                                        <div key={label} style={{display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px'}}>
-                                            <span style={{fontSize: '0.55rem', color: 'var(--text-dim)', width: '36px'}}>{label}</span>
-                                            <div style={{flex: 1, height: '6px', background: 'var(--bg-mid)', position: 'relative'}}>
-                                                <div style={{position:'absolute',left:'50%',top:'-1px',width:'1px',height:'8px',background:'var(--border)'}} />
-                                                <div style={{
-                                                    position: 'absolute', top: 0, height: '100%',
-                                                    left: `${Math.min(pct, 50)}%`,
-                                                    width: `${Math.abs(pct - 50)}%`,
-                                                    background: pct > 50 ? 'var(--accent)' : '#0088FF',
-                                                    transition: 'left 0.08s linear, width 0.08s linear',
-                                                }} />
-                                            </div>
-                                            <span style={{fontSize: '0.55rem', color: 'var(--text-bright)', width: '32px', textAlign: 'right', fontVariantNumeric: 'tabular-nums'}}>
-                                                {deg}°
-                                            </span>
+                            {/* ── Emotion ──────────────────────────────── */}
+                            {humanData?.faceDetected && (
+                                <>
+                                    <div className="section-header">// EMOTION_DECODE</div>
+                                    <div style={{marginBottom: '8px'}}>
+                                        <div style={{
+                                            padding: '4px 8px', marginBottom: '6px',
+                                            background: 'var(--accent)10', border: '1px solid var(--accent)40',
+                                            fontSize: '0.65rem', letterSpacing: '2px',
+                                            color: 'var(--accent)', textAlign: 'center',
+                                        }}>
+                                            ▶ {(humanData?.emotion || 'neutral').toUpperCase()}
                                         </div>
+                                        {Object.entries(humanData?.emotions || {}).map(([emo, score]) => (
+                                            <div key={emo} style={{display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px'}}>
+                                                <span style={{fontSize: '0.55rem', color: 'var(--text-dim)', width: '60px'}}>{emo.toUpperCase()}</span>
+                                                <div style={{flex: 1, height: '4px', background: 'var(--bg-mid)', position: 'relative'}}>
+                                                    <div style={{
+                                                        position: 'absolute', left: 0, top: 0, height: '100%',
+                                                        width: `${Math.round((score||0) * 100)}%`,
+                                                        background: score > 0.5 ? 'var(--accent)' : 'var(--accent)88',
+                                                        transition: 'width 0.12s ease',
+                                                    }} />
+                                                </div>
+                                                <span style={{fontSize: '0.55rem', color: 'var(--text-bright)', width: '28px', textAlign: 'right'}}>
+                                                    {Math.round((score||0)*100)}%
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    {/* ── Head Rotation ─────────────────────── */}
+                                    <div className="section-header">// HEAD_ROTATION</div>
+                                    <div style={{marginBottom: '8px'}}>
+                                        {[['YAW', humanData?.yaw], ['PITCH', humanData?.pitch], ['ROLL', humanData?.roll]].map(([label, val]) => {
+                                            const pct = ((val||0) + 1) * 50;
+                                            const deg = ((val||0) * 90).toFixed(0);
+                                            return (
+                                                <div key={label} style={{display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px'}}>
+                                                    <span style={{fontSize: '0.55rem', color: 'var(--text-dim)', width: '36px'}}>{label}</span>
+                                                    <div style={{flex: 1, height: '6px', background: 'var(--bg-mid)', position: 'relative'}}>
+                                                        <div style={{position:'absolute',left:'50%',top:'-1px',width:'1px',height:'8px',background:'var(--border)'}} />
+                                                        <div style={{
+                                                            position: 'absolute', top: 0, height: '100%',
+                                                            left: `${Math.min(pct, 50)}%`,
+                                                            width: `${Math.abs(pct - 50)}%`,
+                                                            background: pct > 50 ? 'var(--accent)' : '#0088FF',
+                                                            transition: 'left 0.08s linear, width 0.08s linear',
+                                                        }} />
+                                                    </div>
+                                                    <span style={{fontSize: '0.55rem', color: 'var(--text-bright)', width: '32px', textAlign: 'right', fontVariantNumeric: 'tabular-nums'}}>
+                                                        {deg}°
+                                                    </span>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </>
+                            )}
+
+                            {/* ── Gesture ──────────────────────────────── */}
+                            {humanData?.handGesture && (
+                                <>
+                                    <div className="section-header">// GESTURE</div>
+                                    <div style={{
+                                        padding: '4px 8px', marginBottom: '8px',
+                                        border: '1px solid var(--accent)60', background: 'var(--accent)08',
+                                        fontSize: '0.58rem', color: 'var(--accent)', letterSpacing: '1px',
+                                        lineHeight: '1.5',
+                                    }}>
+                                        {humanData.handGesture.toUpperCase()}
+                                    </div>
+                                </>
+                            )}
+                        </>
+                    )}
+
+                    {!globalState.gesture.enabled && (
+                        <>
+                            <div className="hud-divider" />
+
+                            {/* ── Detection Modules ─────────────────────── */}
+                            <div className="section-header">// DETECTION_MODULES</div>
+                            <div style={{fontSize: '0.55rem', color: 'var(--text-muted)', marginBottom: '6px'}}>
+                                Toggle modules live
+                            </div>
+                            <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', marginBottom: '8px'}}>
+                                {[['FACE', 'enableFace'], ['HANDS', 'enableHands'], ['BODY', 'enableBody'], ['EMOTION', 'enableEmotion']].map(([label, cfgKey]) => {
+                                    const active = humanEngine?.config[cfgKey] ?? true;
+                                    return (
+                                        <button
+                                            key={cfgKey}
+                                            className={`brutalist-button ${active ? 'active' : ''}`}
+                                            style={{fontSize: '0.6rem', padding: '5px'}}
+                                            onClick={() => {
+                                                if (humanEngine) {
+                                                    humanEngine.setModule(cfgKey, !humanEngine.config[cfgKey]);
+                                                    setUiRefresh(r => r + 1);
+                                                }
+                                            }}
+                                        >
+                                            {active ? '◉' : '○'} {label}
+                                        </button>
                                     );
                                 })}
                             </div>
                         </>
                     )}
-
-                    {/* ── Gesture ──────────────────────────────── */}
-                    {humanData?.handGesture && (
-                        <>
-                            <div className="section-header">// GESTURE</div>
-                            <div style={{
-                                padding: '4px 8px', marginBottom: '8px',
-                                border: '1px solid var(--accent)60', background: 'var(--accent)08',
-                                fontSize: '0.58rem', color: 'var(--accent)', letterSpacing: '1px',
-                                lineHeight: '1.5',
-                            }}>
-                                {humanData.handGesture.toUpperCase()}
-                            </div>
-                        </>
-                    )}
-
-                    <div className="hud-divider" />
-
-                    {/* ── Detection Modules ─────────────────────── */}
-                    <div className="section-header">// DETECTION_MODULES</div>
-                    <div style={{fontSize: '0.55rem', color: 'var(--text-muted)', marginBottom: '6px'}}>
-                        Toggle modules live
-                    </div>
-                    <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', marginBottom: '8px'}}>
-                        {[['FACE', 'enableFace'], ['HANDS', 'enableHands'], ['BODY', 'enableBody'], ['EMOTION', 'enableEmotion']].map(([label, cfgKey]) => {
-                            const active = humanEngine?.config[cfgKey] ?? true;
-                            return (
-                                <button
-                                    key={cfgKey}
-                                    className={`brutalist-button ${active ? 'active' : ''}`}
-                                    style={{fontSize: '0.6rem', padding: '5px'}}
-                                    onClick={() => {
-                                        if (humanEngine) {
-                                            humanEngine.setModule(cfgKey, !humanEngine.config[cfgKey]);
-                                            setUiRefresh(r => r + 1);
-                                        }
-                                    }}
-                                >
-                                    {active ? '◉' : '○'} {label}
-                                </button>
-                            );
-                        })}
-                    </div>
 
                     {!humanEnabled && (
                         <div style={{marginTop: '8px', fontSize: '0.55rem', color: 'var(--text-muted)', lineHeight: '1.6'}}>
@@ -1912,11 +2011,19 @@ function Dead4RatApp() {
                     {(() => {
                         const gs = globalState.gesture;
                         const MODES = [
-                            { id: 1, label: 'LENS',     icon: '🔮' },
-                            { id: 2, label: 'ENERGY',   icon: '✨' },
-                            { id: 3, label: 'SHOCK',    icon: '💥' },
-                            { id: 4, label: 'THEREMIN', icon: '🎵' },
+                            { id: 1, label: 'LENS',     icon: '◉' },
+                            { id: 2, label: 'ENERGY',   icon: '◉' },
+                            { id: 3, label: 'SHOCK',    icon: '◉' },
+                            { id: 4, label: 'THEREMIN', icon: '◉' },
                             { id: 5, label: 'ALL',      icon: '◉' },
+                        ];
+                        const EXTMODES = [
+                            { id: 0, label: 'OFF' },
+                            { id: 1, label: 'WAVE' },
+                            { id: 2, label: 'PULSE' },
+                            { id: 3, label: 'RIPPLE' },
+                            { id: 4, label: 'GRAVITY' },
+                            { id: 5, label: 'FREEZE' },
                         ];
                         return (
                             <>
@@ -1928,7 +2035,6 @@ function Dead4RatApp() {
                                     style={{width:'100%', fontSize:'0.6rem', letterSpacing:'2px', marginBottom:'8px'}}
                                     onClick={() => {
                                         gs.enabled = !gs.enabled;
-                                        // Immediately toggle overlay visibility
                                         if (blobTracker) {
                                             if (gs.enabled) {
                                                 blobTracker.overlayCanvas.style.display = 'none';
@@ -1955,6 +2061,40 @@ function Dead4RatApp() {
                                             {m.icon} {m.label}
                                         </button>
                                     ))}
+                                </div>
+
+                                {/* Extended Effect Modes */}
+                                <div className="section-header">// EXT_EFFECTS</div>
+                                <div style={{display:'flex',gap:'3px',flexWrap:'wrap',marginBottom:'8px'}}>
+                                    {EXTMODES.map(m => (
+                                        <button
+                                            key={m.id}
+                                            className={`brutalist-button ${gs.modeExt===m.id?'primary':''}`}
+                                            style={{fontSize:'0.5rem',padding:'3px 6px',flex:'1 1 auto',minWidth:'0'}}
+                                            onClick={() => { gs.modeExt=m.id; setUiRefresh(r=>r+1); }}
+                                        >
+                                            {m.label}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                {/* Hand Tracking Indicator */}
+                                <div className="section-header">// HAND_TRACKER</div>
+                                <div style={{
+                                    width: '100%',
+                                    height: '80px',
+                                    background: '#0a0a0a',
+                                    border: '1px solid var(--border)',
+                                    position: 'relative',
+                                    marginBottom: '8px',
+                                    overflow: 'hidden',
+                                }}>
+                                    <canvas
+                                        id="gesture-tracker-canvas"
+                                        width={280}
+                                        height={76}
+                                        style={{width:'100%',height:'100%'}}
+                                    />
                                 </div>
 
                                 {/* Live meters */}
