@@ -89,6 +89,7 @@ class MaskEngine {
             await this.segmentationModel.send({image: videoElement});
         } catch (e) {
             console.error("MaskEngine API Error:", e);
+        } finally {
             this.isProcessing = false;
         }
     }

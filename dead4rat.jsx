@@ -605,8 +605,14 @@ function Dead4RatApp() {
         const aiDriveEnabledRef = { current: false };
         const aiDriveMappingRef  = { current: {} };
         // Keep refs in sync — we'll update them via a useEffect below
-        Object.defineProperty(aiDriveEnabledRef, 'current', { get: () => globalState._aiDriveEnabled || false, set: v => {} });
-        Object.defineProperty(aiDriveMappingRef,  'current', { get: () => globalState._aiDriveMapping  || {}, set: v => {} });
+        Object.defineProperty(aiDriveEnabledRef, 'current', { 
+            get: () => globalState._aiDriveEnabled || false, 
+            set: v => { globalState._aiDriveEnabled = v; } 
+        });
+        Object.defineProperty(aiDriveMappingRef,  'current', { 
+            get: () => globalState._aiDriveMapping  || {}, 
+            set: v => { globalState._aiDriveMapping = v; } 
+        });
         const renderLoop = (time) => {
             requestAnimationFrame(renderLoop);
             frames++;
@@ -900,7 +906,7 @@ function Dead4RatApp() {
                 globalState._fluidSplats = null;
             }
 
-            canvasEngine.render(globalState);
+            canvasEngine?.render(globalState);
         };
         requestAnimationFrame(renderLoop);
     };
@@ -1049,14 +1055,15 @@ function Dead4RatApp() {
 
     // ── Effect card renderer ──────────────────────────────────────────────
     const BAND_CYCLE = ['BASS', 'MID', 'HIGH'];
+    const BAND_COLORS = { BASS: '#FF5500', MID: '#FF9900', HIGH: '#FFDD00' };
     const renderEffect = (key) => {
         const effect = globalState.glitchez[key];
         const band = effect.audioBand || 'MID';
         const bandVal = band === 'BASS' ? liveAudio.current.bass : band === 'HIGH' ? liveAudio.current.high : liveAudio.current.mid;
-        const isAudioActive = effect.audioReactive && effect.enabled && audioEngine.isRunning;
+        const isAudioActive = effect.audioReactive && effect.enabled && audioEngine?.isRunning;
         const glowIntensity = isAudioActive ? Math.min(1, bandVal * 4) : 0;
 
-        const bandColor = band === 'BASS' ? '#FF5500' : band === 'MID' ? '#FF9900' : '#FFDD00';
+        const bandColor = BAND_COLORS[band] || '#FF9900';
 
         const selectBand = (newBand) => {
             const eff = globalState.glitchez[key];
@@ -1096,27 +1103,23 @@ function Dead4RatApp() {
                     </span>
                     <span style={{display: 'flex', alignItems: 'center', gap: '3px', flexShrink: 0}}>
                         {/* BAND selector buttons — BASS / MID / HIGH */}
-                        {[
-                            { id: 'BASS', label: 'B', color: '#FF5500' },
-                            { id: 'MID',  label: 'M', color: '#FF9900' },
-                            { id: 'HIGH', label: 'H', color: '#FFDD00' },
-                        ].map(b => {
-                            const isActive = effect.audioReactive && band === b.id;
+                        {BAND_CYCLE.map(id => {
+                            const isActive = effect.audioReactive && band === id;
                             return (
                                 <button
-                                    key={b.id}
+                                    key={id}
                                     className={`audio-band-btn ${isActive ? 'active' : ''}`}
-                                    title={`${b.id} band reactive${isActive ? ' (click to turn off)' : ''}`}
-                                    onClick={() => selectBand(b.id)}
+                                    title={`${id} band reactive${isActive ? ' (click to turn off)' : ''}`}
+                                    onClick={() => selectBand(id)}
                                     style={{
-                                        borderColor: isActive ? b.color : undefined,
-                                        color: isActive ? b.color : undefined,
-                                        background: isActive ? `${b.color}15` : undefined,
+                                        borderColor: isActive ? BAND_COLORS[id] : undefined,
+                                        color: isActive ? BAND_COLORS[id] : undefined,
+                                        background: isActive ? `${BAND_COLORS[id]}15` : undefined,
                                         minWidth: '18px',
                                         padding: '2px 4px',
                                     }}
                                 >
-                                    {b.label}
+                                    {id[0]}
                                 </button>
                             );
                         })}

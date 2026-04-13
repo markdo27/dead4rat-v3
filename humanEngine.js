@@ -99,6 +99,7 @@ class HumanEngine {
             return false;
         }
         if (this.human) return true;
+        if (this.isLoading) return false; // Guard against concurrent load
 
         this.isLoading = true;
         try {
@@ -135,6 +136,7 @@ class HumanEngine {
             this.human = new HumanClass(cfg);
             await this.human.load();
             await this.human.warmup();
+            this._applyConfig(); // Apply user config to live human instance
             console.log('[HumanEngine] Ready ✓  version:', this.human.version || 'unknown');
             this.isLoading = false;
             return true;
@@ -225,11 +227,13 @@ class HumanEngine {
                 }
             }
             // Convert radians to degrees if values are tiny (Human sometimes returns radians)
-            if (Math.abs(yawDeg) < 3.2 && Math.abs(pitchDeg) < 3.2 && Math.abs(rollDeg) < 3.2) {
+            // Use 0.3 rad (~17°) as threshold - genuine head rotations are larger
+            if (Math.abs(yawDeg) < 0.3 && Math.abs(pitchDeg) < 0.3 && Math.abs(rollDeg) < 0.3) {
                 yawDeg   *= (180 / Math.PI);
                 pitchDeg *= (180 / Math.PI);
                 rollDeg  *= (180 / Math.PI);
             }
+            // Normalize to -1..1 range (values are already in degrees from above conversion)
             const rawYaw   = Math.max(-1, Math.min(1, yawDeg   / 90.0));
             const rawPitch = Math.max(-1, Math.min(1, pitchDeg / 90.0));
             const rawRoll  = Math.max(-1, Math.min(1, rollDeg  / 90.0));
@@ -265,6 +269,9 @@ class HumanEngine {
         } else {
             this.faceDetected = false;
             this.faceYaw *= 0.9; this.facePitch *= 0.9; this.faceRoll *= 0.9;
+            this._prevYaw = this.faceYaw;
+            this._prevPitch = this.facePitch;
+            this._prevRoll = this.faceRoll;
         }
 
         // ── Hands ─────────────────────────────────────────────
@@ -274,10 +281,10 @@ class HumanEngine {
         this.pinchRight = 0;
         this.pinchTriggered = false;
 
-        let handCount = 0;
-        let palmXSum = 0, palmYSum = 0;
-        let leftPalmX = 0.5, leftPalmY = 0.5;
-        let rightPalmX = 0.5, rightPalmY = 0.5;
+        let validHandCount = 0;
+        let leftPalmX = 0, leftPalmY = 0;
+        let rightPalmX = 0, rightPalmY = 0;
+        let leftResolved = false, rightResolved = false;
 
         if (result.hand && result.hand.length > 0) {
             // Diagnostic: log hand detection shape on first detection
@@ -305,9 +312,8 @@ class HumanEngine {
                 this._handLogDone = true;
             }
 
-            result.hand.forEach(h => {
-                handCount++;
-                const isLeft = h.label?.toLowerCase() === 'left' || (handCount === 1 && !h.label);
+            result.hand.forEach((h, idx) => {
+                const isLeft = h.label?.toLowerCase() === 'left' || (idx === 0 && !h.label);
                 if (isLeft) this.handLeft = true; else this.handRight = true;
 
                 // Resolve hand keypoint array — different Human versions use different properties:
@@ -327,60 +333,52 @@ class HumanEngine {
                 }
 
                 if (pts && pts.length >= 10) {
-                    // Each point can be [x, y, z] array or {x, y, z} object
+                    validHandCount++;
                     const getXY = (pt) => {
-                        if (Array.isArray(pt)) return pt;      // [x, y, z]
-                        if (pt && typeof pt.x === 'number') return [pt.x, pt.y, pt.z || 0];
-                        return [0, 0, 0];
+                        if (Array.isArray(pt)) return pt;
+                        if (pt && typeof pt.x === 'number') return [pt.x, pt.y];
+                        return [0, 0];
                     };
-                    // Indices: 0=wrist, 4=thumb_tip, 8=index_tip, 9=middle_mcp (palm centre)
                     const thumbTip  = getXY(pts[4]);
                     const indexTip  = getXY(pts[8]);
-                    const palmBase  = getXY(pts[9]); // middle MCP – good proxy for palm centre
-
-                    // Pinch distance: Euclidean distance between thumb and index fingertips,
-                    // normalised to hand size (wrist-to-middle-MCP baseline)
-                    const wrist = getXY(pts[0]);
+                    const palmBase  = getXY(pts[9]);
+                    const wrist     = getXY(pts[0]);
                     const handSizeRef = Math.hypot(palmBase[0]-wrist[0], palmBase[1]-wrist[1]) || 1;
                     const rawPinch = Math.hypot(thumbTip[0]-indexTip[0], thumbTip[1]-indexTip[1]) / (handSizeRef * 2.5);
-                    // Invert so 1 = pinched, 0 = open; clamp 0-1
                     const pinchVal  = Math.max(0, Math.min(1, 1.0 - rawPinch));
 
-                    // Palm position (normalised, mirrored on X so right-hand = right side)
                     const nx = 1.0 - (palmBase[0] / (this.videoWidth  || 640));
                     const ny =        palmBase[1] / (this.videoHeight || 480);
 
                     if (isLeft) {
+                        leftResolved = true;
                         this.pinchLeft = this._lerp(this._prevPinchL, pinchVal);
                         this._prevPinchL = this.pinchLeft;
                         leftPalmX = nx; leftPalmY = ny;
                     } else {
+                        rightResolved = true;
                         this.pinchRight = this._lerp(this._prevPinchR, pinchVal);
                         this._prevPinchR = this.pinchRight;
                         rightPalmX = nx; rightPalmY = ny;
-                        // Also update legacy handTip with index fingertip
                         this.handTipX = 1.0 - (indexTip[0] / (this.videoWidth  || 640));
                         this.handTipY =        indexTip[1] / (this.videoHeight || 480);
                     }
-
-                    palmXSum += nx;
-                    palmYSum += ny;
                 }
             });
 
-            // Dominant palm = right hand if present, else left hand, else average
-            if (this.handRight) {
+            // Dominant palm = right hand if resolved, else left if resolved, else default
+            if (rightResolved) {
                 this.palmX = this._lerp(this._prevPalmX, rightPalmX);
                 this.palmY = this._lerp(this._prevPalmY, rightPalmY);
-            } else {
+            } else if (leftResolved) {
                 this.palmX = this._lerp(this._prevPalmX, leftPalmX);
                 this.palmY = this._lerp(this._prevPalmY, leftPalmY);
             }
             this._prevPalmX = this.palmX;
             this._prevPalmY = this.palmY;
 
-            // Theremin inter-hand span
-            if (handCount >= 2) {
+            // Theremin inter-hand span (only if both hands resolved)
+            if (validHandCount >= 2 && leftResolved && rightResolved) {
                 const rawSpan = Math.hypot(rightPalmX - leftPalmX, rightPalmY - leftPalmY);
                 this.handSpan = this._lerp(this._prevSpan, Math.min(1, rawSpan * 1.5));
             } else {
@@ -425,6 +423,13 @@ class HumanEngine {
         this.handSpan = 0;
         this.pinchTriggered = false;
         this.bodyDetected = false;
+        // Reset smoothing history to prevent ghost trails on restart
+        this._prevYaw = 0; this._prevPitch = 0; this._prevRoll = 0;
+        this._prevGazeX = 0.5; this._prevGazeY = 0.5;
+        this._prevPinchL = 0; this._prevPinchR = 0;
+        this._prevPalmX = 0.5; this._prevPalmY = 0.5;
+        this._prevSpan = 0;
+        this._pinchWasActive = false;
     }
 
     getData() {

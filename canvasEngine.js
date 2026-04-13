@@ -26,9 +26,11 @@ class CanvasEngine {
 
         this.fboA = null;
         this.fboB = null;
-        this.renderTarget = null; // These will hold { fbo, tex }
+        this.renderTarget = null;
         this.feedbackSource = null;
-        this.scaleMode = 'FIT'; // 'FIT' | 'FILL' | '1:1' | 'STRETCH'
+        this.scaleMode = 'FIT';
+        // Placeholder texture for when video is not initialized (1x1 black pixel)
+        this._placeholderTex = new Uint8Array([0, 0, 0, 255]);
 
         this.initShaders();
         this.initBuffers();
@@ -55,44 +57,6 @@ class CanvasEngine {
             gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
 
             return { fbo, tex };
-        };
-        
-        this.particleFBOs = () => {
-            const size = 512; // 262,144 particles
-            const createFloatFBO = () => {
-                const tex = gl.createTexture();
-                gl.bindTexture(gl.TEXTURE_2D, tex);
-                
-                // Initialize default physics payload (center origin)
-                const data = new Float32Array(size * size * 4);
-                for(let i=0; i<data.length; i+=4){
-                    data[i] = (Math.random() - 0.5) * 10.0;
-                    data[i+1] = (Math.random() - 0.5) * 10.0;
-                    data[i+2] = (Math.random() - 0.5) * 10.0;
-                    data[i+3] = Math.random(); // Life
-                }
-
-                gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, size, size, 0, gl.RGBA, gl.FLOAT, data);
-                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-
-                const fbo = gl.createFramebuffer();
-                gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
-                gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
-                return { fbo, tex };
-            }
-            if (this.fboPartA) {
-                gl.deleteFramebuffer(this.fboPartA.fbo);
-                gl.deleteTexture(this.fboPartA.tex);
-                gl.deleteFramebuffer(this.fboPartB.fbo);
-                gl.deleteTexture(this.fboPartB.tex);
-            }
-            this.fboPartA = createFloatFBO();
-            this.fboPartB = createFloatFBO();
-            this.particleSource = this.fboPartA;
-            this.particleTarget = this.fboPartB;
         };
 
         // Cleanup old if resize
@@ -1653,6 +1617,9 @@ class CanvasEngine {
         this.locGestureMode    = loc("u_gestureMode");
         this.locGestureShockT  = loc("u_gestureShockT");
         this.locGestureModeExt = loc("u_gestureModeExt");
+
+        // Cache attribute locations (constant after program link)
+        this._posLoc = this.gl.getAttribLocation(this.program, "a_position");
     }
 
     initTextures() {
@@ -1700,8 +1667,7 @@ class CanvasEngine {
         } else if (source instanceof HTMLCanvasElement) {
             gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
         } else if (!this._videoInitialized) {
-            const temp = new Uint8Array([0, 0, 0, 255]);
-            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, temp);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, this._placeholderTex);
             this._videoInitialized = true;
         }
 
@@ -1990,9 +1956,8 @@ class CanvasEngine {
 
         // Draw main quad to FBO
         gl.bindBuffer(gl.ARRAY_BUFFER, this.positionBuffer);
-        const posLoc = gl.getAttribLocation(this.program, "a_position");
-        gl.enableVertexAttribArray(posLoc);
-        gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
+        gl.enableVertexAttribArray(this._posLoc);
+        gl.vertexAttribPointer(this._posLoc, 2, gl.FLOAT, false, 0, 0);
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
         // --- GPGPU Particles Pass (THE SPIRIT) ---

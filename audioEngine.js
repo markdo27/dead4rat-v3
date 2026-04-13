@@ -47,11 +47,11 @@ class AudioEngine {
         this._smoothing = Math.min(0.99, Math.max(0.0, val));
     }
 
-    /** Returns a copy of the raw frequency array for visualization */
+    /** Returns the live frequency array buffer (do not modify) */
     getFrequencyData() {
         if (!this.analyser || !this.dataArray) return new Uint8Array(0);
         this.analyser.getByteFrequencyData(this.dataArray);
-        return this.dataArray;
+        return this.dataArray; // Returns live reference - callers must NOT modify
     }
 
     // ─── Start from Microphone ────────────────────────────────────────────

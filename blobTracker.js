@@ -51,6 +51,16 @@ class BlobTracker {
         // last raw Human result (full object with landmarks)
         this._humanRaw    = null;
 
+        // Preallocated buffers for BFS (avoids per-frame allocation)
+        this._binary   = new Uint8Array(this.analysisW * this.analysisH);
+        this._visited  = new Uint8Array(this.analysisW * this.analysisH);
+        this._bfsQueue = new Int32Array(this.analysisW * this.analysisH);
+
+        // Precomputed constants
+        this._totalPixels = this.analysisW * this.analysisH;
+        this._TWO_PI = Math.PI * 2;
+        this._TIP_INDICES = new Set([4, 8, 12, 16, 20]);
+
         // Resize overlay canvas to match window
         this._resizeOverlay();
         window.addEventListener('resize', () => this._resizeOverlay());
@@ -90,52 +100,65 @@ class BlobTracker {
         // ── Step 1: Frame-diff → binary mask ────────────────
         const W = this.analysisW;
         const H = this.analysisH;
-        const binary = new Uint8Array(W * H); // 1 = active pixel
+        const binary = this._binary;
+        const visited = this._visited;
+        const thresh3 = this.threshold * 3;
+        binary.fill(0);
 
         for (let i = 0; i < curr.length; i += 4) {
-            const pi = i / 4;
+            const pi = i >> 2;
             const dr = Math.abs(curr[i]   - this._prevPixels[i]);
             const dg = Math.abs(curr[i+1] - this._prevPixels[i+1]);
             const db = Math.abs(curr[i+2] - this._prevPixels[i+2]);
-            binary[pi] = (dr + dg + db) / 3 > this.threshold ? 1 : 0;
+            binary[pi] = (dr + dg + db) > thresh3 ? 1 : 0;
         }
 
         // Save prev frame
         this._prevPixels.set(curr);
 
         // ── Step 2: BFS connected-components ────────────────
-        const visited = new Uint8Array(W * H);
+        visited.fill(0);
         const rawBlobs = [];
+        const bfsQueue = this._bfsQueue;
+        const totalPixels = this._totalPixels;
 
         for (let y = 0; y < H; y++) {
             for (let x = 0; x < W; x++) {
                 const idx = y * W + x;
                 if (!binary[idx] || visited[idx]) continue;
 
-                // BFS
-                const queue = [idx];
+                // BFS with ring buffer (O(1) dequeue vs O(n) shift)
+                let head = 0, tail = 0;
+                bfsQueue[tail++] = idx;
                 visited[idx] = 1;
                 let minX = x, maxX = x, minY = y, maxY = y, count = 0;
 
-                while (queue.length > 0) {
-                    const cur = queue.shift();
+                while (head < tail) {
+                    const cur = bfsQueue[head++];
                     const cx  = cur % W;
-                    const cy  = Math.floor(cur / W);
+                    const cy  = (cur / W) | 0;
                     count++;
                     if (cx < minX) minX = cx; if (cx > maxX) maxX = cx;
                     if (cy < minY) minY = cy; if (cy > maxY) maxY = cy;
 
-                    // 4-connected neighbours
-                    const neighbours = [cur - 1, cur + 1, cur - W, cur + W];
-                    for (const n of neighbours) {
-                        if (n < 0 || n >= W * H) continue;
-                        const nx = n % W, ny = Math.floor(n / W);
-                        // Prevent wrap-around
-                        if (Math.abs(nx - (cur % W)) > 1) continue;
-                        if (!visited[n] && binary[n]) {
-                            visited[n] = 1;
-                            queue.push(n);
-                        }
+                    // 4-connected neighbours (inline, no allocation)
+                    const n0 = cur - 1, n1 = cur + 1, n2 = cur - W, n3 = cur + W;
+
+                    if (n0 >= 0 && !visited[n0] && binary[n0]) {
+                        visited[n0] = 1;
+                        bfsQueue[tail++] = n0;
+                    }
+                    if (n1 < totalPixels && (n1 % W) !== 0 && !visited[n1] && binary[n1]) {
+                        visited[n1] = 1;
+                        bfsQueue[tail++] = n1;
+                    }
+                    if (n2 >= 0 && !visited[n2] && binary[n2]) {
+                        visited[n2] = 1;
+                        bfsQueue[tail++] = n2;
+                    }
+                    if (n3 < totalPixels && !visited[n3] && binary[n3]) {
+                        visited[n3] = 1;
+                        bfsQueue[tail++] = n3;
                     }
                 }
 
@@ -219,62 +242,73 @@ class BlobTracker {
             }
         }
 
-        // Remove expired blobs
-        this._persistBlobs = this._persistBlobs.filter(pb => pb.ttl > 0);
+        // Remove expired blobs (in-place splice, no allocation)
+        for (let i = this._persistBlobs.length - 1; i >= 0; i--) {
+            if (this._persistBlobs[i].ttl <= 0) this._persistBlobs.splice(i, 1);
+        }
     }
 
     _drawOverlay() {
         const ctx = this.overlayCtx;
         const W   = this.overlayCanvas.width;
         const H   = this.overlayCanvas.height;
+        const TWO_PI = this._TWO_PI;
         ctx.clearRect(0, 0, W, H);
 
-        // Draw persistent (possibly fading) blobs — sorted so brightest on top
-        const sorted = [...this._persistBlobs].sort((a, b) => b.ttl - a.ttl);
+        // Sort blobs by TTL (in-place, no allocation needed for draw order)
+        this._persistBlobs.sort((a, b) => b.ttl - a.ttl);
 
-        sorted.forEach((blob, i) => {
+        // Batch draw all bounding boxes first
+        ctx.lineJoin = 'miter';
+        this._persistBlobs.forEach((blob, i) => {
             const isPrimary = i === 0;
-            // Fade alpha based on remaining TTL
-            const lifeFrac  = blob.ttl / this.persistFrames; // 1=fresh, 0=dead
-            const baseAlpha = isPrimary ? 1.0 : 0.65;
-            const alpha     = baseAlpha * lifeFrac;
+            const lifeFrac  = blob.ttl / this.persistFrames;
+            const alpha     = (isPrimary ? 1.0 : 0.65) * lifeFrac;
             const color     = isPrimary ? `rgba(255,85,0,${alpha})` : `rgba(255,136,0,${alpha})`;
-            const lineW     = isPrimary ? 3 : 1.5;
-
-            // Bounding box
             ctx.strokeStyle = color;
-            ctx.lineWidth   = lineW;
+            ctx.lineWidth   = isPrimary ? 3 : 1.5;
             ctx.strokeRect(blob.x, blob.y, blob.w, blob.h);
-
-            // Corner ticks (brutalist style)
-            const tick = 12;
-            ctx.strokeStyle = isPrimary ? '#FF5500' : '#FF8800';
-            ctx.lineWidth = isPrimary ? 3 : 1.5;
-            [
-                [blob.x, blob.y, tick, 0, 0, tick],
-                [blob.x + blob.w, blob.y, -tick, 0, 0, tick],
-                [blob.x, blob.y + blob.h, tick, 0, 0, -tick],
-                [blob.x + blob.w, blob.y + blob.h, -tick, 0, 0, -tick],
-            ].forEach(([ox, oy, hx, hy, vx, vy]) => {
-                ctx.beginPath();
-                ctx.moveTo(ox, oy); ctx.lineTo(ox + hx, oy + hy);
-                ctx.moveTo(ox, oy); ctx.lineTo(ox + vx, oy + vy);
-                ctx.stroke();
-            });
-
-            // Center dot
-            const cx = blob.x + blob.w / 2;
-            const cy = blob.y + blob.h / 2;
-            ctx.fillStyle = color;
-            ctx.beginPath();
-            ctx.arc(cx, cy, isPrimary ? 7 : 4, 0, Math.PI * 2);
-            ctx.fill();
-
-            // ID label
-            ctx.fillStyle = isPrimary ? '#FF5500' : '#FF880099';
-            ctx.font = `bold ${isPrimary ? 11 : 9}px "Share Tech Mono", monospace`;
-            ctx.fillText(`BLOB_${i.toString().padStart(2, '0')}  ${blob.area}px`, blob.x + 6, blob.y + 14);
         });
+
+        // Batch draw all corner ticks (single stroke per blob)
+        ctx.strokeStyle = '#FF5500';
+        ctx.lineWidth = 3;
+        this._persistBlobs.forEach((blob, i) => {
+            if (i > 0) return; // Only primary has ticks
+            const tick = 12;
+            ctx.beginPath();
+            ctx.moveTo(blob.x, blob.y); ctx.lineTo(blob.x + tick, blob.y);
+            ctx.moveTo(blob.x, blob.y); ctx.lineTo(blob.x, blob.y + tick);
+            ctx.moveTo(blob.x + blob.w, blob.y); ctx.lineTo(blob.x + blob.w - tick, blob.y);
+            ctx.moveTo(blob.x + blob.w, blob.y); ctx.lineTo(blob.x + blob.w, blob.y + tick);
+            ctx.moveTo(blob.x, blob.y + blob.h); ctx.lineTo(blob.x + tick, blob.y + blob.h);
+            ctx.moveTo(blob.x, blob.y + blob.h); ctx.lineTo(blob.x, blob.y + blob.h - tick);
+            ctx.moveTo(blob.x + blob.w, blob.y + blob.h); ctx.lineTo(blob.x + blob.w - tick, blob.y + blob.h);
+            ctx.moveTo(blob.x + blob.w, blob.y + blob.h); ctx.lineTo(blob.x + blob.w, blob.y + blob.h - tick);
+            ctx.stroke();
+        });
+
+        // Batch draw all center dots
+        ctx.fillStyle = '#FF5500';
+        this._persistBlobs.forEach((blob, i) => {
+            if (i > 0) ctx.fillStyle = '#FF8800';
+            ctx.beginPath();
+            ctx.arc(blob.x + blob.w / 2, blob.y + blob.h / 2, i === 0 ? 7 : 4, 0, TWO_PI);
+            ctx.fill();
+        });
+
+        // ID labels
+        ctx.fillStyle = '#FF550099';
+        ctx.font = 'bold 11px "Share Tech Mono", monospace';
+        this._persistBlobs.forEach((blob, i) => {
+            if (i > 0) ctx.fillStyle = '#FF880099';
+            ctx.fillText(`BLOB_${String(i).padStart(2, '0')}  ${blob.area}px`, blob.x + 6, blob.y + 14);
+        });
+
+        // Corner HUD — blob count
+        ctx.fillStyle = 'rgba(255,85,0,0.85)';
+        ctx.font = '10px "Share Tech Mono", monospace';
+        ctx.fillText(`// BLOB_DETECT  COUNT: ${this.blobCount}`, 12, H - 14);
 
         // Corner HUD — blob count
         ctx.fillStyle = 'rgba(255,85,0,0.85)';
@@ -393,17 +427,18 @@ class BlobTracker {
                 ctx.font = `8px ${MONO}`;
                 ctx.fillText(label, hudX + 2, rowY + 10);
                 ctx.fillStyle = col;
-                ctx.fillText(`${((val||0)*90).toFixed(0)}°`, hudX + barW + 34, rowY + 10);
+                ctx.fillText(`${(val||0).toFixed(0)}°`, hudX + barW + 34, rowY + 10);
             });
 
-            // Face mesh dots (very subtle)
+            // Face mesh dots (very subtle) — batch into single fill call
             if (face.mesh && face.mesh.length > 0) {
                 ctx.fillStyle = `${C_PRI}30`;
+                ctx.beginPath();
                 for (const [px, py] of face.mesh) {
-                    ctx.beginPath();
-                    ctx.arc(px * sx, py * sy, 1, 0, Math.PI * 2);
-                    ctx.fill();
+                    ctx.moveTo(px * sx + 1, py * sy);
+                    ctx.arc(px * sx, py * sy, 1, 0, TWO_PI);
                 }
+                ctx.fill();
             }
         }
 
@@ -440,36 +475,48 @@ class BlobTracker {
                     }
                 }
                 if (pts && pts.length >= 21) {
-                    // Helper: points can be [x,y,z] arrays or {x,y,z} objects
                     const getXY = (pt) => {
                         if (Array.isArray(pt)) return pt;
-                        if (pt && typeof pt.x === 'number') return [pt.x, pt.y, pt.z || 0];
+                        if (pt && typeof pt.x === 'number') return [pt.x, pt.y];
                         return null;
                     };
-                    const CONN = [
-                        [0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],
-                        [0,9],[9,10],[10,11],[11,12],[0,13],[13,14],[14,15],[15,16],
-                        [0,17],[17,18],[18,19],[19,20],[5,9],[9,13],[13,17],
-                    ];
+                    const CONN = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[0,9],[9,10],[10,11],[11,12],[0,13],[13,14],[14,15],[15,16],[0,17],[17,18],[18,19],[19,20],[5,9],[9,13],[13,17]];
+                    const TIP = this._TIP_INDICES;
+
+                    // Batch all bones into single stroke call
                     ctx.strokeStyle = colDim;
                     ctx.lineWidth = 1.5;
+                    ctx.beginPath();
                     for (const [a, b] of CONN) {
                         const pa = getXY(pts[a]), pb = getXY(pts[b]);
                         if (!pa || !pb) continue;
-                        ctx.beginPath();
                         ctx.moveTo(pa[0]*sx, pa[1]*sy);
                         ctx.lineTo(pb[0]*sx, pb[1]*sy);
-                        ctx.stroke();
                     }
+                    ctx.stroke();
+
+                    // Batch keypoints: tips vs non-tips (2 fill calls total)
+                    ctx.fillStyle = colDim;
+                    ctx.beginPath();
                     pts.forEach((pt, idx) => {
+                        if (TIP.has(idx)) return;
                         const xy = getXY(pt);
                         if (!xy) return;
-                        const tip = [4,8,12,16,20].includes(idx);
-                        ctx.fillStyle = tip ? col : colDim;
-                        ctx.beginPath();
-                        ctx.arc(xy[0]*sx, xy[1]*sy, tip ? 4 : 2, 0, Math.PI*2);
-                        ctx.fill();
+                        ctx.moveTo(xy[0]*sx, xy[1]*sy);
+                        ctx.arc(xy[0]*sx, xy[1]*sy, 2, 0, TWO_PI);
                     });
+                    ctx.fill();
+
+                    ctx.fillStyle = col;
+                    ctx.beginPath();
+                    pts.forEach((pt, idx) => {
+                        if (!TIP.has(idx)) return;
+                        const xy = getXY(pt);
+                        if (!xy) return;
+                        ctx.moveTo(xy[0]*sx, xy[1]*sy);
+                        ctx.arc(xy[0]*sx, xy[1]*sy, 4, 0, TWO_PI);
+                    });
+                    ctx.fill();
                 }
             });
         }
@@ -479,34 +526,29 @@ class BlobTracker {
             const body = raw.body[0];
             if (body.keypoints && body.keypoints.length > 0) {
                 const kps = body.keypoints;
-                const CONN = [
-                    [5,6],[5,7],[7,9],[6,8],[8,10],
-                    [5,11],[6,12],[11,12],
-                    [11,13],[13,15],[12,14],[14,16],
-                ];
+                const CONN = [[5,6],[5,7],[7,9],[6,8],[8,10],[5,11],[6,12],[11,12],[11,13],[13,15],[12,14],[14,16]];
+
+                // Batch bones into single stroke
                 ctx.strokeStyle = `${C_SEC}AA`;
                 ctx.lineWidth = 2;
+                ctx.beginPath();
                 for (const [a, b] of CONN) {
                     const pa = kps[a], pb = kps[b];
                     if (!pa || !pb || (pa.score||0) < 0.25 || (pb.score||0) < 0.25) continue;
-                    const pax = (pa.position?.[0] ?? pa.x) * sx;
-                    const pay = (pa.position?.[1] ?? pa.y) * sy;
-                    const pbx = (pb.position?.[0] ?? pb.x) * sx;
-                    const pby = (pb.position?.[1] ?? pb.y) * sy;
-                    ctx.beginPath();
-                    ctx.moveTo(pax, pay);
-                    ctx.lineTo(pbx, pby);
-                    ctx.stroke();
+                    ctx.moveTo((pa.position?.[0] ?? pa.x) * sx, (pa.position?.[1] ?? pa.y) * sy);
+                    ctx.lineTo((pb.position?.[0] ?? pb.x) * sx, (pb.position?.[1] ?? pb.y) * sy);
                 }
+                ctx.stroke();
+
+                // Batch keypoints into single fill
+                ctx.fillStyle = C_SEC;
+                ctx.beginPath();
                 kps.forEach(kp => {
                     if (!kp || (kp.score||0) < 0.25) return;
-                    const kx = (kp.position?.[0] ?? kp.x) * sx;
-                    const ky = (kp.position?.[1] ?? kp.y) * sy;
-                    ctx.fillStyle = C_SEC;
-                    ctx.beginPath();
-                    ctx.arc(kx, ky, 4, 0, Math.PI*2);
-                    ctx.fill();
+                    ctx.moveTo((kp.position?.[0] ?? kp.x) * sx + 4, (kp.position?.[1] ?? kp.y) * sy);
+                    ctx.arc((kp.position?.[0] ?? kp.x) * sx, (kp.position?.[1] ?? kp.y) * sy, 4, 0, TWO_PI);
                 });
+                ctx.fill();
                 // Body bbox
                 if (body.box) {
                     const [bx, by, bw, bh] = body.box;
@@ -568,7 +610,7 @@ class BlobTracker {
         if (!val) {
             this.blobs = [];
             this.blobCount = 0;
-            if (!this.showHuman) {
+            if (!this.showHuman || !this.humanData) {
                 this.overlayCtx.clearRect(0, 0, this.overlayCanvas.width, this.overlayCanvas.height);
             }
         }
