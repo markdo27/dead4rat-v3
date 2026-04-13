@@ -820,7 +820,7 @@ function Dead4RatApp() {
                 }
 
                 // 2. HumanEngine hand tip → precision splat at index finger tip
-                if (humanEngine && humanEngine.isRunning && humanEngine.handLeft || humanEngine && humanEngine.isRunning && humanEngine.handRight) {
+                if (humanEngine && humanEngine.isRunning && (humanEngine.handLeft || humanEngine.handRight)) {
                     const hd = globalState.human;
                     if (hd) {
                         splats.push({

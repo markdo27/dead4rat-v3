@@ -128,10 +128,14 @@ class HumanEngine {
                 segmentation: { enabled: false },
                 filter: { enabled: true, equalization: false },
             };
-            this.human = new Human.Human(cfg);
+            // CDN IIFE build: window.Human is either a namespace with .Human
+            // constructor, or the constructor itself — try both patterns
+            const HumanClass = (typeof Human.Human === 'function') ? Human.Human : Human;
+            console.log('[HumanEngine] Constructor found:', HumanClass.name || 'Human');
+            this.human = new HumanClass(cfg);
             await this.human.load();
             await this.human.warmup();
-            console.log('[HumanEngine] Ready ✓');
+            console.log('[HumanEngine] Ready ✓  version:', this.human.version || 'unknown');
             this.isLoading = false;
             return true;
         } catch (err) {
@@ -182,7 +186,18 @@ class HumanEngine {
                 const result = await this.human.detect(video);
                 this._lastResult = result;
                 this._parseResult(result);
-            } catch (e) { /* skip */ }
+            } catch (e) {
+                // Log detection errors so they're visible in console
+                if (!this._errThrottle || Date.now() - this._errThrottle > 5000) {
+                    console.warn('[HumanEngine] detect() error:', e?.message || e);
+                    this._errThrottle = Date.now();
+                }
+            }
+        } else if (video && !this._readyWarnShown) {
+            console.log('[HumanEngine] Waiting for video readyState...',
+                'readyState=' + (video?.readyState ?? 'null'),
+                'paused=' + (video?.paused ?? 'null'));
+            this._readyWarnShown = true;
         }
         if (this._loopActive) setTimeout(() => this._runLoop(), 66);
     }
@@ -265,21 +280,47 @@ class HumanEngine {
         let rightPalmX = 0.5, rightPalmY = 0.5;
 
         if (result.hand && result.hand.length > 0) {
+            // Diagnostic: log hand detection shape on first detection
+            if (!this._handLogDone) {
+                const h0 = result.hand[0];
+                console.log('[HumanEngine] Hand detected! label=' + h0.label +
+                    ' score=' + (h0.score?.toFixed(3) || '?') +
+                    ' keypoints=' + (h0.keypoints?.length || 0) +
+                    ' landmarks_type=' + (typeof h0.landmarks) +
+                    ' landmarks_len=' + (Array.isArray(h0.landmarks) ? h0.landmarks.length : 'N/A') +
+                    ' box=' + JSON.stringify(h0.box?.map(v => Math.round(v))));
+                // Log a sample keypoint to verify pixel vs normalised coords
+                if (h0.keypoints && h0.keypoints.length > 0) {
+                    const kp = h0.keypoints[0];
+                    console.log('[HumanEngine] Sample keypoint[0]:', JSON.stringify(kp),
+                        'videoSize:', this.videoWidth + 'x' + this.videoHeight);
+                }
+                this._handLogDone = true;
+            }
+
             result.hand.forEach(h => {
                 handCount++;
                 const isLeft = h.label?.toLowerCase() === 'left' || (handCount === 1 && !h.label);
                 if (isLeft) this.handLeft = true; else this.handRight = true;
 
-                // Landmarks: 0=wrist, 4=thumb_tip, 8=index_tip, 9=middle_mcp (palm centre)
-                if (h.landmarks && h.landmarks.length >= 10) {
-                    const lm = h.landmarks;
-                    const thumbTip  = lm[4];
-                    const indexTip  = lm[8];
-                    const palmBase  = lm[9]; // middle MCP – good proxy for palm centre
+                // Human v3.x: `keypoints` is the numeric [x,y,z] array (pixel coords)
+                // `landmarks` is gesture annotations (FingerCurl/FingerDirection) — NOT coordinates
+                // Indices: 0=wrist, 4=thumb_tip, 8=index_tip, 9=middle_mcp (palm centre)
+                const kp = h.keypoints;
+                if (kp && kp.length >= 10) {
+                    // Each keypoint is [x, y, z?] in pixel coordinates
+                    const getXY = (pt) => {
+                        if (Array.isArray(pt)) return pt;      // [x, y, z]
+                        if (pt && pt.x !== undefined) return [pt.x, pt.y, pt.z || 0]; // {x,y,z}
+                        return [0, 0, 0];
+                    };
+                    const thumbTip  = getXY(kp[4]);
+                    const indexTip  = getXY(kp[8]);
+                    const palmBase  = getXY(kp[9]); // middle MCP – good proxy for palm centre
 
                     // Pinch distance: Euclidean distance between thumb and index fingertips,
                     // normalised to hand size (wrist-to-middle-MCP baseline)
-                    const wrist = lm[0];
+                    const wrist = getXY(kp[0]);
                     const handSizeRef = Math.hypot(palmBase[0]-wrist[0], palmBase[1]-wrist[1]) || 1;
                     const rawPinch = Math.hypot(thumbTip[0]-indexTip[0], thumbTip[1]-indexTip[1]) / (handSizeRef * 2.5);
                     // Invert so 1 = pinched, 0 = open; clamp 0-1

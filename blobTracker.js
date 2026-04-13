@@ -428,9 +428,16 @@ class BlobTracker {
                     ctx.fillText(`${isLeft ? 'L' : 'R'}_HAND  ${hi}`, hx + 4, hy + 12);
                 }
 
-                // Skeleton
-                if (hand.landmarks && hand.landmarks.length >= 21) {
-                    const lm = hand.landmarks;
+                // Skeleton — use `keypoints` (numeric [x,y,z] pixel coords), NOT `landmarks`
+                // In Human v3.x, `landmarks` is gesture annotations (FingerCurl etc.)
+                const kp = hand.keypoints;
+                if (kp && kp.length >= 21) {
+                    // Helper: keypoints can be [x,y,z] arrays or {x,y,z} objects
+                    const getXY = (pt) => {
+                        if (Array.isArray(pt)) return pt;
+                        if (pt && pt.x !== undefined) return [pt.x, pt.y, pt.z || 0];
+                        return null;
+                    };
                     const CONN = [
                         [0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],
                         [0,9],[9,10],[10,11],[11,12],[0,13],[13,14],[14,15],[15,16],
@@ -439,17 +446,20 @@ class BlobTracker {
                     ctx.strokeStyle = colDim;
                     ctx.lineWidth = 1.5;
                     for (const [a, b] of CONN) {
-                        if (!lm[a] || !lm[b]) continue;
+                        const pa = getXY(kp[a]), pb = getXY(kp[b]);
+                        if (!pa || !pb) continue;
                         ctx.beginPath();
-                        ctx.moveTo(lm[a][0]*sx, lm[a][1]*sy);
-                        ctx.lineTo(lm[b][0]*sx, lm[b][1]*sy);
+                        ctx.moveTo(pa[0]*sx, pa[1]*sy);
+                        ctx.lineTo(pb[0]*sx, pb[1]*sy);
                         ctx.stroke();
                     }
-                    lm.forEach((pt, idx) => {
+                    kp.forEach((pt, idx) => {
+                        const xy = getXY(pt);
+                        if (!xy) return;
                         const tip = [4,8,12,16,20].includes(idx);
                         ctx.fillStyle = tip ? col : colDim;
                         ctx.beginPath();
-                        ctx.arc(pt[0]*sx, pt[1]*sy, tip ? 4 : 2, 0, Math.PI*2);
+                        ctx.arc(xy[0]*sx, xy[1]*sy, tip ? 4 : 2, 0, Math.PI*2);
                         ctx.fill();
                     });
                 }
