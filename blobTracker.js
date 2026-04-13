@@ -428,14 +428,22 @@ class BlobTracker {
                     ctx.fillText(`${isLeft ? 'L' : 'R'}_HAND  ${hi}`, hx + 4, hy + 12);
                 }
 
-                // Skeleton — use `keypoints` (numeric [x,y,z] pixel coords), NOT `landmarks`
-                // In Human v3.x, `landmarks` is gesture annotations (FingerCurl etc.)
-                const kp = hand.keypoints;
-                if (kp && kp.length >= 21) {
-                    // Helper: keypoints can be [x,y,z] arrays or {x,y,z} objects
+                // Skeleton — resolve hand points from whichever property is available
+                // Human versions differ: some use `keypoints`, some use `landmarks` for coords
+                let pts = null;
+                if (hand.keypoints && Array.isArray(hand.keypoints) && hand.keypoints.length >= 21) {
+                    pts = hand.keypoints;
+                } else if (Array.isArray(hand.landmarks) && hand.landmarks.length >= 21) {
+                    const lm0 = hand.landmarks[0];
+                    if (Array.isArray(lm0) || (lm0 && typeof lm0.x === 'number')) {
+                        pts = hand.landmarks;
+                    }
+                }
+                if (pts && pts.length >= 21) {
+                    // Helper: points can be [x,y,z] arrays or {x,y,z} objects
                     const getXY = (pt) => {
                         if (Array.isArray(pt)) return pt;
-                        if (pt && pt.x !== undefined) return [pt.x, pt.y, pt.z || 0];
+                        if (pt && typeof pt.x === 'number') return [pt.x, pt.y, pt.z || 0];
                         return null;
                     };
                     const CONN = [
@@ -446,14 +454,14 @@ class BlobTracker {
                     ctx.strokeStyle = colDim;
                     ctx.lineWidth = 1.5;
                     for (const [a, b] of CONN) {
-                        const pa = getXY(kp[a]), pb = getXY(kp[b]);
+                        const pa = getXY(pts[a]), pb = getXY(pts[b]);
                         if (!pa || !pb) continue;
                         ctx.beginPath();
                         ctx.moveTo(pa[0]*sx, pa[1]*sy);
                         ctx.lineTo(pb[0]*sx, pb[1]*sy);
                         ctx.stroke();
                     }
-                    kp.forEach((pt, idx) => {
+                    pts.forEach((pt, idx) => {
                         const xy = getXY(pt);
                         if (!xy) return;
                         const tip = [4,8,12,16,20].includes(idx);

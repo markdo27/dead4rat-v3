@@ -283,18 +283,25 @@ class HumanEngine {
             // Diagnostic: log hand detection shape on first detection
             if (!this._handLogDone) {
                 const h0 = result.hand[0];
-                console.log('[HumanEngine] Hand detected! label=' + h0.label +
-                    ' score=' + (h0.score?.toFixed(3) || '?') +
-                    ' keypoints=' + (h0.keypoints?.length || 0) +
-                    ' landmarks_type=' + (typeof h0.landmarks) +
-                    ' landmarks_len=' + (Array.isArray(h0.landmarks) ? h0.landmarks.length : 'N/A') +
-                    ' box=' + JSON.stringify(h0.box?.map(v => Math.round(v))));
-                // Log a sample keypoint to verify pixel vs normalised coords
+                const allKeys = Object.keys(h0).join(', ');
+                console.log('[HumanEngine] Hand detected! Properties: ' + allKeys);
+                console.log('[HumanEngine] Hand details:',
+                    'label=' + h0.label,
+                    'score=' + (h0.score?.toFixed?.(3) || h0.score || '?'),
+                    'keypoints=' + (h0.keypoints?.length || 0),
+                    'landmarks_type=' + (typeof h0.landmarks),
+                    'landmarks_isArray=' + Array.isArray(h0.landmarks),
+                    'landmarks_len=' + (Array.isArray(h0.landmarks) ? h0.landmarks.length : 'N/A'),
+                    'annotations_type=' + (typeof h0.annotations),
+                    'box=' + JSON.stringify(h0.box?.map?.(v => Math.round(v)) || h0.box));
+                // Log sample data from both possible sources
                 if (h0.keypoints && h0.keypoints.length > 0) {
-                    const kp = h0.keypoints[0];
-                    console.log('[HumanEngine] Sample keypoint[0]:', JSON.stringify(kp),
-                        'videoSize:', this.videoWidth + 'x' + this.videoHeight);
+                    console.log('[HumanEngine] keypoints[0]:', JSON.stringify(h0.keypoints[0]));
                 }
+                if (Array.isArray(h0.landmarks) && h0.landmarks.length > 0) {
+                    console.log('[HumanEngine] landmarks[0]:', JSON.stringify(h0.landmarks[0]));
+                }
+                console.log('[HumanEngine] videoSize:', this.videoWidth + 'x' + this.videoHeight);
                 this._handLogDone = true;
             }
 
@@ -303,24 +310,37 @@ class HumanEngine {
                 const isLeft = h.label?.toLowerCase() === 'left' || (handCount === 1 && !h.label);
                 if (isLeft) this.handLeft = true; else this.handRight = true;
 
-                // Human v3.x: `keypoints` is the numeric [x,y,z] array (pixel coords)
-                // `landmarks` is gesture annotations (FingerCurl/FingerDirection) — NOT coordinates
-                // Indices: 0=wrist, 4=thumb_tip, 8=index_tip, 9=middle_mcp (palm centre)
-                const kp = h.keypoints;
-                if (kp && kp.length >= 10) {
-                    // Each keypoint is [x, y, z?] in pixel coordinates
+                // Resolve hand keypoint array — different Human versions use different properties:
+                //   - Some versions: `keypoints` = Point[] of {x,y,z} or [[x,y,z],...]
+                //   - Some versions: `landmarks` = [[x,y,z],...] numeric coordinate array
+                //   - Some versions: `landmarks` = gesture annotations (NOT coordinates)
+                // Strategy: try keypoints first, then landmarks if it looks like a numeric array
+                let pts = null;
+                if (h.keypoints && Array.isArray(h.keypoints) && h.keypoints.length >= 10) {
+                    pts = h.keypoints;
+                } else if (Array.isArray(h.landmarks) && h.landmarks.length >= 10) {
+                    // Check if landmarks[0] is a numeric point (not a gesture annotation object)
+                    const lm0 = h.landmarks[0];
+                    if (Array.isArray(lm0) || (lm0 && typeof lm0.x === 'number')) {
+                        pts = h.landmarks;  // It's a coordinate array
+                    }
+                }
+
+                if (pts && pts.length >= 10) {
+                    // Each point can be [x, y, z] array or {x, y, z} object
                     const getXY = (pt) => {
                         if (Array.isArray(pt)) return pt;      // [x, y, z]
-                        if (pt && pt.x !== undefined) return [pt.x, pt.y, pt.z || 0]; // {x,y,z}
+                        if (pt && typeof pt.x === 'number') return [pt.x, pt.y, pt.z || 0];
                         return [0, 0, 0];
                     };
-                    const thumbTip  = getXY(kp[4]);
-                    const indexTip  = getXY(kp[8]);
-                    const palmBase  = getXY(kp[9]); // middle MCP – good proxy for palm centre
+                    // Indices: 0=wrist, 4=thumb_tip, 8=index_tip, 9=middle_mcp (palm centre)
+                    const thumbTip  = getXY(pts[4]);
+                    const indexTip  = getXY(pts[8]);
+                    const palmBase  = getXY(pts[9]); // middle MCP – good proxy for palm centre
 
                     // Pinch distance: Euclidean distance between thumb and index fingertips,
                     // normalised to hand size (wrist-to-middle-MCP baseline)
-                    const wrist = getXY(kp[0]);
+                    const wrist = getXY(pts[0]);
                     const handSizeRef = Math.hypot(palmBase[0]-wrist[0], palmBase[1]-wrist[1]) || 1;
                     const rawPinch = Math.hypot(thumbTip[0]-indexTip[0], thumbTip[1]-indexTip[1]) / (handSizeRef * 2.5);
                     // Invert so 1 = pinched, 0 = open; clamp 0-1
