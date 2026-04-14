@@ -26,6 +26,11 @@
       "sourceType": "github",
       "computedHash": "e9d23b1cc1c60b255ece379103e58548e0a1689038ea6a0eba49988f0d650fa2"
     },
+    "interface-auditor": {
+      "source": "uxuiprinciples/agent-skills",
+      "sourceType": "github",
+      "computedHash": "320f6aab6a528832daf06db4895e074ea9ab471339ad2901977c7a87d1da6dac"
+    },
     "three-js-interactive-builder": {
       "source": "4444j99/a-i--skills",
       "sourceType": "github",

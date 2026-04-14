@@ -488,7 +488,6 @@ function Dead4RatApp() {
         setAudioFile(null);
         if (enable) {
             await audioEngine.start();
-            setUseMic(true);
         }
         setUiRefresh(r => r + 1);
     };
@@ -517,10 +516,10 @@ function Dead4RatApp() {
                 const range = param.max - param.min;
                 if (param.max === 1 && param.step === 1) param.value = Math.random() > 0.5 ? 1 : 0;
                 else param.value = (Math.random() * range) + param.min;
-                const el = document.getElementById(`slider-${key}-${paramKey}`);
-                if (el) el.value = param.value;
+                // No DOM mutation — React controlled sliders update on next render via setUiRefresh
             });
         });
+        setUiRefresh(r => r + 1);
     };
 
     const scrambleEngines = () => {
@@ -601,20 +600,10 @@ function Dead4RatApp() {
 
         let lastTime = performance.now();
         let frames = 0;
-        // Stable refs so render loop closure always sees latest value
-        const aiDriveEnabledRef = { current: false };
-        const aiDriveMappingRef  = { current: {} };
-        // Keep refs in sync — we'll update them via a useEffect below
-        Object.defineProperty(aiDriveEnabledRef, 'current', { 
-            get: () => globalState._aiDriveEnabled || false, 
-            set: v => { globalState._aiDriveEnabled = v; } 
-        });
-        Object.defineProperty(aiDriveMappingRef,  'current', { 
-            get: () => globalState._aiDriveMapping  || {}, 
-            set: v => { globalState._aiDriveMapping = v; } 
-        });
+        // Simple closure references to globalState — no Object.defineProperty hack needed
+        // globalState._aiDriveEnabled and globalState._aiDriveMapping are already mutable
         const renderLoop = (time) => {
-            requestAnimationFrame(renderLoop);
+            globalState._rafId = requestAnimationFrame(renderLoop);
             frames++;
             if (time - lastTime >= 1000) {
                 setFps(Math.round((frames * 1000) / (time - lastTime)));
@@ -672,17 +661,7 @@ function Dead4RatApp() {
                 gs.palmY = gd.palmY;
                 gs.span  = gd.span;
 
-                // Throttled debug log every ~1s when active
-                gs._debugFrames = (gs._debugFrames || 0) + 1;
-                if (gs.enabled && gs._debugFrames % 60 === 0) {
-                    console.log('[GESTURE] pinch=' + gd.pinch.toFixed(3)
-                        + ' palmX=' + gd.palmX.toFixed(3)
-                        + ' palmY=' + gd.palmY.toFixed(3)
-                        + ' span=' + gd.span.toFixed(3)
-                        + ' L=' + gd.handLeft + ' R=' + gd.handRight
-                        + ' mode=' + gs.mode
-                        + ' shockT=' + (gs.shockT || 0).toFixed(3));
-                }
+                // Throttled debug log removed — use browser DevTools to inspect globalState.gesture
 
                 // ── Shockwave timer management ─────────────────────────────
                 if (gs.enabled) {
@@ -1346,7 +1325,7 @@ function Dead4RatApp() {
                     title="SIGNAL_MONITOR"
                     tag="AUDIO"
                     initialX={16}
-                    initialY={40}
+                    initialY={50}
                     width="320px"
                     onClose={() => togglePanel('signal')}
                     minimized={!panels.signal}
@@ -1415,7 +1394,7 @@ function Dead4RatApp() {
 
 
                     {/* BLOB TRACKER */}
-                    <div className="section-header">BLOB_TRACKER // DETECT</div>
+                    <div className="section-header">// BLOB_TRACKER</div>
                     <div style={{display: 'flex', gap: '6px', marginBottom: '8px'}}>
                         <button
                             className={`brutalist-button cmd-btn ${blobEnabled ? 'primary' : ''}`}
@@ -1612,17 +1591,21 @@ function Dead4RatApp() {
                     <div className="section-hint">Click a preset to load it · SAVE stores current settings</div>
                     <button className="brutalist-button cmd-btn primary" style={{width: '100%', marginBottom: '8px'}} onClick={savePreset}>+ SAVE CURRENT STATE</button>
                     {/* Starter presets — always shown, non-deletable */}
-                    <div style={{fontSize: '0.5rem', color: 'var(--text-muted)', marginBottom: '4px', letterSpacing: '1px'}}>── BUILT-IN ──</div>
-                    <div className="preset-grid">
-                        {STARTER_PRESETS.map(p => (
-                            <div key={p.id} className="preset-card starter" onClick={() => loadPreset(p)} title={`Load ${p.name}`}>
-                                <div className="starter-badge">★</div>
-                                <div className="preset-name" style={{paddingTop: '14px'}}>{p.name}</div>
+                    {STARTER_PRESETS.length > 0 && (
+                        <>
+                            <div style={{fontSize: '0.5rem', color: 'var(--text-muted)', marginBottom: '4px', letterSpacing: '1px'}}>── BUILT-IN ──</div>
+                            <div className="preset-grid">
+                                {STARTER_PRESETS.map(p => (
+                                    <div key={p.id} className="preset-card starter" onClick={() => loadPreset(p)} title={`Load ${p.name}`}>
+                                        <div className="starter-badge">★</div>
+                                        <div className="preset-name" style={{paddingTop: '14px'}}>{p.name}</div>
+                                    </div>
+                                ))}
                             </div>
-                        ))}
-                    </div>
+                        </>
+                    )}
                     {/* User presets */}
-                    {presets.length > 0 && (
+                    {presets.length > 0 ? (
                         <React.Fragment>
                             <div style={{fontSize: '0.5rem', color: 'var(--text-muted)', margin: '6px 0 4px', letterSpacing: '1px'}}>── SAVED ──</div>
                             <div className="preset-grid">
@@ -1638,6 +1621,11 @@ function Dead4RatApp() {
                                 ))}
                             </div>
                         </React.Fragment>
+                    ) : STARTER_PRESETS.length === 0 && (
+                        <div style={{fontSize: '0.55rem', color: 'var(--text-muted)', textAlign: 'center', padding: '12px 0', lineHeight: '1.6'}}>
+                            NO PRESETS SAVED YET<br/>
+                            <span style={{color: 'var(--text-dim)'}}>↑ SAVE CURRENT STATE TO CREATE ONE</span>
+                        </div>
                     )}
                 </TerminalWindow>
             )}
@@ -1648,7 +1636,7 @@ function Dead4RatApp() {
                     id="win-fx"
                     title="SUBSTRATE_DECAY // MODULES"
                     initialX={window.innerWidth - 380}
-                    initialY={16}
+                    initialY={50}
                     width="360px"
                     maxHeight="calc(100vh - 60px)"
                     onClose={() => togglePanel('effects')}
@@ -1672,7 +1660,7 @@ function Dead4RatApp() {
                                     <span style={{flex:1}} />
                                     <span className="cat-count">{activeCount > 0 ? `${activeCount} ON` : `${cat.keys.length} FX`}</span>
                                 </div>
-                                <div style={{display: isOpen ? 'block' : 'none'}}>
+                                <div className={`category-body ${isOpen ? 'open' : ''}`}>
                                     {cat.keys.map(k => globalState.glitchez[k] ? renderEffect(k) : null)}
                                 </div>
                             </div>

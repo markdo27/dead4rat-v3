@@ -143,7 +143,14 @@ function TerminalWindow({
 
     React.useEffect(() => {
         if (!isDragging) return;
-        const move = (e) => setPos({ x: e.clientX - dragOffset.current.x, y: e.clientY - dragOffset.current.y });
+        const move = (e) => {
+            const el = ref.current;
+            const maxX = window.innerWidth - (el ? el.offsetWidth : 320);
+            const maxY = window.innerHeight - (el ? el.offsetHeight : 30);
+            const nextX = Math.max(0, Math.min(maxX, e.clientX - dragOffset.current.x));
+            const nextY = Math.max(0, Math.min(maxY, e.clientY - dragOffset.current.y));
+            setPos({ x: nextX, y: nextY });
+        };
         const up = () => setIsDragging(false);
         window.addEventListener('mousemove', move);
         window.addEventListener('mouseup', up);

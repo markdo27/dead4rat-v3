@@ -108,16 +108,16 @@ class AudioEngine {
 
     // ─── Internal: create & connect the analyser ─────────────────────────
     _setupAnalyser(connectToDestination = false) {
-        const gl = this.audioContext;
+        const ctx = this.audioContext;
 
-        this.analyser = gl.createAnalyser();
+        this.analyser = ctx.createAnalyser();
         this.analyser.fftSize = 2048;
         this.analyser.smoothingTimeConstant = 0.8;
         
         this.sourceNode.connect(this.analyser);
         if (connectToDestination) {
             // File playback: let the user hear the audio
-            this.analyser.connect(gl.destination);
+            this.analyser.connect(ctx.destination);
         }
 
         const bufferLength = this.analyser.frequencyBinCount;
