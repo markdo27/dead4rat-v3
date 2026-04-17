@@ -420,11 +420,16 @@ function Dead4RatApp() {
     // ── Chladni Sand Generator overlay ───────────────────────────────────
     const [chladniOpen, setChladniOpen] = React.useState(false);
 
-    // Close Chladni on Escape key
+    // Close Chladni on Escape key OR postMessage from the iframe's own close button
     React.useEffect(() => {
         const onKey = (e) => { if (e.key === 'Escape' && chladniOpen) setChladniOpen(false); };
+        const onMsg = (e) => { if (e.data && e.data.type === 'CHLADNI_CLOSE') setChladniOpen(false); };
         window.addEventListener('keydown', onKey);
-        return () => window.removeEventListener('keydown', onKey);
+        window.addEventListener('message', onMsg);
+        return () => {
+            window.removeEventListener('keydown', onKey);
+            window.removeEventListener('message', onMsg);
+        };
     }, [chladniOpen]);
 
     React.useEffect(() => {
@@ -1210,50 +1215,20 @@ function Dead4RatApp() {
             {chladniOpen && (
                 <div style={{
                     position: 'fixed', inset: 0, zIndex: 9000,
-                    background: '#000',
+                    background: '#050505',
                     display: 'flex', flexDirection: 'column',
                     animation: 'chladniFadeIn 0.22s ease',
+                    pointerEvents: 'auto',
                 }}>
-                    {/* Close strip */}
-                    <div style={{
-                        position: 'absolute', top: 0, left: 0, right: 0,
-                        height: '36px', zIndex: 9001,
-                        display: 'flex', alignItems: 'center', gap: '10px',
-                        padding: '0 12px',
-                        background: 'rgba(0,0,0,0.72)',
-                        backdropFilter: 'blur(8px)',
-                        borderBottom: '1px solid rgba(167,139,250,0.25)',
-                        fontFamily: 'var(--font-mono)',
-                        fontSize: '0.6rem',
-                        letterSpacing: '1px',
-                    }}>
-                        <span style={{ color: '#a78bfa', fontWeight: 700 }}>✦ CHLADNI SAND GENERATOR</span>
-                        <span style={{ flex: 1 }} />
-                        <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: '0.55rem' }}>ESC to close</span>
-                        <button
-                            onClick={() => setChladniOpen(false)}
-                            style={{
-                                background: 'none',
-                                border: '1px solid rgba(167,139,250,0.4)',
-                                color: '#a78bfa',
-                                cursor: 'pointer',
-                                fontFamily: 'var(--font-mono)',
-                                fontSize: '0.65rem',
-                                padding: '2px 10px',
-                                lineHeight: 1,
-                                borderRadius: 0,
-                            }}
-                        >✕ CLOSE</button>
-                    </div>
-                    {/* Chladni iframe — full-screen beneath the strip */}
+                    {/* Full-screen iframe — chladni.html owns its own close button */}
                     <iframe
                         src="chladni.html"
                         style={{
-                            flex: 1,
                             width: '100%',
+                            height: '100%',
                             border: 'none',
-                            marginTop: '36px',
-                            height: 'calc(100% - 36px)',
+                            display: 'block',
+                            pointerEvents: 'auto',
                         }}
                         title="Chladni Sand Generator"
                         allow="microphone"
