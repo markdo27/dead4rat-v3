@@ -200,6 +200,28 @@ input[type=checkbox]{accent-color:#FF5500;cursor:pointer;width:12px;height:12px}
 /* ── Keyboard hint ── */
 #kb-hint{position:fixed;bottom:12px;right:12px;z-index:99;font-size:0.45rem;color:#1a0a00;letter-spacing:1px;line-height:1.8;pointer-events:none}
 
+/* ── Hand tracking ── */
+.hud-btn.hand-btn{color:#00CC66;border-color:#00CC66}
+.hud-btn.hand-btn:hover{color:#000;background:#00CC66;border-color:#00CC66}
+.hud-btn.hand-on{color:#000 !important;background:#00FF88 !important;border-color:#00FF88 !important;box-shadow:0 0 10px rgba(0,255,136,0.5)}
+#hand-preview{
+  position:fixed;bottom:12px;right:12px;z-index:101;
+  display:none;flex-direction:column;gap:5px;
+  background:rgba(5,5,5,0.94);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  border:1px solid #003322;border-left:2px solid #00FF88;
+  padding:7px 8px;pointer-events:none;
+}
+#hand-preview.visible{display:flex}
+#hand-canvas{display:block;width:192px;height:108px;border:1px solid #003322}
+.hand-meta{display:flex;justify-content:space-between;align-items:center;gap:6px}
+.hand-lbl{font-size:0.45rem;color:#00CC66;letter-spacing:1px}
+#hand-status{font-size:0.45rem;color:#006633;letter-spacing:1px}
+#hand-cursor{
+  position:fixed;pointer-events:none;z-index:10;
+  width:36px;height:36px;margin-left:-18px;margin-top:-18px;
+  display:none;
+}
+
 /* ── Light theme ── */
 body.light-theme{background:#f0ede8;color:#442200}
 body.light-theme #hud-bar{background:rgba(240,237,232,0.94);border-bottom-color:rgba(0,0,0,0.08)}
@@ -217,6 +239,25 @@ body.light-theme #hud-text-card{background:rgba(240,237,232,0.94)}
   <div class="mg-corner" id="mgBL"></div>
   <div class="mg-corner" id="mgBR"></div>
   <div id="rec-dot"><div id="rec-circle"></div><span id="rec-lbl">REC 0s</span></div>
+</div>
+
+<!-- Hand cursor overlay (fingertip ring on canvas) -->
+<svg id="hand-cursor" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="18" cy="18" r="13" stroke="#00FF88" stroke-width="2" opacity="0.9"/>
+  <circle cx="18" cy="18" r="4" fill="#00FF88" opacity="0.7"/>
+  <line x1="18" y1="2" x2="18" y2="8" stroke="#00FF88" stroke-width="1.5"/>
+  <line x1="18" y1="28" x2="18" y2="34" stroke="#00FF88" stroke-width="1.5"/>
+  <line x1="2" y1="18" x2="8" y2="18" stroke="#00FF88" stroke-width="1.5"/>
+  <line x1="28" y1="18" x2="34" y2="18" stroke="#00FF88" stroke-width="1.5"/>
+</svg>
+
+<!-- Hand tracking PIP preview -->
+<div id="hand-preview">
+  <canvas id="hand-canvas" width="384" height="216"></canvas>
+  <div class="hand-meta">
+    <span class="hand-lbl">✋ HAND TRACKING</span>
+    <span id="hand-status">INIT...</span>
+  </div>
 </div>
 
 <!-- ── TOP HUD BAR ── -->
@@ -262,6 +303,9 @@ body.light-theme #hud-text-card{background:rgba(240,237,232,0.94)}
 
   <!-- EXPLODE -->
   <button class="hud-btn explode-btn" id="explode-btn" title="Explode all particles outward [SPACE]">⚡ EXPLODE</button>
+
+  <!-- HAND -->
+  <button class="hud-btn hand-btn" id="hand-btn" title="Toggle hand tracking [H] — index finger pushes particles">✋ HAND</button>
 
   <span class="hud-sep"></span>
 
@@ -487,7 +531,7 @@ body.light-theme #hud-text-card{background:rgba(240,237,232,0.94)}
 </div>
 
 <!-- Keyboard hint -->
-<div id="kb-hint">↑↓ M &nbsp;·&nbsp; ←→ N &nbsp;·&nbsp; SPACE EXPLODE</div>
+<div id="kb-hint">↑↓ M &nbsp;·&nbsp; ←→ N &nbsp;·&nbsp; SPACE EXPLODE &nbsp;·&nbsp; H HAND</div>
 
 <script>
 // ── Close → postMessage to parent ────────────────────────────────────────────
@@ -526,6 +570,16 @@ var aSmooth={brightness:0,bass:0,flux:0};
 var zone={x0:0,y0:0,x1:800,y1:600};
 var beatSnap=false,beatSnapThreshold=0.35,beatCool=0,beatFlashFrames=0;
 var exploding=false,explodeTimer=0;
+
+// ── Hand tracking state ───────────────────────────────────────────────────────
+var handMode=false,handDetecting=false;
+var hand={active:false,x:0,y:0,vx:0,vy:0,prevX:0,prevY:0,lostFrames:0};
+var handVideoEl=null,handVideoStream=null,handsDetector=null,handAnimFrame=null;
+var handPreviewEl=document.getElementById('hand-preview');
+var handPreviewCanvas=document.getElementById('hand-canvas');
+var handPreviewCtx=handPreviewCanvas.getContext('2d');
+var handStatusEl=document.getElementById('hand-status');
+var handCursorEl=document.getElementById('hand-cursor');
 
 var P={count:14000,size:1.0,inertia:7,restore:2.0,rmax:15.0,mrad:165,mforce:17.5,spread:2.0,eacc:0.27,edec:0.06,gain:20.0,fsen:1.0,trail:20};
 function inertiaToDamp(v){return 0.99-(v-1)/9*0.17;}
@@ -624,7 +678,145 @@ document.addEventListener('keydown',function(e){
   else if(e.key==='ArrowUp'){curFm=Math.min(10,curFm+1);targetFm=curFm;updateMNDisplay();e.preventDefault();}
   else if(e.key==='ArrowDown'){curFm=Math.max(1,curFm-1);targetFm=curFm;updateMNDisplay();e.preventDefault();}
   else if(e.key===' '){explode();e.preventDefault();}
+  else if(e.key==='h'||e.key==='H'){toggleHandMode();e.preventDefault();}
 });
+
+// ── Hand Tracking (MediaPipe Hands) ──────────────────────────────────────────
+function toggleHandMode(){if(handMode)stopHandMode();else startHandMode();}
+
+async function startHandMode(){
+  var btn=document.getElementById('hand-btn');
+  if(handDetecting)return;
+  handDetecting=true;
+  statusEl.textContent='HAND: LOADING MODEL...';
+  try{
+    // Load MediaPipe Hands dynamically
+    if(!window.Hands){
+      await new Promise(function(res,rej){
+        var s=document.createElement('script');
+        s.src='https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/hands.js';
+        s.crossOrigin='anonymous';
+        s.onload=res;s.onerror=rej;
+        document.head.appendChild(s);
+      });
+    }
+    // Get camera
+    var stream=await navigator.mediaDevices.getUserMedia({video:{width:640,height:360,facingMode:'user'}});
+    handVideoEl=document.createElement('video');
+    handVideoEl.srcObject=stream;handVideoEl.playsInline=true;handVideoEl.muted=true;
+    await handVideoEl.play();
+    handVideoStream=stream;
+
+    // Init Hands
+    handsDetector=new Hands({locateFile:function(f){
+      return 'https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/'+f;
+    }});
+    handsDetector.setOptions({maxNumHands:1,modelComplexity:1,minDetectionConfidence:0.65,minTrackingConfidence:0.5});
+    handsDetector.onResults(onHandResults);
+
+    handMode=true;handDetecting=false;
+    btn.classList.add('hand-on');
+    btn.textContent='✋ ON';
+    handPreviewEl.classList.add('visible');
+    handStatusEl.textContent='SCANNING...';
+    statusEl.textContent='HAND TRACKING ACTIVE';
+    handCursorEl.style.display='block';
+    canvas.style.cursor='none';
+    runHandLoop();
+  }catch(err){
+    handDetecting=false;
+    statusEl.textContent='HAND ERR: '+(err.message||err);
+  }
+}
+
+function stopHandMode(){
+  handMode=false;handDetecting=false;
+  if(handAnimFrame){cancelAnimationFrame(handAnimFrame);handAnimFrame=null;}
+  if(handsDetector){try{handsDetector.close();}catch(e){} handsDetector=null;}
+  if(handVideoStream){handVideoStream.getTracks().forEach(function(t){t.stop()});handVideoStream=null;}
+  handVideoEl=null;
+  hand.active=false;hand.vx=0;hand.vy=0;
+  var btn=document.getElementById('hand-btn');
+  btn.classList.remove('hand-on');
+  btn.textContent='✋ HAND';
+  handPreviewEl.classList.remove('visible');
+  handCursorEl.style.display='none';
+  canvas.style.cursor='crosshair';
+  statusEl.textContent='HAND TRACKING OFF';
+  handPreviewCtx.clearRect(0,0,384,216);
+}
+
+function runHandLoop(){
+  if(!handMode||!handsDetector||!handVideoEl)return;
+  handsDetector.send({image:handVideoEl}).then(function(){
+    if(handMode)handAnimFrame=requestAnimationFrame(runHandLoop);
+  }).catch(function(){
+    if(handMode)handAnimFrame=requestAnimationFrame(runHandLoop);
+  });
+}
+
+function onHandResults(results){
+  // ── Draw preview ──
+  var pw=384,ph=216;
+  handPreviewCtx.save();
+  handPreviewCtx.scale(-1,1);handPreviewCtx.translate(-pw,0); // mirror
+  handPreviewCtx.drawImage(results.image,0,0,pw,ph);
+  handPreviewCtx.restore();
+  // Darken overlay
+  handPreviewCtx.fillStyle='rgba(5,5,5,0.55)';
+  handPreviewCtx.fillRect(0,0,pw,ph);
+
+  if(results.multiHandLandmarks&&results.multiHandLandmarks.length>0){
+    var lm=results.multiHandLandmarks[0];
+    // Landmark 8 = index fingertip (primary pointer)
+    var idx=lm[8];
+    // Normalized coords: x=0 is left of webcam (but webcam is mirrored on screen)
+    // We mirror x so hand moving right = brush moves right
+    var nx=1-idx.x, ny=idx.y;
+    var cx=nx*W, cy=ny*H;
+
+    // Velocity
+    if(hand.active){
+      hand.vx=(hand.vx*0.4+(cx-hand.prevX)*0.6);
+      hand.vy=(hand.vy*0.4+(cy-hand.prevY)*0.6);
+    }else{hand.vx=0;hand.vy=0;}
+    hand.prevX=hand.x;hand.prevY=hand.y;
+    hand.x=cx;hand.y=cy;hand.active=true;hand.lostFrames=0;
+
+    // Move cursor overlay
+    handCursorEl.style.left=cx+'px';
+    handCursorEl.style.top=cy+'px';
+    var spd=Math.min(1,Math.hypot(hand.vx,hand.vy)/20);
+    handCursorEl.style.opacity=(0.5+spd*0.5).toFixed(2);
+    handCursorEl.style.transform='scale('+(1+spd*0.6)+')';
+
+    // Draw skeleton on preview
+    var CONNECTIONS=[[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
+    handPreviewCtx.strokeStyle='rgba(0,255,136,0.55)';handPreviewCtx.lineWidth=1;
+    CONNECTIONS.forEach(function(c){
+      var a=lm[c[0]],b=lm[c[1]];
+      handPreviewCtx.beginPath();
+      handPreviewCtx.moveTo((1-a.x)*pw,a.y*ph);
+      handPreviewCtx.lineTo((1-b.x)*pw,b.y*ph);
+      handPreviewCtx.stroke();
+    });
+    // Draw fingertip
+    handPreviewCtx.beginPath();handPreviewCtx.arc((1-idx.x)*pw,idx.y*ph,5,0,Math.PI*2);
+    handPreviewCtx.fillStyle='#00FF88';handPreviewCtx.fill();
+    handStatusEl.textContent='✦ DETECTED';
+  }else{
+    hand.lostFrames++;
+    if(hand.lostFrames>8){
+      hand.active=false;
+      // Decay velocity
+      hand.vx*=0.7;hand.vy*=0.7;
+      handCursorEl.style.opacity='0.2';
+    }
+    handStatusEl.textContent='SCANNING...';
+  }
+}
+
+document.getElementById('hand-btn').addEventListener('click',toggleHandMode);
 
 // ── EXPLODE ───────────────────────────────────────────────────────────────────
 function explode(){
@@ -903,12 +1095,32 @@ function draw(){
   // Simulation
   var damp=inertiaToDamp(P.inertia),rp=Math.pow(1-energy,2.2),mr2=P.mrad*P.mrad,ds=Math.hypot(mouse.vx,mouse.vy);
   var vibr=energy*P.spread*(1.8+aSmooth.bass*2),nodePull=P.spread*energy*(1.8+aSmooth.brightness*1.2),fluxK=aSmooth.flux*P.spread*4;
+  // Determine active brush source (mouse or hand)
+  var brushActive=handMode?hand.active:mouse.down;
+  var brushX=handMode?hand.x:mouse.x;
+  var brushY=handMode?hand.y:mouse.y;
+  var brushVX=handMode?hand.vx:mouse.vx;
+  var brushVY=handMode?hand.vy:mouse.vy;
+  var brushSpeed=Math.hypot(brushVX,brushVY);
+  // Hand has always-on gentle repulsion even when stationary; mouse needs click
+  var handBase=handMode&&hand.active?P.mforce*0.35:0;
 
   for(var i=0;i<particles.length;i++){
     var p=particles[i],fx=0,fy=0;
 
-    // Mouse brush
-    if(mouse.down){var mdx=p.x-mouse.x,mdy=p.y-mouse.y,md2=mdx*mdx+mdy*mdy;if(md2<mr2&&md2>0.01){var md=Math.sqrt(md2),fo=Math.pow(1-md/P.mrad,2),ppx,ppy;if(ds>1.5){var nx=mouse.vx/ds,ny=mouse.vy/ds;ppx=nx*0.7+(mdx/md)*0.3;ppy=ny*0.7+(mdy/md)*0.3;}else{ppx=mdx/md;ppy=mdy/md;}fx+=ppx*P.mforce*fo;fy+=ppy*P.mforce*fo;}}
+    // Brush (mouse click OR hand presence)
+    if(brushActive){
+      var bdx=p.x-brushX,bdy=p.y-brushY,bd2=bdx*bdx+bdy*bdy;
+      if(bd2<mr2&&bd2>0.01){
+        var bd=Math.sqrt(bd2),fo=Math.pow(1-bd/P.mrad,2),ppx,ppy;
+        if(brushSpeed>1.5){
+          var bnx=brushVX/brushSpeed,bny=brushVY/brushSpeed;
+          ppx=bnx*0.65+(bdx/bd)*0.35;ppy=bny*0.65+(bdy/bd)*0.35;
+        }else{ppx=bdx/bd;ppy=bdy/bd;}
+        var bforce=P.mforce*Math.min(1,brushSpeed/6+0.18)+handBase;
+        fx+=ppx*bforce*fo;fy+=ppy*bforce*fo;
+      }
+    }
 
     // Chladni force
     if(energy>0.005){var cv=cVal(p.x,p.y,curFm,curFn),gr=cGrad(p.x,p.y,curFm,curFn),mg2=Math.hypot(gr[0],gr[1])||1,pl2=Math.abs(cv)*nodePull*2.2;fx-=(gr[0]/mg2)*pl2*Math.sign(cv);fy-=(gr[1]/mg2)*pl2*Math.sign(cv);fx+=(Math.random()-.5)*vibr;fy+=(Math.random()-.5)*vibr;if(fluxK>0.05){fx+=(Math.random()-.5)*fluxK;fy+=(Math.random()-.5)*fluxK;}}
@@ -921,7 +1133,7 @@ function draw(){
 
     p.vx=(p.vx+fx)*damp;p.vy=(p.vy+fy)*damp;
     var sp=Math.hypot(p.vx,p.vy),msp=exploding?40:(rp>0.1?P.rmax*rp+20*(1-rp):20);
-    if(mouse.down)msp=Math.max(msp,P.mforce*3);
+    if(brushActive)msp=Math.max(msp,P.mforce*3);
     if(sp>msp){p.vx=p.vx/sp*msp;p.vy=p.vy/sp*msp;}
     p.x+=p.vx;p.y+=p.vy;
     if(p.x<zone.x0){p.x=zone.x0;p.vx*=-.3;}else if(p.x>zone.x1){p.x=zone.x1;p.vx*=-.3;}
@@ -933,6 +1145,8 @@ function draw(){
     ctx.fillStyle='rgb('+col[0]+','+col[1]+','+col[2]+')';ctx.fill();
   }
   mouse.vx*=0.7;mouse.vy*=0.7;
+  // Hand velocity decay when lost
+  if(!hand.active){hand.vx*=0.8;hand.vy*=0.8;}
 }
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
