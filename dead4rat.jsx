@@ -1211,7 +1211,7 @@ function Dead4RatApp() {
     return (
         <React.Fragment>
 
-            {/* ═══════════════ CHLADNI OVERLAY ═══════════════ */}
+            {/* ═══════════════ SANDER OVERLAY ═══════════════ */}
             {chladniOpen && (
                 <div style={{
                     position: 'fixed', inset: 0, zIndex: 9000,
@@ -1220,9 +1220,9 @@ function Dead4RatApp() {
                     animation: 'chladniFadeIn 0.22s ease',
                     pointerEvents: 'auto',
                 }}>
-                    {/* Full-screen iframe — chladni.html owns its own close button */}
+                    {/* Full-screen iframe — sander.html owns its own close button */}
                     <iframe
-                        src="chladni.html"
+                        src="sander.html"
                         style={{
                             width: '100%',
                             height: '100%',
@@ -1230,7 +1230,7 @@ function Dead4RatApp() {
                             display: 'block',
                             pointerEvents: 'auto',
                         }}
-                        title="Chladni Sand Generator"
+                        title="SANDER"
                         allow="microphone"
                     />
                 </div>
@@ -1357,9 +1357,9 @@ function Dead4RatApp() {
                     <button
                         className={chladniOpen ? 'hud-active' : ''}
                         onClick={() => setChladniOpen(o => !o)}
-                        title="Open Chladni Sand Generator"
-                        style={{ color: chladniOpen ? '#a78bfa' : undefined, borderColor: chladniOpen ? '#a78bfa' : undefined }}
-                    >✦ CHLADNI</button>
+                        title="Open SANDER"
+                        style={{ color: chladniOpen ? '#FF5500' : undefined, borderColor: chladniOpen ? '#FF5500' : undefined }}
+                    >✦ SANDER</button>
                     <button onClick={() => setUiVisible(false)}>HIDE UI</button>
                 </div>
             )}
