@@ -417,6 +417,16 @@ function Dead4RatApp() {
 
     const togglePanel = (key) => setPanels(p => ({...p, [key]: !p[key]}));
 
+    // ── Chladni Sand Generator overlay ───────────────────────────────────
+    const [chladniOpen, setChladniOpen] = React.useState(false);
+
+    // Close Chladni on Escape key
+    React.useEffect(() => {
+        const onKey = (e) => { if (e.key === 'Escape' && chladniOpen) setChladniOpen(false); };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [chladniOpen]);
+
     React.useEffect(() => {
         if (!canvasEngine)  canvasEngine  = new CanvasEngine('main-canvas');
         if (!audioEngine)   audioEngine   = new AudioEngine();
@@ -1196,6 +1206,61 @@ function Dead4RatApp() {
     return (
         <React.Fragment>
 
+            {/* ═══════════════ CHLADNI OVERLAY ═══════════════ */}
+            {chladniOpen && (
+                <div style={{
+                    position: 'fixed', inset: 0, zIndex: 9000,
+                    background: '#000',
+                    display: 'flex', flexDirection: 'column',
+                    animation: 'chladniFadeIn 0.22s ease',
+                }}>
+                    {/* Close strip */}
+                    <div style={{
+                        position: 'absolute', top: 0, left: 0, right: 0,
+                        height: '36px', zIndex: 9001,
+                        display: 'flex', alignItems: 'center', gap: '10px',
+                        padding: '0 12px',
+                        background: 'rgba(0,0,0,0.72)',
+                        backdropFilter: 'blur(8px)',
+                        borderBottom: '1px solid rgba(167,139,250,0.25)',
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: '0.6rem',
+                        letterSpacing: '1px',
+                    }}>
+                        <span style={{ color: '#a78bfa', fontWeight: 700 }}>✦ CHLADNI SAND GENERATOR</span>
+                        <span style={{ flex: 1 }} />
+                        <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: '0.55rem' }}>ESC to close</span>
+                        <button
+                            onClick={() => setChladniOpen(false)}
+                            style={{
+                                background: 'none',
+                                border: '1px solid rgba(167,139,250,0.4)',
+                                color: '#a78bfa',
+                                cursor: 'pointer',
+                                fontFamily: 'var(--font-mono)',
+                                fontSize: '0.65rem',
+                                padding: '2px 10px',
+                                lineHeight: 1,
+                                borderRadius: 0,
+                            }}
+                        >✕ CLOSE</button>
+                    </div>
+                    {/* Chladni iframe — full-screen beneath the strip */}
+                    <iframe
+                        src="chladni.html"
+                        style={{
+                            flex: 1,
+                            width: '100%',
+                            border: 'none',
+                            marginTop: '36px',
+                            height: 'calc(100% - 36px)',
+                        }}
+                        title="Chladni Sand Generator"
+                        allow="microphone"
+                    />
+                </div>
+            )}
+
             {/* ═══════════════ PRE-BOOT TERMINAL ═══════════════ */}
             {uiVisible && !started && (
                 <TerminalWindow
@@ -1314,6 +1379,12 @@ function Dead4RatApp() {
                     <button className={panels.human ? 'hud-active' : ''} onClick={() => togglePanel('human')} style={{color: humanEnabled ? '#00FF88' : undefined}}>HUMAN AI</button>
                     <button className={panels.signal ? 'hud-active' : ''} onClick={() => togglePanel('signal')}>AUDIO</button>
                     <button className={panels.effects ? 'hud-active' : ''} onClick={() => togglePanel('effects')}>FX</button>
+                    <button
+                        className={chladniOpen ? 'hud-active' : ''}
+                        onClick={() => setChladniOpen(o => !o)}
+                        title="Open Chladni Sand Generator"
+                        style={{ color: chladniOpen ? '#a78bfa' : undefined, borderColor: chladniOpen ? '#a78bfa' : undefined }}
+                    >✦ CHLADNI</button>
                     <button onClick={() => setUiVisible(false)}>HIDE UI</button>
                 </div>
             )}
