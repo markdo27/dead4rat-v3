@@ -717,7 +717,7 @@ document.getElementById('ar-w').addEventListener('change',function(){frameAR.w=M
 document.getElementById('ar-h').addEventListener('change',function(){frameAR.h=Math.max(1,parseInt(this.value)||1);computeFrameRect();initParticles();});
 syncCR('s-margin','v-margin',null,0,function(v){frameMargin=v;computeFrameRect();initParticles();});
 
-// ── Canvas + sampling ─────────────────────────────────────────────────────────
+// ── Canvas + sampling ────��────────────────────────────────────────────────────
 function resizeCanvas(){
   W=window.innerWidth;H=window.innerHeight;
   canvas.width=W;canvas.height=H;
@@ -943,5 +943,11 @@ computeFrameRect();
 zone=activeZone();
 initParticles();draw();
 </script>
+
+<!-- Vercel Speed Insights -->
+<script>
+  window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
+</script>
+<script defer src="/_vercel/speed-insights/script.js"></script>
 </body>
 </html>
