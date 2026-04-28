@@ -688,45 +688,130 @@ class CanvasEngine {
                     float lenDZ = length(qdz);
                     return max(0.5 * lenZ * log(max(lenZ, 1.0)) / max(lenDZ, 0.001), 0.0005);
                 }
-                else {
-                    // ── MODE 11: KALEIDOSCOPIC IFS (MANDELBOX) ──────────
-                    // Box-fold + sphere-fold fractal — infinite recursive detail
+                else if (u_genMode < 11.5) {
+                    // ── MODE 11: MANDELBOX ──────────────────────────────
                     p.xz *= rot(u_time * u_genSpeed * 0.1);
                     p.yz *= rot(u_time * u_genSpeed * 0.06);
-
                     float mboxScale = -1.5 - u_genIter * 1.5 - ABnd * u_genWarp * 0.8;
-                    float fixedR2 = 1.0;
-                    float minR2 = 0.25 * u_genDensity;
-                    vec3 offset = p;
-                    float DEfactor = 1.0;
-
+                    float fixedR2 = 1.0; float minR2 = 0.25 * u_genDensity;
+                    vec3 offset = p; float DEfactor = 1.0;
                     for (int i = 0; i < 12; i++) {
-                        // Box fold: clamp each axis to [-1,1] then reflect
                         p = clamp(p, -1.0, 1.0) * 2.0 - p;
-
-                        // Sphere fold: if inside minR sphere, push out; if inside fixedR, invert
                         float r2 = dot(p, p);
-                        if (r2 < minR2) {
-                            float t2 = fixedR2 / minR2;
-                            p *= t2;
-                            DEfactor *= t2;
-                        } else if (r2 < fixedR2) {
-                            float t2 = fixedR2 / r2;
-                            p *= t2;
-                            DEfactor *= t2;
-                        }
-
-                        // Scale + translate
+                        if (r2 < minR2) { float t2 = fixedR2/minR2; p*=t2; DEfactor*=t2; }
+                        else if (r2 < fixedR2) { float t2 = fixedR2/r2; p*=t2; DEfactor*=t2; }
                         p = p * mboxScale + offset;
                         DEfactor = DEfactor * abs(mboxScale) + 1.0;
-
-                        // Audio-reactive twist between iterations
-                        if (ABnd > 0.15) {
-                            p.xy *= rot(ABnd * u_genWarp * 0.08);
-                        }
+                        if (ABnd > 0.15) p.xy *= rot(ABnd * u_genWarp * 0.08);
                     }
-                    // DE = distance to origin / accumulated scale factor
                     return max(length(p) / DEfactor, 0.0003);
+                }
+                else if (u_genMode < 12.5) {
+                    // ── MODE 12: GYROID ─────────────────────────────────
+                    // Triply-periodic minimal surface — flowing neon ribbons
+                    p.z -= u_time * u_genSpeed * 3.0;
+                    p.xy *= rot(u_time * 0.07 + ABnd * u_genWarp * 0.25);
+                    float freq = (0.9 + u_genDensity * 1.2) * 3.14159;
+                    vec3 gp = p * freq;
+                    float g1 = sin(gp.x)*cos(gp.y) + sin(gp.y)*cos(gp.z) + sin(gp.z)*cos(gp.x);
+                    float g2 = sin(gp.x*2.0)*cos(gp.y*2.0) + sin(gp.y*2.0)*cos(gp.z*2.0) + sin(gp.z*2.0)*cos(gp.x*2.0);
+                    float wall = (0.07 + ABnd * 0.18 * u_genWarp) * u_genDensity;
+                    return abs(g1 + g2 * 0.28) / (freq * 1.8) - wall / freq;
+                }
+                else if (u_genMode < 13.5) {
+                    // ── MODE 13: PORTAL STORM ───────────────────────────
+                    // Interlocked spinning torus rings — cosmic portal field
+                    p.z -= u_time * u_genSpeed * 1.5;
+                    float ringD = 1e10;
+                    float numR = 5.0 + floor(u_genDensity * 2.0);
+                    for (int i = 0; i < 7; i++) {
+                        if (float(i) >= numR) break;
+                        float fi = float(i);
+                        float ang = fi * 0.8976 + u_time * (0.07 + fi * 0.03 + ABnd * u_genWarp * 0.12);
+                        vec3 qr = p;
+                        qr.xz *= rot(ang); qr.yz *= rot(ang * 0.618 + u_time * 0.04); qr.xy *= rot(ang * 0.382);
+                        float bigR = 1.1 + sin(u_time * 0.2 + fi * 2.1) * 0.35 * u_genWarp;
+                        float tubeR = (0.045 + ABnd * 0.1 * u_genWarp) * u_genDensity;
+                        vec2 qxy = vec2(length(qr.xy) - bigR, qr.z);
+                        ringD = min(ringD, length(qxy) - tubeR);
+                    }
+                    return ringD;
+                }
+                else if (u_genMode < 14.5) {
+                    // ── MODE 14: SIERPINSKI ─────────────────────────────
+                    // Tetrahedral IFS fractal — infinite spiky recursion
+                    p.xz *= rot(u_time * u_genSpeed * 0.15);
+                    p.yz *= rot(u_time * u_genSpeed * 0.09);
+                    p *= 0.65;
+                    vec3 a1 = normalize(vec3( 1.0,  1.0, -1.0));
+                    vec3 a2 = normalize(vec3(-1.0, -1.0, -1.0));
+                    vec3 a3 = normalize(vec3( 1.0, -1.0,  1.0));
+                    vec3 a4 = normalize(vec3(-1.0,  1.0,  1.0));
+                    vec3 sp = p; float scaleSp = 1.0;
+                    float sScale = 1.9 + ABnd * u_genWarp * 0.25;
+                    for (int i = 0; i < 10; i++) {
+                        float c;
+                        c = dot(sp-a1,a1); if(c<0.0) sp -= 2.0*c*a1;
+                        c = dot(sp-a2,a2); if(c<0.0) sp -= 2.0*c*a2;
+                        c = dot(sp-a3,a3); if(c<0.0) sp -= 2.0*c*a3;
+                        c = dot(sp-a4,a4); if(c<0.0) sp -= 2.0*c*a4;
+                        sp = sp * sScale - a1 * (sScale - 1.0);
+                        scaleSp *= sScale;
+                    }
+                    return max(length(sp)/scaleSp - 0.002, -0.5);
+                }
+                else if (u_genMode < 15.5) {
+                    // ── MODE 15: NEON HELIX ─────────────────────────────
+                    // Double DNA helix tunnel — two intertwined glowing strands
+                    p.z -= u_time * u_genSpeed * 5.5;
+                    p.xy *= rot(u_time * 0.04);
+                    float freq2 = 0.9 + u_genDensity * 0.7;
+                    float helixR = 0.55 + u_genWarp * ABnd * 0.25;
+                    float twist = p.z * freq2;
+                    vec2 h1 = vec2(cos(twist), sin(twist)) * helixR;
+                    vec2 h2 = vec2(cos(twist+3.14159), sin(twist+3.14159)) * helixR;
+                    float tubeR = (0.07 + ABnd * 0.1 * u_genWarp) * u_genDensity;
+                    float s1 = length(p.xy - h1) - tubeR;
+                    float s2 = length(p.xy - h2) - tubeR;
+                    // Cross-rungs: appear at regular intervals along z
+                    float rungPhase = fract(p.z * freq2 / 3.14159);
+                    float rungWeight = 1.0 - abs(rungPhase - 0.5) * 4.0;
+                    float rungAngle = floor(p.z * freq2 / 3.14159) * 3.14159;
+                    vec2 rungMid = vec2(cos(rungAngle + 1.5708), sin(rungAngle + 1.5708)) * helixR * 0.5;
+                    float rung = length(p.xy - rungMid * clamp(rungWeight, 0.0, 1.0)) - tubeR * 0.5;
+                    float rungMask = max(0.0, rungWeight) > 0.0 ? rung : 1e10;
+                    return min(s1, min(s2, rungMask));
+                }
+                else if (u_genMode < 16.5) {
+                    // ── MODE 16: BUBBLE BATH ────────────────────────────
+                    // Multi-scale soap-bubble sphere shells — audio pops them
+                    p.z -= u_time * u_genSpeed * 2.0;
+                    p.xy *= rot(u_time * 0.05 + ABnd * u_genWarp * 0.1);
+                    float wall = (0.02 + ABnd * 0.04 * u_genWarp) * u_genDensity;
+                    // Large bubbles
+                    vec3 q1 = mod(p * 1.6 + 0.5, 1.0) - 0.5;
+                    float b1 = abs(length(q1 / 1.6) - (0.4 + ABnd * 0.1 * u_genWarp)) - wall;
+                    // Medium bubbles (offset grid)
+                    vec3 q2 = mod(p * 0.9 + vec3(0.55, 0.55, 0.55), 1.0) - 0.5;
+                    float b2 = abs(length(q2 / 0.9) - (0.38 + ABnd * 0.08 * u_genWarp)) - wall;
+                    return min(b1, b2);
+                }
+                else {
+                    // ── MODE 17: ACID TUNNEL ────────────────────────────
+                    // Iterated sphere-inversion + fold IFS — warps into infinity
+                    p.z -= u_time * u_genSpeed * 6.0;
+                    p.xy *= rot(u_time * 0.12 + ABnd * u_genWarp * 0.35);
+                    vec3 qa = p; float qa_sc = 1.0;
+                    float invR = max(0.12, 1.15 - ABnd * u_genWarp * 0.25);
+                    for (int i = 0; i < 7; i++) {
+                        qa = abs(qa) - vec3(0.82, 0.82, 0.48);
+                        float r2 = dot(qa, qa);
+                        if (r2 < invR) { float sc = invR/r2; qa*=sc; qa_sc*=sc; }
+                        qa.xy *= rot(0.42 + ABnd * u_genWarp * 0.12);
+                        qa.xz *= rot(u_time * 0.015);
+                        qa *= 1.48; qa_sc *= 1.48;
+                    }
+                    return max((length(qa) - 0.75) / qa_sc, 0.0003);
                 }
             }
 
@@ -801,7 +886,13 @@ class CanvasEngine {
                 else if (gm < 8.5) fogColor = vec3(0.01, 0.05, 0.02);  // mycelium forest
                 else if (gm < 9.5) fogColor = vec3(0.04, 0.04, 0.04);  // Voronoi graphite
                 else if (gm < 10.5) fogColor = vec3(0.03, 0.01, 0.06); // julia mauve
-                else               fogColor = vec3(0.05, 0.02, 0.01);  // mandelbox rust
+                else if (gm < 11.5) fogColor = vec3(0.05, 0.02, 0.01); // mandelbox rust
+                else if (gm < 12.5) fogColor = vec3(0.0,  0.06, 0.08); // gyroid teal
+                else if (gm < 13.5) fogColor = vec3(0.06, 0.0,  0.10); // portal deep purple
+                else if (gm < 14.5) fogColor = vec3(0.08, 0.04, 0.0);  // sierpinski amber
+                else if (gm < 15.5) fogColor = vec3(0.0,  0.08, 0.04); // helix bio-green
+                else if (gm < 16.5) fogColor = vec3(0.02, 0.04, 0.10); // bubble midnight blue
+                else               fogColor = vec3(0.05, 0.0,  0.05);  // acid tunnel magenta
 
                 // Audio transient = brief directional light burst from upper-right
                 // Keeps firing for ~0.25s after each transient (we fake decay with sin)
@@ -2091,6 +2182,12 @@ class CanvasEngine {
         else if (state.genMode === 'VORONOI')      genModeNum = 9.0;
         else if (state.genMode === 'QUAT JULIA')   genModeNum = 10.0;
         else if (state.genMode === 'MANDELBOX')    genModeNum = 11.0;
+        else if (state.genMode === 'GYROID')        genModeNum = 12.0;
+        else if (state.genMode === 'PORTAL STORM')  genModeNum = 13.0;
+        else if (state.genMode === 'SIERPINSKI')    genModeNum = 14.0;
+        else if (state.genMode === 'NEON HELIX')    genModeNum = 15.0;
+        else if (state.genMode === 'BUBBLE BATH')   genModeNum = 16.0;
+        else if (state.genMode === 'ACID TUNNEL')   genModeNum = 17.0;
         else if (state.genMode === 'RADIANT HORIZON') genModeNum = 3.0;
         else if (state.genMode === 'FRACTAL PYRAMID') genModeNum = 4.0;
         else if (state.genMode === 'NEON CAVES')      genModeNum = 5.0;

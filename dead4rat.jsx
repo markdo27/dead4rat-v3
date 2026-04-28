@@ -1942,7 +1942,10 @@ function Dead4RatApp() {
                             'BIO ABYSS',   'FLOW FIELD',
                             'WAVE COLLAPSE','MYCELIUM',
                             'VORONOI',     'QUAT JULIA',
-                            'MANDELBOX'
+                            'MANDELBOX',   'GYROID',
+                            'PORTAL STORM','SIERPINSKI',
+                            'NEON HELIX',  'BUBBLE BATH',
+                            'ACID TUNNEL'
                         ].map(m => (
                             <button 
                                 key={m} 
