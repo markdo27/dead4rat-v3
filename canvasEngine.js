@@ -720,45 +720,38 @@ class CanvasEngine {
                 }
                 else if (u_genMode < 13.5) {
                     // ── MODE 13: PORTAL STORM ───────────────────────────
-                    // Interlocked spinning torus rings — cosmic portal field
+                    // 6 interlocked spinning torus rings — cosmic portal field
                     p.z -= u_time * u_genSpeed * 1.5;
-                    float ringD = 1e10;
-                    float numR = 5.0 + floor(u_genDensity * 2.0);
-                    for (int i = 0; i < 7; i++) {
-                        if (float(i) >= numR) break;
+                    float ringD = 100.0;
+                    for (int i = 0; i < 6; i++) {
                         float fi = float(i);
-                        float ang = fi * 0.8976 + u_time * (0.07 + fi * 0.03 + ABnd * u_genWarp * 0.12);
+                        float ang = fi * 1.047 + u_time * (0.07 + fi * 0.025) + ABnd * u_genWarp * 0.12;
                         vec3 qr = p;
-                        qr.xz *= rot(ang); qr.yz *= rot(ang * 0.618 + u_time * 0.04); qr.xy *= rot(ang * 0.382);
-                        float bigR = 1.1 + sin(u_time * 0.2 + fi * 2.1) * 0.35 * u_genWarp;
-                        float tubeR = (0.045 + ABnd * 0.1 * u_genWarp) * u_genDensity;
-                        vec2 qxy = vec2(length(qr.xy) - bigR, qr.z);
-                        ringD = min(ringD, length(qxy) - tubeR);
+                        qr.xz *= rot(ang);
+                        qr.yz *= rot(ang * 0.618 + u_time * 0.04);
+                        float bigR = 1.0 + sin(u_time * 0.2 + fi * 2.09) * 0.3 * u_genWarp;
+                        float tubeR = (0.05 + ABnd * 0.1 * u_genWarp) * u_genDensity;
+                        float torusDist = length(vec2(length(qr.xy) - bigR, qr.z)) - tubeR;
+                        ringD = min(ringD, torusDist);
                     }
                     return ringD;
                 }
                 else if (u_genMode < 14.5) {
                     // ── MODE 14: SIERPINSKI ─────────────────────────────
-                    // Tetrahedral IFS fractal — infinite spiky recursion
+                    // IQ tetrahedral fold — proven correct IFS
                     p.xz *= rot(u_time * u_genSpeed * 0.15);
                     p.yz *= rot(u_time * u_genSpeed * 0.09);
-                    p *= 0.65;
-                    vec3 a1 = normalize(vec3( 1.0,  1.0, -1.0));
-                    vec3 a2 = normalize(vec3(-1.0, -1.0, -1.0));
-                    vec3 a3 = normalize(vec3( 1.0, -1.0,  1.0));
-                    vec3 a4 = normalize(vec3(-1.0,  1.0,  1.0));
-                    vec3 sp = p; float scaleSp = 1.0;
-                    float sScale = 1.9 + ABnd * u_genWarp * 0.25;
-                    for (int i = 0; i < 10; i++) {
-                        float c;
-                        c = dot(sp-a1,a1); if(c<0.0) sp -= 2.0*c*a1;
-                        c = dot(sp-a2,a2); if(c<0.0) sp -= 2.0*c*a2;
-                        c = dot(sp-a3,a3); if(c<0.0) sp -= 2.0*c*a3;
-                        c = dot(sp-a4,a4); if(c<0.0) sp -= 2.0*c*a4;
-                        sp = sp * sScale - a1 * (sScale - 1.0);
-                        scaleSp *= sScale;
+                    float sc = 2.0 + ABnd * u_genWarp * 0.15;
+                    float ofs = sc - 1.0;
+                    vec3 sp = p * 0.8;
+                    for (int i = 0; i < 8; i++) {
+                        // Tetrahedral plane reflections (IQ method)
+                        if (sp.x + sp.y < 0.0) { float t = sp.x; sp.x = -sp.y; sp.y = -t; }
+                        if (sp.x + sp.z < 0.0) { float t = sp.x; sp.x = -sp.z; sp.z = -t; }
+                        if (sp.y + sp.z < 0.0) { float t = sp.y; sp.y = -sp.z; sp.z = -t; }
+                        sp = sp * sc - vec3(ofs);
                     }
-                    return max(length(sp)/scaleSp - 0.002, -0.5);
+                    return (length(sp) - 2.0) * pow(sc, -8.0);
                 }
                 else if (u_genMode < 15.5) {
                     // ── MODE 15: NEON HELIX ─────────────────────────────
@@ -798,20 +791,19 @@ class CanvasEngine {
                 }
                 else {
                     // ── MODE 17: ACID TUNNEL ────────────────────────────
-                    // Iterated sphere-inversion + fold IFS — warps into infinity
-                    p.z -= u_time * u_genSpeed * 6.0;
-                    p.xy *= rot(u_time * 0.12 + ABnd * u_genWarp * 0.35);
+                    // Apollonian-fold IFS — space folds into itself
+                    p.z -= u_time * u_genSpeed * 4.0;
+                    p.xy *= rot(u_time * 0.1 + ABnd * u_genWarp * 0.3);
                     vec3 qa = p; float qa_sc = 1.0;
-                    float invR = max(0.12, 1.15 - ABnd * u_genWarp * 0.25);
-                    for (int i = 0; i < 7; i++) {
-                        qa = abs(qa) - vec3(0.82, 0.82, 0.48);
-                        float r2 = dot(qa, qa);
-                        if (r2 < invR) { float sc = invR/r2; qa*=sc; qa_sc*=sc; }
-                        qa.xy *= rot(0.42 + ABnd * u_genWarp * 0.12);
-                        qa.xz *= rot(u_time * 0.015);
-                        qa *= 1.48; qa_sc *= 1.48;
+                    for (int i = 0; i < 8; i++) {
+                        qa = abs(qa) - vec3(0.9, 0.9, 0.5);
+                        // Guard r2 against zero to prevent NaN
+                        float r2 = max(dot(qa, qa), 0.0001);
+                        float k = max(1.4 / r2, 1.0);
+                        qa *= k; qa_sc *= k;
+                        qa.xy *= rot(0.5 + u_time * 0.018 + ABnd * u_genWarp * 0.1);
                     }
-                    return max((length(qa) - 0.75) / qa_sc, 0.0003);
+                    return (length(qa) - 1.2) / max(qa_sc, 0.001);
                 }
             }
 
