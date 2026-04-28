@@ -6,49 +6,47 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
     <title>DEAD4RAT - TERMINAL DECAY</title>
-    <!-- Brutalist Google Fonts -->
+
+    <!-- Fonts — display=swap so text renders immediately, fonts load async -->
     <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Inter:wght@400;700;900&family=Rubik+Glitch&family=VT323&family=Space+Mono&family=Bungee&family=Roboto+Mono&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css?v=9">
-    
-    <!-- Standalone React via CDN for lack of Node environment -->
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <!-- Babel for in-browser JSX compilation -->
+
+    <!-- React PRODUCTION builds — ~2x faster parse + execution than dev builds -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+
+    <!-- Babel for in-browser JSX — must load synchronously before text/babel scripts -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <!-- Midi Support -->
-    <script src="https://cdn.jsdelivr.net/npm/webmidi@3.1.6/dist/iife/webmidi.iife.js"></script>
 
-    <!-- MediaPipe ML Models -->
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js" crossorigin="anonymous"></script>
+    <!-- MIDI — async, not needed until user enables MIDI -->
+    <script async src="https://cdn.jsdelivr.net/npm/webmidi@3.1.6/dist/iife/webmidi.iife.js"></script>
 
-    <!-- Human AI — Face / Hand / Body / Emotion Detection -->
-    <script src="https://cdn.jsdelivr.net/npm/@vladmandic/human/dist/human.js"></script>
+    <!-- ML Libraries — DEFERRED: huge files (~10MB) not needed until user clicks "Start Human AI"
+         async prevents them from blocking the initial render and Babel compilation -->
+    <script async src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js" crossorigin="anonymous"></script>
+    <script async src="https://cdn.jsdelivr.net/npm/@vladmandic/human/dist/human.js"></script>
 </head>
 <body>
-    
-    <!-- React Root Mount Point -->
+
+    <!-- React Root -->
     <div id="root"></div>
 
-    <!-- Hidden Video Source for Texture -->
+    <!-- Hidden webcam source -->
     <video id="webcam-feed" autoplay playsinline style="display: none;"></video>
-    
 
-    <!-- Core VJ Engines -->
+    <!-- Core VJ Engines — loaded synchronously (needed before JSX runs) -->
     <script src="audioEngine.js?v=5"></script>
     <script src="maskEngine.js?v=2"></script>
     <script src="humanEngine.js?v=5"></script>
     <script src="blobTracker.js?v=8"></script>
     <script src="fluidEngine.js?v=4"></script>
-    <script src="canvasEngine.js?v=102"></script>
-
+    <script src="canvasEngine.js?v=103"></script>
     <script src="mediaManager.js?v=5"></script>
     <script src="presetManager.js?v=5"></script>
     <script src="midiController.js?v=4"></script>
-    
-    <!-- UI Component Library -->
+
+    <!-- UI — Babel compiles these in-browser; production React makes this significantly faster -->
     <script type="text/babel" src="ui_components.jsx?v=1"></script>
-    
-    <!-- UI Orchestrator -->
     <script type="text/babel" src="dead4rat.jsx?v=100"></script>
 
 </body>

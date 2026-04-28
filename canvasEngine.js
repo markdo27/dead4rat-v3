@@ -770,11 +770,11 @@ class CanvasEngine {
 
                 // ── PARAMETRIC CONSTANTS — tweak these ───────────────────
                 // (exposed here so you can slide them in GEN_DEFAULTS)
-                const float MAX_DIST   = 30.0;   // ray kill distance
-                const int   MAX_STEPS  = 80;     // max march iterations
-                const float HIT_THRESH = 0.012;  // surface detection threshold
+                const float MAX_DIST   = 25.0;   // ray kill distance
+                const int   MAX_STEPS  = 40;     // max march iterations (adaptive leap offsets lower count)
+                const float HIT_THRESH = 0.015;  // surface detection threshold
                 const float HIT_NEAR   = 0.08;   // start shrinking step below this
-                const float LEAP_MULT  = 1.7;    // speed multiplier in empty space
+                const float LEAP_MULT  = 1.8;    // speed multiplier in empty space
                 const float LEAP_MIN   = 0.3;    // don't leap below this (near-surface guard)
 
                 // Subpixel jitter kills temporal aliasing on thin geometry.
@@ -830,41 +830,20 @@ class CanvasEngine {
                         // Albedo from surface palette
                         vec3 albedo = cospal(tVal, u_genColor1);
 
-                        // Fast surface normal — 4-tap tetrahedron, only when we hit
-                        // Skip normal on first ~5 steps (too close to camera — numerical noise)
-                        vec3 nrm = vec3(0.0, 1.0, 0.0); // safe default
-                        if (t > 0.1) {
-                            nrm = calcNormal(pos);
-                        }
+                        // Cheap depth-gradient lighting — no extra SDF evals needed.
+                        // Simulates a key light from upper-right using ray direction + depth.
+                        // 4-tap calcNormal removed: it cost 4x mapGen per surface hit.
+                        float fakeNdotL = clamp(0.4 + 0.6 * (1.0 - t / MAX_DIST), 0.0, 1.0);
+                        float transFlash = u_transient > 0.5 ? 0.4 * u_genWarp : 0.0;
+                        float lighting = 0.2 + fakeNdotL * (0.7 + u_genWarp * 0.2) + transFlash;
 
-                        // Ambient: a small fraction of the surface color lit from below
-                        // dot(nrm, vec3(0,-1,0)) inverted: surfaces facing down are slightly brighter
-                        // (faked sky dome — prevents pure black shadows)
-                        float amb = 0.15 + 0.12 * clamp(-nrm.y, 0.0, 1.0);
+                        // AO proxy: fewer steps to hit = less occluded
+                        float ao = 1.0 - clamp(float(i) / float(MAX_STEPS) * 1.5, 0.0, 0.5);
 
-                        // Diffuse: Lambert from static key light + transient flash
-                        float diff  = max(0.0, dot(nrm, lightDir));
-                        float flash = transLight * max(0.0, dot(nrm, normalize(vec3(0.4, 0.6, 0.8))));
-                        // u_genWarp scales how hard the audio hammers the lighting
-                        float lighting = amb + diff * (0.6 + u_genWarp * 0.3)
-                                            + flash * 1.2 * u_genWarp;
+                        float contrib = 0.08 * depthFog * ao;
+                        colAccum   += contrib;
+                        colorAccum += contrib * mix(albedo * lighting, fogColor, 1.0 - depthFog * 0.8);
 
-                        // Emission: independently palette'd so bright spots glow differently
-                        // Only fires on near-surface + bright lighting = natural self-glow
-                        vec3 emit = emitpal(tVal + 0.15, u_genColor2) * max(0.0, diff - 0.5);
-
-                        // Ambient occlusion proxy:
-                        // We accumulate AO as a fraction of how many steps we took
-                        // before hitting — more steps = more occluded = darker crevices
-                        float ao = 1.0 - clamp(float(i) / float(MAX_STEPS) * 2.0, 0.0, 0.6);
-
-                        // Contribution weight: falloff with depth, scaled by transparency
-                        float contrib = 0.065 * depthFog * ao;
-                        colAccum    += contrib;
-
-                        // Final color: albedo lit + emission added on top
-                        vec3 surfCol = albedo * lighting + emit * 0.4;
-                        colorAccum  += contrib * mix(surfCol, fogColor, 1.0 - depthFog * 0.7);
 
                         // Enforce minimum step on hit to prevent infinite loop trap
                         d = HIT_THRESH;
