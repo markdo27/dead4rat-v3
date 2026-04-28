@@ -435,21 +435,7 @@ class CanvasEngine {
                 return u_mid;
             }
 
-            // ── Fast 3-sample normal via forward differences ─────────────
-            // Only 3 extra SDF evaluations (vs 6 for central differences).
-            // Tetrahedron technique from IQ — each offset has one component flipped,
-            // so the cross terms cancel and we get a proper gradient at half cost.
-            vec3 calcNormal(vec3 p) {
-                // Offset epsilon: not too small (quantisation noise) not too big (bias)
-                const float eps = 0.003;
-                const vec2 k = vec2(1.0, -1.0);
-                return normalize(
-                    k.xyy * mapGen(p + k.xyy * eps) +
-                    k.yyx * mapGen(p + k.yyx * eps) +
-                    k.yxy * mapGen(p + k.yxy * eps) +
-                    k.xxx * mapGen(p + k.xxx * eps)
-                );
-            }
+
 
             float mapGen(vec3 p) {
                 float ABnd = getGenBand();
@@ -742,6 +728,19 @@ class CanvasEngine {
                     // DE = distance to origin / accumulated scale factor
                     return max(length(p) / DEfactor, 0.0003);
                 }
+            }
+
+            // ── Fast 3-sample normal estimator (tetrahedron technique, IQ) ──
+            // MUST be declared AFTER mapGen since it calls mapGen.
+            vec3 calcNormal(vec3 p) {
+                const float eps = 0.003;
+                const vec2 k = vec2(1.0, -1.0);
+                return normalize(
+                    k.xyy * mapGen(p + k.xyy * eps) +
+                    k.yyx * mapGen(p + k.yyx * eps) +
+                    k.yxy * mapGen(p + k.yxy * eps) +
+                    k.xxx * mapGen(p + k.xxx * eps)
+                );
             }
 
             // ════════════════════════════════════════════════════════════
