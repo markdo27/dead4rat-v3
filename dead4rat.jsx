@@ -413,6 +413,17 @@ function Dead4RatApp() {
 
     // ── F3: Demo Mode ─────────────────────────────────────────────────────
     const [isDemo, setIsDemo] = React.useState(!!_sharedState);
+    const [panels, setPanels] = React.useState({
+        terminal: true,
+        command: false,
+        effects: false,
+        signal: false,
+        generators: false,
+        human: false,
+        gesture: false,
+        fluid: false,
+        sequence: false,
+    });
 
     // ── F4: Performance Mode ──────────────────────────────────────────────
     const [perfMode, setPerfMode] = React.useState(false);
@@ -434,19 +445,9 @@ function Dead4RatApp() {
     // Live band values for effect card glow (updated from render loop)
     const liveAudio = React.useRef({ bass: 0, mid: 0, high: 0 });
 
-    const [panels, setPanels] = React.useState({
-        terminal: true,
-        command: true,
-        effects: false,
-        signal: false,
-        generators: false,
-        human: false,
-        gesture: false,
-        fluid: false,
-        sequence: false,
-    });
 
     const togglePanel = (key) => setPanels(p => ({...p, [key]: !p[key]}));
+
 
     // ── Chladni Sand Generator overlay ───────────────────────────────────
     const [chladniOpen, setChladniOpen] = React.useState(false);
@@ -1504,13 +1505,14 @@ function Dead4RatApp() {
                             style={{ color: perfMode ? '#FF9900' : undefined, borderColor: perfMode ? '#FF9900' : undefined }}
                         >{perfMode ? '⚡ PERF' : 'PERF'}</button>
                         <span className="hud-sep">│</span>
-                        <button className={panels.sequence ? 'hud-active' : ''} onClick={() => togglePanel('sequence')} title="Clip Launcher">SEQ</button>
-                        <button className={panels.generators ? 'hud-active' : ''} onClick={() => togglePanel('generators')}>GEN</button>
-                        <button className={panels.human ? 'hud-active' : ''} onClick={() => togglePanel('human')} style={{color: humanEnabled ? '#00FF88' : undefined}}>AI</button>
-                        <button className={panels.signal ? 'hud-active' : ''} onClick={() => togglePanel('signal')}>AUDIO</button>
-                        <button className={panels.effects ? 'hud-active' : ''} onClick={() => togglePanel('effects')}>FX</button>
+                        <button className={`hud-panel-btn ${panels.command ? 'hud-active' : ''}`} onClick={() => togglePanel('command')} title="Command Center">CMD</button>
+                        <button className={`hud-panel-btn ${panels.sequence ? 'hud-active' : ''}`} onClick={() => togglePanel('sequence')} title="Clip Launcher">SEQ</button>
+                        <button className={`hud-panel-btn ${panels.generators ? 'hud-active' : ''}`} onClick={() => togglePanel('generators')}>GEN</button>
+                        <button className={`hud-panel-btn ${panels.human ? 'hud-active' : ''}`} onClick={() => togglePanel('human')} style={{color: humanEnabled ? '#00FF88' : undefined}}>AI</button>
+                        <button className={`hud-panel-btn ${panels.signal ? 'hud-active' : ''}`} onClick={() => togglePanel('signal')}>AUDIO</button>
+                        <button className={`hud-panel-btn ${panels.effects ? 'hud-active' : ''}`} onClick={() => togglePanel('effects')}>FX</button>
                         <button
-                            className={chladniOpen ? 'hud-active' : ''}
+                            className={`hud-panel-btn ${chladniOpen ? 'hud-active' : ''}`}
                             onClick={() => setChladniOpen(o => !o)}
                             title="Open SANDER"
                             style={{ color: chladniOpen ? '#FF5500' : undefined, borderColor: chladniOpen ? '#FF5500' : undefined }}
