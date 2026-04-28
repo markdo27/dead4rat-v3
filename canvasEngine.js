@@ -1034,8 +1034,15 @@ class CanvasEngine {
                 vec4 baseColor = texture2D(u_videoTex, clamp(uv, 0.0, 1.0));
                 
                 if (u_genMode > 0.5) {
-                    baseColor.rgb = renderGenerativeArt(uv);
+                    vec3 genCol = renderGenerativeArt(uv);
+                    // Composite: generative art is the background.
+                    // Text/image layers from compositor punch through via their luma.
+                    // Dark areas of the compositor (empty canvas) = show gen art.
+                    // Bright areas (white text, images) = show compositor layer on top.
+                    float overlay = clamp(dot(baseColor.rgb, vec3(0.299, 0.587, 0.114)) * 2.5, 0.0, 1.0);
+                    baseColor.rgb = mix(genCol, baseColor.rgb, overlay);
                 }
+
 
                 // Block blend after UV warp
                 if (u_block > 0.5) {
