@@ -1472,7 +1472,7 @@ function Dead4RatApp() {
                         </div>
                         <span className="hud-sep">│</span>
                         <div className="hud-btn-group">
-                            {['FIT', 'FILL', '1:1', 'STRETCH'].map(mode => (
+                            {['FIT', 'FILL', '1:1', '9:16', 'STRETCH'].map(mode => (
                                 <button
                                     key={mode}
                                     className={canvasScale === mode ? 'hud-active' : ''}
