@@ -116,6 +116,19 @@ let blobTracker = null;
 let humanEngine = null;
 let fluidEngine = null;
 
+// ── URL State Hydration (F2: Share Preset) ────────────────────────────────
+const _urlParams = new URLSearchParams(window.location.search);
+const _sharedState = _urlParams.get('p') ? PresetManager.decodeState(_urlParams.get('p')) : null;
+if (_sharedState) {
+    try {
+        if (_sharedState.g) globalState.glitchez = _sharedState.g;
+        if (_sharedState.m) globalState.genMode   = _sharedState.m;
+        if (_sharedState.p) globalState.genParams  = _sharedState.p;
+        window.history.replaceState({}, '', window.location.pathname);
+    } catch(e) { console.warn('Shared state decode failed', e); }
+}
+
+
 // ═══════════════════════════════════════════
 // TERMINAL WINDOW — Uses component library
 // ═══════════════════════════════════════════
@@ -394,9 +407,26 @@ function Dead4RatApp() {
         emotionToHue:  true,
     });
 
-    const [genMode, setGenMode] = React.useState('OFF');
+    const [genMode, setGenMode] = React.useState(globalState.genMode || 'OFF');
     const [genAudioBand, setGenAudioBand] = React.useState('MID');
     const [genAudioReactive, setGenAudioReactive] = React.useState(true);
+
+    // ── F3: Demo Mode ─────────────────────────────────────────────────────
+    const [isDemo, setIsDemo] = React.useState(!!_sharedState);
+
+    // ── F4: Performance Mode ──────────────────────────────────────────────
+    const [perfMode, setPerfMode] = React.useState(false);
+
+    // ── F5: Clip Launcher ─────────────────────────────────────────────────
+    const CLIP_COUNT = 8;
+    const [clips, setClips] = React.useState(Array(CLIP_COUNT).fill(null));
+    const [activeClip, setActiveClip] = React.useState(null);
+    const [clipTransition, setClipTransition] = React.useState(800);
+    const clipMorphRef = React.useRef(null);
+
+    // ── F2: Share URL flash ───────────────────────────────────────────────
+    const [shareFlash, setShareFlash] = React.useState(false);
+
 
     const [openCategories, setOpenCategories] = React.useState({ COLOR: true, DISTORT: false, TEXTURE: true, GLITCH: false, FEEDBACK: false, DETECT: false });
     const toggleCategory = (name) => setOpenCategories(s => ({...s, [name]: !s[name]}));
@@ -406,13 +436,14 @@ function Dead4RatApp() {
 
     const [panels, setPanels] = React.useState({
         terminal: true,
-        command: true,   // primary entry point — open by default
-        effects: false,  // default minimized (overloaded-screen fix)
-        signal: false,   // minimized — expand when audio needed
+        command: true,
+        effects: false,
+        signal: false,
         generators: false,
         human: false,
         gesture: false,
         fluid: false,
+        sequence: false,
     });
 
     const togglePanel = (key) => setPanels(p => ({...p, [key]: !p[key]}));
@@ -1032,7 +1063,21 @@ function Dead4RatApp() {
 
     const savePreset = () => {
         const name = prompt('Enter Preset Name:');
-        if (name) { presetManager.savePreset(name, globalState.glitchez, canvasEngine.canvas); setPresets([...presetManager.presets]); }
+        if (name) { presetManager.savePreset(name, globalState.glitchez); setPresets([...presetManager.presets]); }
+    };
+
+    // ── F2: Share Preset via URL ──────────────────────────────────────────
+    const sharePreset = () => {
+        const encoded = PresetManager.encodeState(globalState.glitchez, globalState.genMode, globalState.genParams);
+        if (!encoded) return;
+        const url = `${window.location.origin}${window.location.pathname}?p=${encoded}`;
+        navigator.clipboard.writeText(url).catch(() => {
+            const ta = document.createElement('textarea');
+            ta.value = url; document.body.appendChild(ta); ta.select();
+            document.execCommand('copy'); ta.remove();
+        });
+        setShareFlash(true);
+        setTimeout(() => setShareFlash(false), 2000);
     };
 
     const loadPreset = (p) => {
@@ -1041,8 +1086,102 @@ function Dead4RatApp() {
         document.body.appendChild(flash);
         setTimeout(() => { flash.style.transition = 'opacity 0.4s'; flash.style.opacity = 0; setTimeout(() => flash.remove(), 400); }, 30);
         globalState.glitchez = JSON.parse(JSON.stringify(p.settings));
+        if (p.genMode) { globalState.genMode = p.genMode; setGenMode(p.genMode); }
         setUiRefresh(r => r + 1);
     };
+
+    // ── F3: Demo Mode boot ────────────────────────────────────────────────
+    const startDemo = async () => {
+        // Activate a curated generative preset — no camera/mic needed
+        globalState.glitchez.scanLines.enabled   = true;
+        globalState.glitchez.rgbShift.enabled    = true;
+        globalState.glitchez.rgbShift.params.amount.value = 8;
+        globalState.glitchez.noise.enabled       = true;
+        globalState.glitchez.noise.params.amount.value = 0.08;
+        globalState.glitchez.videoFeedback.enabled = true;
+        globalState.glitchez.videoFeedback.params.amount.value = 0.82;
+        globalState.genMode = 'FLOW FIELD';
+        setGenMode('FLOW FIELD');
+        setIsDemo(true);
+        setStarted(true);
+        setUiRefresh(r => r + 1);
+        // Render loop without camera
+        let lastTime = performance.now(); let frames = 0;
+        const demoLoop = (time) => {
+            globalState._rafId = requestAnimationFrame(demoLoop);
+            frames++;
+            if (time - lastTime >= 1000) { setFps(Math.round((frames * 1000) / (time - lastTime))); lastTime = time; frames = 0; }
+            globalState.videoElement = null;
+            globalState.compositeSource = null;
+            canvasEngine?.render(globalState);
+        };
+        requestAnimationFrame(demoLoop);
+    };
+
+    // ── F4: Perf Mode toggle ──────────────────────────────────────────────
+    const togglePerfMode = () => {
+        const next = !perfMode;
+        setPerfMode(next);
+        const c = document.getElementById('main-canvas');
+        if (c) {
+            if (next) {
+                c.style.width = '100vw'; c.style.height = '100vh';
+                c.width  = Math.round(window.innerWidth  * 0.5);
+                c.height = Math.round(window.innerHeight * 0.5);
+            } else {
+                c.width  = window.innerWidth; c.height = window.innerHeight;
+                c.style.width = ''; c.style.height = '';
+            }
+        }
+        globalState._perfMode = next;
+    };
+
+    // ── F5: Clip Launcher ─────────────────────────────────────────────────
+    const recordClip = (idx) => {
+        const snapshot = {
+            glitchez: JSON.parse(JSON.stringify(globalState.glitchez)),
+            genMode: globalState.genMode,
+            genParams: JSON.parse(JSON.stringify(globalState.genParams)),
+            label: `CLIP ${idx + 1}`,
+            recordedAt: Date.now(),
+        };
+        const next = [...clips]; next[idx] = snapshot; setClips(next);
+    };
+
+    const triggerClip = (idx) => {
+        const clip = clips[idx];
+        if (!clip) return;
+        setActiveClip(idx);
+        if (clip.genMode) { globalState.genMode = clip.genMode; setGenMode(clip.genMode); }
+        const from   = JSON.parse(JSON.stringify(globalState.glitchez));
+        const target = clip.glitchez;
+        clipMorphRef.current = { from, target, startTime: performance.now(), duration: clipTransition };
+    };
+
+    // Morph engine — runs every frame
+    React.useEffect(() => {
+        let rafId;
+        const tick = () => {
+            rafId = requestAnimationFrame(tick);
+            const morph = clipMorphRef.current;
+            if (!morph) return;
+            const t = Math.min(1, (performance.now() - morph.startTime) / morph.duration);
+            const ease = t < 0.5 ? 2*t*t : -1+(4-2*t)*t;
+            Object.keys(morph.target).forEach(ek => {
+                const fe = morph.from[ek]; const te = morph.target[ek];
+                if (!fe || !te) return;
+                globalState.glitchez[ek].enabled = t >= 0.5 ? te.enabled : fe.enabled;
+                Object.keys(te.params || {}).forEach(pk => {
+                    const fp = fe.params?.[pk]; const tp = te.params?.[pk];
+                    if (fp && tp) globalState.glitchez[ek].params[pk].value = fp.value + (tp.value - fp.value) * ease;
+                });
+            });
+            if (t >= 1) { clipMorphRef.current = null; setUiRefresh(r => r+1); }
+        };
+        tick();
+        return () => cancelAnimationFrame(rafId);
+    }, []);
+
 
     const selectedLayer = mediaManager?.layers.find(l => l.id === selectedLayerId);
     const effectKeys = Object.keys(globalState.glitchez);
@@ -1253,25 +1392,32 @@ function Dead4RatApp() {
                         <span className="status-label">APP_STATE</span>
                         <span className="status-value highlight">STABLE_BOOT</span>
                     </div>
-                    <div className="status-row">
-                        <span className="status-label">FRAMERATE</span>
-                        <span className="status-value">{fps}_FPS</span>
-                    </div>
+                    {_sharedState && (
+                        <div style={{marginBottom: '8px', padding: '6px 8px', background: 'rgba(255,85,0,0.08)', border: '1px solid var(--accent)', fontSize: 'var(--fs-micro)', color: 'var(--accent)', letterSpacing: '1px'}}>
+                            ✦ SHARED PRESET LOADED — BOOT TO APPLY
+                        </div>
+                    )}
 
                     <div className="hud-divider" />
 
-                    <div className="section-header">CORE_CMD // CONTROLS</div>
+                    <div className="section-header">CORE_CMD // LAUNCH</div>
+                    <div className="section-hint">Full mode requires camera access</div>
 
-                    <button className="brutalist-button primary" style={{marginTop: '12px', width: '100%', fontSize: '1rem'}} onClick={toggleStart}>
-                        BOOT_KERNEL
+                    <button className="brutalist-button primary" style={{marginTop: '10px', width: '100%', fontSize: '0.9rem', padding: '10px'}} onClick={toggleStart}>
+                        ◉ BOOT_KERNEL — FULL MODE
                     </button>
 
-                    <div style={{marginTop: '12px', fontSize: '0.55rem', color: 'var(--text-muted)', lineHeight: '1.4', letterSpacing: '1px'}}>
-                        <span>────────────────────────</span><br/>
-                        <span className="blink-cursor">{'>'} AWAITING INPUT</span>
+                    <div className="section-hint" style={{marginTop: '10px'}}>No camera? Run a live generative demo</div>
+                    <button className="brutalist-button" style={{width: '100%', fontSize: '0.75rem', padding: '8px', borderColor: 'var(--accent-dim)', color: 'var(--accent-dim)'}} onClick={startDemo}>
+                        ▶ DEMO_MODE — NO PERMISSIONS
+                    </button>
+
+                    <div style={{marginTop: '12px', fontSize: '0.5rem', color: 'var(--text-muted)', lineHeight: '1.4', letterSpacing: '1px', fontStyle: 'italic'}}>
+                        DEMO runs FLOW FIELD + 4 effects — no webcam, no mic required
                     </div>
                 </TerminalWindow>
             )}
+
 
             {/* ═══════════════ POST-BOOT HUD BAR ═══════════════ */}
             {uiVisible && started && (
@@ -1337,7 +1483,8 @@ function Dead4RatApp() {
 
                     {/* ── RIGHT: Actions + panel toggles ────────────── */}
                     <div className="hud-zone hud-zone-right">
-                        <button onClick={toggleCam}>{camOn ? 'CAM OFF' : 'CAM ON'}</button>
+                        {!isDemo && <button onClick={toggleCam}>{camOn ? 'CAM OFF' : 'CAM ON'}</button>}
+                        {isDemo && <span style={{fontSize: 'var(--fs-micro)', color: 'var(--accent-dim)', letterSpacing:'1px'}}>DEMO</span>}
                         <button className={isRecording ? 'hud-active' : ''} onClick={recordToggle}>
                             {isRecording ? '⏹ REC' : '⏺ REC'}
                         </button>
@@ -1350,7 +1497,14 @@ function Dead4RatApp() {
                                 setTimeout(() => setExportFlash(false), 1500);
                             }}
                         >{exportFlash ? '✓ SAVED' : 'EXPORT'}</button>
+                        <button
+                            className={perfMode ? 'hud-active' : ''}
+                            onClick={togglePerfMode}
+                            title="Performance mode: halves canvas resolution, caps 30fps"
+                            style={{ color: perfMode ? '#FF9900' : undefined, borderColor: perfMode ? '#FF9900' : undefined }}
+                        >{perfMode ? '⚡ PERF' : 'PERF'}</button>
                         <span className="hud-sep">│</span>
+                        <button className={panels.sequence ? 'hud-active' : ''} onClick={() => togglePanel('sequence')} title="Clip Launcher">SEQ</button>
                         <button className={panels.generators ? 'hud-active' : ''} onClick={() => togglePanel('generators')}>GEN</button>
                         <button className={panels.human ? 'hud-active' : ''} onClick={() => togglePanel('human')} style={{color: humanEnabled ? '#00FF88' : undefined}}>AI</button>
                         <button className={panels.signal ? 'hud-active' : ''} onClick={() => togglePanel('signal')}>AUDIO</button>
@@ -1639,43 +1793,48 @@ function Dead4RatApp() {
 
                     {/* PRESETS */}
                     <div className="section-header">// PRESETS</div>
-                    <div className="section-hint">Click a preset to load it · SAVE stores current settings</div>
-                    <button className="brutalist-button cmd-btn primary" style={{width: '100%', marginBottom: '8px'}} onClick={savePreset}>+ SAVE CURRENT STATE</button>
-                    {/* Starter presets — always shown, non-deletable */}
-                    {STARTER_PRESETS.length > 0 && (
-                        <>
-                            <div style={{fontSize: '0.5rem', color: 'var(--text-muted)', marginBottom: '4px', letterSpacing: '1px'}}>── BUILT-IN ──</div>
-                            <div className="preset-grid">
-                                {STARTER_PRESETS.map(p => (
-                                    <div key={p.id} className="preset-card starter" onClick={() => loadPreset(p)} title={`Load ${p.name}`}>
-                                        <div className="starter-badge">★</div>
-                                        <div className="preset-name" style={{paddingTop: '14px'}}>{p.name}</div>
-                                    </div>
-                                ))}
-                            </div>
-                        </>
-                    )}
-                    {/* User presets */}
+                    <div className="section-hint">SAVE stores current state · SHARE copies a URL</div>
+                    <div style={{display:'flex', gap:'4px', marginBottom:'8px'}}>
+                        <button className="brutalist-button cmd-btn primary" style={{flex:1}} onClick={savePreset}>+ SAVE STATE</button>
+                        <button
+                            className="brutalist-button cmd-btn"
+                            style={{flex:'0 0 auto', color: shareFlash ? '#00FF88' : undefined, borderColor: shareFlash ? '#00FF88' : undefined, transition: 'color 0.3s, border-color 0.3s'}}
+                            onClick={sharePreset}
+                            title="Copy shareable URL for current state"
+                        >{shareFlash ? '✓ URL COPIED' : '⇪ SHARE'}</button>
+                    </div>
+
+                    {/* User presets — text-only (no thumbnails) */}
                     {presets.length > 0 ? (
-                        <React.Fragment>
-                            <div style={{fontSize: '0.5rem', color: 'var(--text-muted)', margin: '6px 0 4px', letterSpacing: '1px'}}>── SAVED ──</div>
-                            <div className="preset-grid">
-                                {presets.map(p => (
-                                    <div key={p.id} className="preset-card" onClick={() => loadPreset(p)}>
-                                        <img src={p.thumbnail} alt={p.name} />
-                                        <div className="preset-name">{p.name.toUpperCase()}</div>
+                        <div style={{display:'flex', flexDirection:'column', gap:'3px'}}>
+                            {presets.map(p => {
+                                const age = p.timestamp ? Math.round((Date.now() - new Date(p.timestamp).getTime()) / 60000) : null;
+                                const ageStr = age === null ? '' : age < 60 ? `${age}m ago` : age < 1440 ? `${Math.round(age/60)}h ago` : `${Math.round(age/1440)}d ago`;
+                                return (
+                                    <div
+                                        key={p.id}
+                                        className="preset-text-row"
+                                        onClick={() => loadPreset(p)}
+                                        title={`Load ${p.name}`}
+                                    >
+                                        <span className="preset-text-name">{p.name.toUpperCase()}</span>
+                                        <span className="preset-text-meta">
+                                            <span style={{color:'var(--accent)'}}>{p.activeCount || '?'} FX</span>
+                                            {ageStr && <span style={{marginLeft:'6px'}}>{ageStr}</span>}
+                                        </span>
                                         <button
+                                            className="preset-text-del"
                                             onClick={(e) => { e.stopPropagation(); presetManager.deletePreset(p.id); setPresets([...presetManager.presets]); }}
-                                            style={{position: 'absolute', top: 2, right: 2, padding: '2px 5px', background: 'var(--accent)', color: '#000', border: 'none', fontSize: '8px', fontWeight: 'bold', cursor: 'pointer', fontFamily: 'var(--font-mono)'}}
+                                            title="Delete preset"
                                         >✕</button>
                                     </div>
-                                ))}
-                            </div>
-                        </React.Fragment>
-                    ) : STARTER_PRESETS.length === 0 && (
-                        <div style={{fontSize: '0.55rem', color: 'var(--text-muted)', textAlign: 'center', padding: '12px 0', lineHeight: '1.6'}}>
+                                );
+                            })}
+                        </div>
+                    ) : (
+                        <div style={{fontSize:'var(--fs-micro)', color:'var(--text-muted)', textAlign:'center', padding:'12px 0', lineHeight:'1.6', fontStyle:'italic'}}>
                             NO PRESETS SAVED YET<br/>
-                            <span style={{color: 'var(--text-dim)'}}>↑ SAVE CURRENT STATE TO CREATE ONE</span>
+                            <span style={{color:'var(--text-dim)'}}>↑ SAVE STATE OR SHARE URL</span>
                         </div>
                     )}
                 </TerminalWindow>
@@ -1842,6 +2001,65 @@ function Dead4RatApp() {
                             );
                         })}
                     </div>
+                </TerminalWindow>
+            )}
+
+            {/* ═══════════════ SEQUENCE — CLIP LAUNCHER ═══════════════ */}
+            {uiVisible && started && (
+                <TerminalWindow
+                    id="win-sequence"
+                    title="SEQUENCE"
+                    tag="CLIPS"
+                    initialX={Math.max(340, window.innerWidth / 2 - 160)}
+                    initialY={50}
+                    width="320px"
+                    maxHeight="420px"
+                    onClose={() => togglePanel('sequence')}
+                    minimized={!panels.sequence}
+                >
+                    <div className="section-hint">Record snapshots of your current state, then fire them as smooth crossfades</div>
+
+                    <div className="section-header">// TRANSITION</div>
+                    <div className="signal-control-row" style={{marginBottom:'10px'}}>
+                        <span className="status-label">MORPH</span>
+                        <input type="range" className="brutalist-slider" min="0" max="3000" step="100"
+                            value={clipTransition}
+                            onChange={(e) => setClipTransition(parseInt(e.target.value))}
+                        />
+                        <span style={{color:'var(--text-bright)', fontSize:'var(--fs-micro)', width:'38px', textAlign:'right'}}>
+                            {clipTransition === 0 ? 'SNAP' : `${(clipTransition/1000).toFixed(1)}s`}
+                        </span>
+                    </div>
+
+                    <div className="section-header">// CLIP BANK</div>
+                    <div className="clip-grid">
+                        {clips.map((clip, idx) => (
+                            <div key={idx} className={`clip-slot ${activeClip === idx ? 'clip-active' : ''} ${clip ? 'clip-loaded' : 'clip-empty'}`}>
+                                <div className="clip-number">{idx + 1}</div>
+                                {clip ? (
+                                    <>
+                                        <div className="clip-label">{clip.label}</div>
+                                        <div className="clip-meta">{clip.genMode !== 'OFF' ? clip.genMode : 'FX'}</div>
+                                        <div className="clip-actions">
+                                            <button className="clip-fire-btn" onClick={() => triggerClip(idx)} title="Fire clip">▶</button>
+                                            <button className="clip-rec-btn" onClick={() => recordClip(idx)} title="Overwrite with current state">●</button>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <>
+                                        <div className="clip-label clip-empty-label">EMPTY</div>
+                                        <button className="clip-rec-btn clip-rec-full" onClick={() => recordClip(idx)} title="Record current state">● REC</button>
+                                    </>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+
+                    {activeClip !== null && clips[activeClip] && (
+                        <div style={{marginTop:'8px', padding:'4px 8px', background:'rgba(255,85,0,0.06)', border:'1px solid var(--accent)', fontSize:'var(--fs-micro)', color:'var(--accent)', letterSpacing:'1px'}}>
+                            ▶ CLIP {activeClip + 1} — {clips[activeClip].label} — MORPHING
+                        </div>
+                    )}
                 </TerminalWindow>
             )}
 

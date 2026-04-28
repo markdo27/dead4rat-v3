@@ -1,5 +1,6 @@
 /**
  * PresetManager — Save/Load effect configurations to localStorage
+ * Thumbnails removed (localStorage quota killer) — text-only with metadata
  */
 class PresetManager {
     constructor() {
@@ -9,20 +10,33 @@ class PresetManager {
 
     loadAll() {
         const data = localStorage.getItem(this.storageKey);
-        return data ? JSON.parse(data) : [];
+        if (!data) return [];
+        try {
+            // Strip thumbnails from legacy presets to reclaim storage
+            return JSON.parse(data).map(p => {
+                const { thumbnail, ...rest } = p;
+                return rest;
+            });
+        } catch (e) { return []; }
     }
 
-    savePreset(name, glitchezState, canvas) {
-        const thumb = this.captureThumbnail(canvas);
+    savePreset(name, glitchezState) {
+        const activeCount = Object.values(glitchezState).filter(e => e.enabled).length;
         const preset = {
             id: Date.now(),
             name: name || `PRESET ${this.presets.length + 1}`,
-            settings: JSON.parse(JSON.stringify(glitchezState)), // Deep clone
-            thumbnail: thumb,
+            settings: JSON.parse(JSON.stringify(glitchezState)),
+            activeCount,
             timestamp: new Date().toISOString()
         };
         this.presets.push(preset);
-        localStorage.setItem(this.storageKey, JSON.stringify(this.presets));
+        try {
+            localStorage.setItem(this.storageKey, JSON.stringify(this.presets));
+        } catch (e) {
+            // localStorage quota exceeded — trim oldest preset and retry
+            this.presets.shift();
+            localStorage.setItem(this.storageKey, JSON.stringify(this.presets));
+        }
         return preset;
     }
 
@@ -31,12 +45,22 @@ class PresetManager {
         localStorage.setItem(this.storageKey, JSON.stringify(this.presets));
     }
 
-    captureThumbnail(canvas) {
-        const thumbCanvas = document.createElement('canvas');
-        const ctx = thumbCanvas.getContext('2d');
-        thumbCanvas.width = 160;
-        thumbCanvas.height = 90;
-        ctx.drawImage(canvas, 0, 0, thumbCanvas.width, thumbCanvas.height);
-        return thumbCanvas.toDataURL('image/jpeg', 0.7);
+    // Serialize full session state to a shareable Base64 URL param
+    static encodeState(glitchezState, genMode, genParams) {
+        const payload = {
+            g: glitchezState,
+            m: genMode,
+            p: genParams,
+        };
+        try {
+            return btoa(encodeURIComponent(JSON.stringify(payload)));
+        } catch (e) { return null; }
+    }
+
+    // Decode URL param back to state
+    static decodeState(encoded) {
+        try {
+            return JSON.parse(decodeURIComponent(atob(encoded)));
+        } catch (e) { return null; }
     }
 }
