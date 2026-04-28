@@ -720,19 +720,21 @@ class CanvasEngine {
                 }
                 else if (u_genMode < 13.5) {
                     // ── MODE 13: PORTAL STORM ───────────────────────────
-                    // 6 interlocked spinning torus rings — cosmic portal field
-                    p.z -= u_time * u_genSpeed * 1.5;
+                    // 5 torus rings tiled along z — cosmic portal tunnel
+                    p.z -= u_time * u_genSpeed * 3.0;
+                    // Tile z so rings repeat every 4 units — always visible
+                    float zTile = mod(p.z + 2.0, 4.0) - 2.0;
                     float ringD = 100.0;
-                    for (int i = 0; i < 6; i++) {
+                    for (int i = 0; i < 5; i++) {
                         float fi = float(i);
-                        float ang = fi * 1.047 + u_time * (0.07 + fi * 0.025) + ABnd * u_genWarp * 0.12;
-                        vec3 qr = p;
-                        qr.xz *= rot(ang);
-                        qr.yz *= rot(ang * 0.618 + u_time * 0.04);
-                        float bigR = 1.0 + sin(u_time * 0.2 + fi * 2.09) * 0.3 * u_genWarp;
-                        float tubeR = (0.05 + ABnd * 0.1 * u_genWarp) * u_genDensity;
-                        float torusDist = length(vec2(length(qr.xy) - bigR, qr.z)) - tubeR;
-                        ringD = min(ringD, torusDist);
+                        // Tilt each ring differently in XZ
+                        float ang = fi * 1.2566 + u_time * (0.05 + fi * 0.015);
+                        float ca = cos(ang); float sa = sin(ang);
+                        float rx = p.x * ca - zTile * sa;
+                        float rz = p.x * sa + zTile * ca;
+                        float bigR = 0.9 + u_genDensity * 0.25 + ABnd * u_genWarp * 0.2;
+                        float tubeR = 0.055 + ABnd * 0.09 * u_genWarp;
+                        ringD = min(ringD, length(vec2(length(vec2(rx, p.y)) - bigR, rz)) - tubeR);
                     }
                     return ringD;
                 }
@@ -791,19 +793,30 @@ class CanvasEngine {
                 }
                 else {
                     // ── MODE 17: ACID TUNNEL ────────────────────────────
-                    // Apollonian-fold IFS — space folds into itself
+                    // Menger cross + FBM warp — acid-trip infinite architecture
                     p.z -= u_time * u_genSpeed * 4.0;
-                    p.xy *= rot(u_time * 0.1 + ABnd * u_genWarp * 0.3);
-                    vec3 qa = p; float qa_sc = 1.0;
-                    for (int i = 0; i < 8; i++) {
-                        qa = abs(qa) - vec3(0.9, 0.9, 0.5);
-                        // Guard r2 against zero to prevent NaN
-                        float r2 = max(dot(qa, qa), 0.0001);
-                        float k = max(1.4 / r2, 1.0);
-                        qa *= k; qa_sc *= k;
-                        qa.xy *= rot(0.5 + u_time * 0.018 + ABnd * u_genWarp * 0.1);
+                    // FBM domain warp for the acid distortion
+                    p.x += snoise(vec2(p.y * 0.5 + u_time * 0.09, p.z * 0.3)) * u_genWarp * 0.4;
+                    p.y += snoise(vec2(p.z * 0.5 + u_time * 0.07, p.x * 0.3 + 7.1)) * u_genWarp * 0.4;
+                    // Tile space
+                    p.x = mod(p.x + 1.5, 3.0) - 1.5;
+                    p.y = mod(p.y + 1.5, 3.0) - 1.5;
+                    p.z = mod(p.z + 1.5, 3.0) - 1.5;
+                    p.xy *= rot(u_time * 0.14 + ABnd * u_genWarp * 0.3);
+                    // Menger sponge cross iteration (same proven pattern as MODE 2)
+                    vec3 qm = p; float msc = 1.0;
+                    float mscale = 1.5 + u_genIter * 0.3;
+                    for (int i = 0; i < 5; i++) {
+                        qm = abs(qm);
+                        tmp = qm.x; qm.x = max(qm.x, qm.y); qm.y = min(tmp, qm.y);
+                        tmp = qm.x; qm.x = max(qm.x, qm.z); qm.z = min(tmp, qm.x);
+                        qm.z -= 0.5 * (mscale - 1.0) / msc;
+                        qm.xy *= rot(0.25 + u_time * 0.03 + ABnd * u_genWarp * 0.15);
+                        qm *= mscale; msc *= mscale;
                     }
-                    return (length(qa) - 1.2) / max(qa_sc, 0.001);
+                    float dOut = sdBox(qm / msc, vec3(1.0));
+                    float dIn  = -sdBox(qm / msc, vec3(0.72 + ABnd * u_genWarp * 0.18));
+                    return max(dOut, dIn);
                 }
             }
 
