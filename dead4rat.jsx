@@ -1376,7 +1376,8 @@ function Dead4RatApp() {
                     tag="AUDIO"
                     initialX={16}
                     initialY={50}
-                    width="320px"
+                    width="300px"
+                    maxHeight="380px"
                     onClose={() => togglePanel('signal')}
                     minimized={!panels.signal}
                 >
@@ -1407,9 +1408,9 @@ function Dead4RatApp() {
                     id="win-command"
                     title="COMMAND_CENTER"
                     initialX={16}
-                    initialY={260}
-                    width="320px"
-                    maxHeight="calc(100vh - 300px)"
+                    initialY={448}
+                    width="300px"
+                    maxHeight="calc(100vh - 508px)"
                     onClose={() => togglePanel('command')}
                     minimized={!panels.command}
                 >
@@ -1685,9 +1686,9 @@ function Dead4RatApp() {
                 <TerminalWindow
                     id="win-fx"
                     title="SUBSTRATE_DECAY // MODULES"
-                    initialX={window.innerWidth - 380}
+                    initialX={window.innerWidth - 364}
                     initialY={50}
-                    width="360px"
+                    width="348px"
                     maxHeight="calc(100vh - 60px)"
                     onClose={() => togglePanel('effects')}
                     minimized={!panels.effects}
@@ -1725,9 +1726,9 @@ function Dead4RatApp() {
                     id="win-generators"
                     title="GENERATIVE_MATRIX"
                     tag="WEBGL"
-                    initialX={window.innerWidth - 740}
-                    initialY={16}
-                    width="340px"
+                    initialX={window.innerWidth - 720}
+                    initialY={50}
+                    width="348px"
                     maxHeight="calc(100vh - 60px)"
                     onClose={() => togglePanel('generators')}
                     minimized={!panels.generators}
@@ -1871,9 +1872,9 @@ function Dead4RatApp() {
                     id="win-human"
                     title="HUMAN_MATRIX"
                     tag="AI"
-                    initialX={Math.max(16, window.innerWidth / 2 - 160)}
-                    initialY={16}
-                    width="320px"
+                    initialX={Math.max(340, window.innerWidth / 2 - 150)}
+                    initialY={50}
+                    width="300px"
                     maxHeight="calc(100vh - 60px)"
                     onClose={() => togglePanel('human')}
                     minimized={!panels.human}
