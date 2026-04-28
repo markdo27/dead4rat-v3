@@ -1276,91 +1276,95 @@ function Dead4RatApp() {
             {/* ═══════════════ POST-BOOT HUD BAR ═══════════════ */}
             {uiVisible && started && (
                 <div className="hud-bar">
-                    <span style={{color: 'var(--accent)', fontWeight: 800, letterSpacing: '2px'}}>D4R</span>
-                    <span className="hud-sep">│</span>
-                    <span className="hud-label">FPS</span>
-                    <span className="hud-value">{fps}</span>
-                    <span className="hud-sep">│</span>
-                    <span className="hud-label">CAM</span>
-                    <span className="hud-value" style={{color: camOn ? 'var(--accent)' : 'var(--text-dim)'}}>{camOn ? 'ON' : 'OFF'}</span>
-                    <span className="hud-sep">│</span>
-                    <span className="hud-label">LYR</span>
-                    <span className="hud-value">{layers.length}</span>
-                    <span className="hud-sep">│</span>
-                    <span className="hud-label">AUDIO</span>
-                    <span className="hud-value" style={{color: audioEngine?.isRunning ? 'var(--accent)' : 'var(--text-dim)'}}>
-                        {audioEngine?.isRunning ? (audioEngine?.sourceType === 'file' ? 'FILE' : 'MIC') : 'OFF'}
-                    </span>
-                    {audioEngine?.isRunning && (
+
+                    {/* ── LEFT: Status readouts ─────────────────────── */}
+                    <div className="hud-zone hud-zone-left">
+                        <span className="hud-brand">D4R</span>
+                        <span className="hud-sep">│</span>
+                        <span className="hud-label">FPS</span>
+                        <span className="hud-value">{fps}</span>
+                        <span className="hud-sep">│</span>
+                        <span className="hud-label">CAM</span>
+                        <span className="hud-value" style={{color: camOn ? 'var(--accent)' : 'var(--text-dim)'}}>{camOn ? 'ON' : 'OFF'}</span>
+                        <span className="hud-sep">│</span>
+                        <span className="hud-label">LYR</span>
+                        <span className="hud-value">{layers.length}</span>
+                        <span className="hud-sep">│</span>
+                        <span className="hud-label">AUDIO</span>
+                        <span className="hud-value" style={{color: audioEngine?.isRunning ? 'var(--accent)' : 'var(--text-dim)'}}>
+                            {audioEngine?.isRunning ? (audioEngine?.sourceType === 'file' ? 'FILE' : 'MIC') : 'OFF'}
+                        </span>
+                        {audioEngine?.isRunning && (
+                            <button className="hud-kill-btn" onClick={handleAudioOff} title="Turn off audio">✕</button>
+                        )}
+                    </div>
+
+                    {/* ── MID: Viewport transforms ──────────────────── */}
+                    <div className="hud-zone hud-zone-mid">
+                        <div className="hud-btn-group">
+                            <button
+                                className={canvasTransform.flipH ? 'hud-active' : ''}
+                                onClick={() => { const next = { ...canvasTransform, flipH: !canvasTransform.flipH }; setCanvasTransform(next); globalState.canvasTransform = next; }}
+                                title="Horizontal flip"
+                            >⇔H</button>
+                            <button
+                                className={canvasTransform.flipV ? 'hud-active' : ''}
+                                onClick={() => { const next = { ...canvasTransform, flipV: !canvasTransform.flipV }; setCanvasTransform(next); globalState.canvasTransform = next; }}
+                                title="Vertical flip"
+                            >⇕V</button>
+                        </div>
+                        <span className="hud-sep">│</span>
+                        <div className="hud-btn-group">
+                            {[['0°', 0], ['90°', 1], ['180°', 2], ['270°', 3]].map(([label, val]) => (
+                                <button
+                                    key={val}
+                                    className={canvasTransform.rotation === val ? 'hud-active' : ''}
+                                    onClick={() => { const next = { ...canvasTransform, rotation: val }; setCanvasTransform(next); globalState.canvasTransform = next; }}
+                                >{label}</button>
+                            ))}
+                        </div>
+                        <span className="hud-sep">│</span>
+                        <div className="hud-btn-group">
+                            {['FIT', 'FILL', '1:1', 'STRETCH'].map(mode => (
+                                <button
+                                    key={mode}
+                                    className={canvasScale === mode ? 'hud-active' : ''}
+                                    onClick={() => { setCanvasScale(mode); if (canvasEngine) canvasEngine.setScaleMode(mode); }}
+                                >{mode}</button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* ── RIGHT: Actions + panel toggles ────────────── */}
+                    <div className="hud-zone hud-zone-right">
+                        <button onClick={toggleCam}>{camOn ? 'CAM OFF' : 'CAM ON'}</button>
+                        <button className={isRecording ? 'hud-active' : ''} onClick={recordToggle}>
+                            {isRecording ? '⏹ REC' : '⏺ REC'}
+                        </button>
                         <button
-                            onClick={handleAudioOff}
-                            title="Turn off audio"
-                            style={{
-                                background: 'none', border: '1px solid var(--accent)',
-                                color: 'var(--accent)', cursor: 'pointer',
-                                fontFamily: 'var(--font-mono)', fontSize: '0.55rem',
-                                padding: '1px 5px', lineHeight: 1, borderRadius: 0,
-                                marginLeft: '2px',
+                            id="hud-export-btn"
+                            style={{ color: exportFlash ? '#00FF88' : undefined, transition: 'color 0.3s' }}
+                            onClick={() => {
+                                canvasEngine.exportPNG(blobTracker);
+                                setExportFlash(true);
+                                setTimeout(() => setExportFlash(false), 1500);
                             }}
-                        >✕</button>
-                    )}
-
-                    <span style={{flex: 1}} />
-
-                    {/* Transform controls — inline in header */}
-                    <button
-                        className={canvasTransform.flipH ? 'hud-active' : ''}
-                        onClick={() => { const next = { ...canvasTransform, flipH: !canvasTransform.flipH }; setCanvasTransform(next); globalState.canvasTransform = next; }}
-                        title="Horizontal flip"
-                    >⇔H</button>
-                    <button
-                        className={canvasTransform.flipV ? 'hud-active' : ''}
-                        onClick={() => { const next = { ...canvasTransform, flipV: !canvasTransform.flipV }; setCanvasTransform(next); globalState.canvasTransform = next; }}
-                        title="Vertical flip"
-                    >⇕V</button>
-                    {[['0°', 0], ['90°', 1], ['180°', 2], ['270°', 3]].map(([label, val]) => (
+                        >{exportFlash ? '✓ SAVED' : 'EXPORT'}</button>
+                        <span className="hud-sep">│</span>
+                        <button className={panels.generators ? 'hud-active' : ''} onClick={() => togglePanel('generators')}>GEN</button>
+                        <button className={panels.human ? 'hud-active' : ''} onClick={() => togglePanel('human')} style={{color: humanEnabled ? '#00FF88' : undefined}}>AI</button>
+                        <button className={panels.signal ? 'hud-active' : ''} onClick={() => togglePanel('signal')}>AUDIO</button>
+                        <button className={panels.effects ? 'hud-active' : ''} onClick={() => togglePanel('effects')}>FX</button>
                         <button
-                            key={val}
-                            className={canvasTransform.rotation === val ? 'hud-active' : ''}
-                            onClick={() => { const next = { ...canvasTransform, rotation: val }; setCanvasTransform(next); globalState.canvasTransform = next; }}
-                        >{label}</button>
-                    ))}
-                    <span className="hud-sep">│</span>
-                    {/* Scale mode */}
-                    {['FIT', 'FILL', '1:1', 'STRETCH'].map(mode => (
-                        <button
-                            key={mode}
-                            className={canvasScale === mode ? 'hud-active' : ''}
-                            onClick={() => { setCanvasScale(mode); if (canvasEngine) canvasEngine.setScaleMode(mode); }}
-                        >{mode}</button>
-                    ))}
-                    <span className="hud-sep">│</span>
+                            className={chladniOpen ? 'hud-active' : ''}
+                            onClick={() => setChladniOpen(o => !o)}
+                            title="Open SANDER"
+                            style={{ color: chladniOpen ? '#FF5500' : undefined, borderColor: chladniOpen ? '#FF5500' : undefined }}
+                        >✦ SANDER</button>
+                        <span className="hud-sep">│</span>
+                        <button onClick={() => setUiVisible(false)}>HIDE</button>
+                    </div>
 
-                    <button onClick={toggleCam}>{camOn ? 'CAM OFF' : 'CAM ON'}</button>
-                    <button className={isRecording ? 'hud-active' : ''} onClick={recordToggle}>
-                        {isRecording ? '⏹ REC' : '⏺ REC'}
-                    </button>
-                    <button
-                        id="hud-export-btn"
-                        style={{ color: exportFlash ? '#00FF88' : undefined, transition: 'color 0.3s' }}
-                        onClick={() => {
-                            canvasEngine.exportPNG(blobTracker);
-                            setExportFlash(true);
-                            setTimeout(() => setExportFlash(false), 1500);
-                        }}
-                    >{exportFlash ? '✓ SAVED' : 'EXPORT'}</button>
-                    <button className={panels.generators ? 'hud-active' : ''} onClick={() => togglePanel('generators')}>GENERATORS</button>
-                    {/* FLUID button hidden at user request */}
-                    <button className={panels.human ? 'hud-active' : ''} onClick={() => togglePanel('human')} style={{color: humanEnabled ? '#00FF88' : undefined}}>HUMAN AI</button>
-                    <button className={panels.signal ? 'hud-active' : ''} onClick={() => togglePanel('signal')}>AUDIO</button>
-                    <button className={panels.effects ? 'hud-active' : ''} onClick={() => togglePanel('effects')}>FX</button>
-                    <button
-                        className={chladniOpen ? 'hud-active' : ''}
-                        onClick={() => setChladniOpen(o => !o)}
-                        title="Open SANDER"
-                        style={{ color: chladniOpen ? '#FF5500' : undefined, borderColor: chladniOpen ? '#FF5500' : undefined }}
-                    >✦ SANDER</button>
-                    <button onClick={() => setUiVisible(false)}>HIDE UI</button>
                 </div>
             )}
 
@@ -1827,16 +1831,11 @@ function Dead4RatApp() {
                                         {(param._lfoBase !== undefined ? param._lfoBase : param.value).toFixed(2)}
                                     </span>
                                     <button
-                                        title="LFO Automate"
-                                        style={{
-                                            padding: '2px 4px', fontSize: '0.6rem', marginLeft: '4px',
-                                            background: param.lfo ? 'var(--accent)' : 'var(--bg-mid)',
-                                            color: param.lfo ? '#000' : 'var(--text-dim)',
-                                            cursor: 'pointer', border: '1px solid var(--border)', flexShrink: 0, width: '20px', textAlign: 'center'
-                                        }}
+                                        className={`lfo-btn ${param.lfo ? 'active' : ''}`}
+                                        title={param.lfo ? `LFO: ${param.lfo.toUpperCase()}` : 'LFO Off'}
                                         onClick={cycleWave}
                                     >
-                                        {param.lfo ? waveLabels[param.lfo] : '[]'}
+                                        {param.lfo ? waveLabels[param.lfo] : '~'}
                                     </button>
                                 </div>
                             );
