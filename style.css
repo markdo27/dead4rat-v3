@@ -1875,3 +1875,12 @@ input[type="range"]:focus-visible {
 /* accent-dim token (used for DEMO badge) */
 :root { --accent-dim: rgba(255,85,0,0.5); }
 
+/* ── Author / licence links in the boot panel ─────────────────────────
+   The panel's status rows are plain spans; these carry a mailto, so they
+   need the underline and hover the rest of the chrome does not. */
+.about-link {
+    color: var(--accent);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+.about-link:hover { color: var(--text-bright); }

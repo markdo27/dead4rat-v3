@@ -1416,6 +1416,32 @@ function Dead4RatApp() {
                     <div style={{marginTop: '12px', fontSize: '0.5rem', color: 'var(--text-muted)', lineHeight: '1.4', letterSpacing: '1px', fontStyle: 'italic'}}>
                         DEMO runs FLOW FIELD + 4 effects — no webcam, no mic required
                     </div>
+
+                    <div className="hud-divider" />
+
+                    {/* Author and terms of use. Lives in the boot panel because
+                        that is the one window on screen before anything starts. */}
+                    <div className="section-header">AUTHOR // LICENCE</div>
+                    <div className="status-row">
+                        <span className="status-label">AUTHOR</span>
+                        <span className="status-value highlight">MARK DO</span>
+                    </div>
+                    <div className="status-row">
+                        <span className="status-label">CONTACT</span>
+                        <a className="status-value about-link" href="mailto:dtcmark@gmail.com">DTCMARK@GMAIL.COM</a>
+                    </div>
+                    <div className="section-hint" style={{marginTop: '8px'}}>
+                        PERSONAL USE — FREE. Use this tool, and anything you make with it,
+                        for personal, study and other non commercial work. No permission needed.
+                    </div>
+                    <div className="section-hint" style={{marginTop: '6px'}}>
+                        COMMERCIAL USE — ASK FIRST. Client, brand, resale and any other paid
+                        work needs written permission:{' '}
+                        <a className="about-link" href="mailto:dtcmark@gmail.com?subject=Commercial%20use%20request">request a licence</a>.
+                    </div>
+                    <div style={{marginTop: '10px', fontSize: '0.5rem', color: 'var(--text-muted)', lineHeight: '1.4', letterSpacing: '1px'}}>
+                        © 2026 MARK DO — PROVIDED AS IS, NO WARRANTY
+                    </div>
                 </TerminalWindow>
             )}
 
