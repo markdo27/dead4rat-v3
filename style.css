@@ -311,8 +311,11 @@ body.idle .unhide { opacity: 0; }
 @media (max-width: 720px) {
     :root { --dock-w: 100vw; }
     .dock { top: auto; left: 0; height: 46vh; border-left: 0; border-top: 1px solid var(--line-hi); }
-    .hud-right .btn-sm { padding: 3px 6px; }
-    .hud-chip[data-health] { display: none; }
+    .hud-right .btn-sm { padding: 3px 7px; }
+    .hud-left .hud-chip { display: none; }
+    .hud-left .hud-chip.rec { display: inline-flex; }
+    .hud-right { flex: 1; justify-content: flex-end; }
+    .hud-opt, .hud-txt { display: none; }
     .scenebar { gap: 6px; }
     .scene-slots { display: flex; overflow-x: auto; scrollbar-width: none; }
     .slot { flex: 0 0 64px; }

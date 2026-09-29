@@ -217,7 +217,7 @@ class Deck {
             L.gen.params.warp = 0.5 + Math.random();
         }
         this.activeScene = -1;
-        this._startMorph(L, Math.min(this.morphMs || 600, 900));
+        this._startMorph(L, Math.min(this.morphMs, 900));
         this.emit();
     }
 
@@ -258,11 +258,15 @@ class Deck {
         this.genLevel = 1;
     }
 
+    // Morphs always start from what is on screen right now — including a
+    // morph that is still running — so chained scene changes never jump.
     _startMorph(target, ms = this.morphMs) {
         target = D.normalizeLook(clone(target));
         if (!this.started || ms <= 0) { this._applyLook(target); this.morph = null; return; }
-        if (this.morph) this._finishMorph();
-        this.morph = { from: clone(this.look), to: target, t0: performance.now(), dur: ms };
+        const from = clone(this.look);
+        const fromWet = { ...this.wet };
+        for (const d of FX_DEFS) from.fx[d.key].on = fromWet[d.key] > 0.001;
+        this.morph = { from, fromWet, fromGen: this.genLevel, to: target, t0: performance.now(), dur: ms };
     }
 
     _finishMorph() { const m = this.morph; this.morph = null; if (m) this._applyLook(m.to); }
@@ -281,17 +285,18 @@ class Deck {
             }
             s.lfo = e < 0.5 ? a.lfo : b.lfo;
             s.band = e < 0.5 ? a.band : b.band;
-            this.wet[d.key] = (a.on ? 1 - e : 0) + (b.on ? e : 0);
+            this.wet[d.key] = (a.on ? m.fromWet[d.key] * (1 - e) : 0) + (b.on ? e : 0);
         }
         const ga = m.from.gen, gb = m.to.gen, g = L.gen;
         for (const p of GEN_PARAMS) g.params[p.k] = ga.params[p.k] + (gb.params[p.k] - ga.params[p.k]) * e;
         g.camKey = ga.camKey + (gb.camKey - ga.camKey) * e;
         g.band = e < 0.5 ? ga.band : gb.band;
         g.lfo = e < 0.5 ? ga.lfo : gb.lfo;
-        if (ga.mode === gb.mode) { g.mode = gb.mode; this.genLevel = 1; }
+        if (ga.mode === gb.mode) { g.mode = gb.mode; this.genLevel = m.fromGen + (1 - m.fromGen) * e; }
         else if (ga.mode === 'OFF') { g.mode = gb.mode; this.genLevel = e; }
-        else if (gb.mode === 'OFF') { g.mode = ga.mode; this.genLevel = 1 - e; }
-        else { g.mode = e < 0.5 ? ga.mode : gb.mode; this.genLevel = Math.abs(1 - 2 * e); }
+        else if (gb.mode === 'OFF') { g.mode = ga.mode; this.genLevel = m.fromGen * (1 - e); }
+        else if (e < 0.5) { g.mode = ga.mode; this.genLevel = m.fromGen * (1 - 2 * e); }
+        else { g.mode = gb.mode; this.genLevel = 2 * e - 1; }
         L.mod.rate = m.from.mod.rate + (m.to.mod.rate - m.from.mod.rate) * e;
         L.mod.depth = m.from.mod.depth + (m.to.mod.depth - m.from.mod.depth) * e;
         if (x >= 1) { this._finishMorph(); this.emit(); }

@@ -87,13 +87,13 @@ function Hud({ dockOpen, setDockOpen, setHidden, setHelp, setSander }) {
                 {deck.recording && <span ref={recRef} className="hud-chip rec">● REC</span>}
             </div>
             <div className="hud-right">
-                <Btn small onClick={() => deck.randomize()} title="Random look (R)">⚄ RANDOM</Btn>
-                <Btn small onClick={() => deck.snapshot()} title="Snapshot PNG (P)">◻ SNAP</Btn>
+                <Btn small className="hud-opt" onClick={() => deck.randomize()} title="Random look (R)">⚄ RANDOM</Btn>
+                <Btn small className="hud-opt" onClick={() => deck.snapshot()} title="Snapshot PNG (P)">◻ SNAP</Btn>
                 <Btn small kind={deck.recording ? 'rec' : undefined} on={deck.recording} onClick={() => deck.toggleRecord()} title="Record video (V)">{deck.recording ? '■ STOP' : '● REC'}</Btn>
-                <Btn small onClick={() => deck.toggleFullscreen()} title="Fullscreen (F)" aria-label="Fullscreen">⛶</Btn>
-                <Btn small onClick={() => setSander(true)} title="Open SANDER — Chladni sand patterns">✦ SANDER</Btn>
+                <Btn small className="hud-opt" onClick={() => deck.toggleFullscreen()} title="Fullscreen (F)" aria-label="Fullscreen">⛶</Btn>
+                <Btn small onClick={() => setSander(true)} title="Open SANDER — Chladni sand patterns" aria-label="Open SANDER">✦<span className="hud-txt"> SANDER</span></Btn>
                 <Btn small onClick={() => setHelp(true)} title="Shortcuts (?)" aria-label="Help">?</Btn>
-                <Btn small on={dockOpen} onClick={() => setDockOpen(!dockOpen)} title="Side panel (D)">☰ PANEL</Btn>
+                <Btn small on={dockOpen} onClick={() => setDockOpen(!dockOpen)} title="Side panel (D)" aria-label="Side panel">☰<span className="hud-txt"> PANEL</span></Btn>
                 <Btn small kind="ghost" onClick={() => setHidden(true)} title="Hide all controls (H)">HIDE</Btn>
             </div>
         </header>

@@ -1226,10 +1226,12 @@ function Hud({
     className: "hud-right"
   }, React.createElement(Btn, {
     small: true,
+    className: "hud-opt",
     onClick: () => deck.randomize(),
     title: "Random look (R)"
   }, "\u2684 RANDOM"), React.createElement(Btn, {
     small: true,
+    className: "hud-opt",
     onClick: () => deck.snapshot(),
     title: "Snapshot PNG (P)"
   }, "\u25FB SNAP"), React.createElement(Btn, {
@@ -1240,14 +1242,18 @@ function Hud({
     title: "Record video (V)"
   }, deck.recording ? '■ STOP' : '● REC'), React.createElement(Btn, {
     small: true,
+    className: "hud-opt",
     onClick: () => deck.toggleFullscreen(),
     title: "Fullscreen (F)",
     "aria-label": "Fullscreen"
   }, "\u26F6"), React.createElement(Btn, {
     small: true,
     onClick: () => setSander(true),
-    title: "Open SANDER \u2014 Chladni sand patterns"
-  }, "\u2726 SANDER"), React.createElement(Btn, {
+    title: "Open SANDER \u2014 Chladni sand patterns",
+    "aria-label": "Open SANDER"
+  }, "\u2726", React.createElement("span", {
+    className: "hud-txt"
+  }, " SANDER")), React.createElement(Btn, {
     small: true,
     onClick: () => setHelp(true),
     title: "Shortcuts (?)",
@@ -1256,8 +1262,11 @@ function Hud({
     small: true,
     on: dockOpen,
     onClick: () => setDockOpen(!dockOpen),
-    title: "Side panel (D)"
-  }, "\u2630 PANEL"), React.createElement(Btn, {
+    title: "Side panel (D)",
+    "aria-label": "Side panel"
+  }, "\u2630", React.createElement("span", {
+    className: "hud-txt"
+  }, " PANEL")), React.createElement(Btn, {
     small: true,
     kind: "ghost",
     onClick: () => setHidden(true),

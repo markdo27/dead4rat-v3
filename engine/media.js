@@ -71,6 +71,8 @@ class MediaLayers {
         const l = this.layers.find(x => x.id === id);
         if (!l) return;
         Object.assign(l, patch);
+        // Canvas text does not trigger web-font downloads on its own.
+        if (patch.font && document.fonts) document.fonts.load(`48px "${patch.font}"`).catch(() => {});
         if (l.vid) {
             l.vid.playbackRate = l.speed || 1;
             if ('playing' in patch) { if (l.playing) l.vid.play().catch(() => {}); else l.vid.pause(); }
