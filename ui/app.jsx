@@ -1,0 +1,292 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// DEAD4RAT UI — app shell: boot, HUD, dock, scene bar, help, SANDER
+// ═══════════════════════════════════════════════════════════════════════════
+
+const TABS = [
+    ['gen', 'SCENE', GenPanel],
+    ['fx', 'FX', FxPanel],
+    ['audio', 'AUDIO', AudioPanel],
+    ['ai', 'TRACK', AiPanel],
+    ['media', 'MEDIA', MediaPanel],
+    ['out', 'OUTPUT', OutputPanel],
+];
+
+const SHORTCUTS = [
+    ['1 – 8', 'Fire scene (morph)'], ['Shift + 1 – 8', 'Save current look to a scene'],
+    ['R', 'Random look'], ['A', 'Autopilot on / off'], ['G / Shift + G', 'Next / previous generator'],
+    ['H', 'Hide / show all controls'], ['D', 'Hide / show the side panel'], ['F', 'Fullscreen'],
+    ['P', 'Snapshot (PNG)'], ['V', 'Record video'], ['?', 'This help'], ['Esc', 'Close overlays'],
+];
+
+function Boot({ onStart }) {
+    const deck = useDeck();
+    const [cam, setCam] = React.useState(true);
+    const [mic, setMic] = React.useState(true);
+    const [busy, setBusy] = React.useState(false);
+    const [about, setAbout] = React.useState(false);
+    const go = async (opts) => { setBusy(true); await onStart(opts); };
+    return (
+        <div className="boot">
+            <div className="boot-card" role="dialog" aria-labelledby="boot-title">
+                <h1 id="boot-title" className="brand">DEAD4RAT<span className="brand-sub">TERMINAL DECAY · LIVE VISUAL SYNTH</span></h1>
+                {deck.sharedLook && <p className="notice">✦ A shared look is waiting — it loads when you start.</p>}
+                <div className="boot-options">
+                    <Switch on={cam} onChange={setCam} label="CAMERA" />
+                    <Switch on={mic} onChange={setMic} label="MICROPHONE" />
+                </div>
+                <Btn kind="primary" className="boot-go" disabled={busy} onClick={() => go({ camera: cam, mic })}>
+                    {busy ? 'STARTING…' : '◉ START'}
+                </Btn>
+                <Btn kind="ghost" className="boot-demo" disabled={busy} onClick={() => go({ demo: true })}>
+                    ▶ DEMO — no camera or mic needed
+                </Btn>
+                <p className="hint center">Everything runs in your browser. Nothing is uploaded. Press <kbd>?</kbd> any time for shortcuts.</p>
+                <button type="button" className="link-btn" aria-expanded={about} onClick={() => setAbout(!about)}>{about ? '▾' : '▸'} AUTHOR & LICENCE</button>
+                {about && (
+                    <div className="about">
+                        <div className="kv"><span>AUTHOR</span><b>MARK DO</b></div>
+                        <div className="kv"><span>CONTACT</span><a href="mailto:dtcmark@gmail.com">DTCMARK@GMAIL.COM</a></div>
+                        <p className="hint">PERSONAL USE — FREE. Use this tool, and anything you make with it, for personal, study and other non commercial work. No permission needed.</p>
+                        <p className="hint">COMMERCIAL USE — ASK FIRST. Client, brand, resale and any other paid work needs written permission: <a href="mailto:dtcmark@gmail.com?subject=Commercial%20use%20request">request a licence</a>.</p>
+                        <p className="hint">© 2026 MARK DO — PROVIDED AS IS, NO WARRANTY</p>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
+function Hud({ dockOpen, setDockOpen, setHidden, setHelp, setSander }) {
+    const deck = useDeck();
+    const fpsRef = React.useRef(null);
+    const lvlRef = React.useRef(null);
+    const recRef = React.useRef(null);
+    useFrame((d) => {
+        if (fpsRef.current) {
+            fpsRef.current.textContent = `${d.fps} FPS · ${Math.round(d.renderScale * 100)}%`;
+            fpsRef.current.dataset.health = d.fps >= 50 ? 'good' : d.fps >= 28 ? 'ok' : 'bad';
+        }
+        if (lvlRef.current) lvlRef.current.style.transform = `scaleX(${d.audio.running ? Math.max(d.audio.level.BASS, d.audio.level.MID) : 0})`;
+        if (recRef.current && d.recording) {
+            const s = Math.floor((performance.now() - d._recStart) / 1000);
+            recRef.current.textContent = `● REC ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+        }
+    }, 15);
+    const a = deck.audio;
+    return (
+        <header className="hud">
+            <div className="hud-left">
+                <span className="hud-brand">D4R</span>
+                <span ref={fpsRef} className="hud-chip" title={`Frames per second · render resolution (quality: ${deck.view.quality})`} />
+                <button type="button" className={cx('hud-chip', deck.camera.on && 'live')} onClick={() => deck.toggleCamera()} title="Camera on/off">CAM {deck.camera.on ? 'ON' : 'OFF'}</button>
+                <span className={cx('hud-chip', a.running && 'live')} title="Audio input">
+                    {a.kind === 'off' ? 'AUDIO OFF' : a.kind === 'mic' ? 'MIC' : 'FILE'}
+                    <span className="hud-level"><span ref={lvlRef} /></span>
+                </span>
+                {deck.demo && <span className="hud-chip dim">DEMO</span>}
+                {deck.recording && <span ref={recRef} className="hud-chip rec">● REC</span>}
+            </div>
+            <div className="hud-right">
+                <Btn small onClick={() => deck.randomize()} title="Random look (R)">⚄ RANDOM</Btn>
+                <Btn small onClick={() => deck.snapshot()} title="Snapshot PNG (P)">◻ SNAP</Btn>
+                <Btn small kind={deck.recording ? 'rec' : undefined} on={deck.recording} onClick={() => deck.toggleRecord()} title="Record video (V)">{deck.recording ? '■ STOP' : '● REC'}</Btn>
+                <Btn small onClick={() => deck.toggleFullscreen()} title="Fullscreen (F)" aria-label="Fullscreen">⛶</Btn>
+                <Btn small onClick={() => setSander(true)} title="Open SANDER — Chladni sand patterns">✦ SANDER</Btn>
+                <Btn small onClick={() => setHelp(true)} title="Shortcuts (?)" aria-label="Help">?</Btn>
+                <Btn small on={dockOpen} onClick={() => setDockOpen(!dockOpen)} title="Side panel (D)">☰ PANEL</Btn>
+                <Btn small kind="ghost" onClick={() => setHidden(true)} title="Hide all controls (H)">HIDE</Btn>
+            </div>
+        </header>
+    );
+}
+
+function Dock({ tab, setTab }) {
+    const Panel = (TABS.find(t => t[0] === tab) || TABS[0])[2];
+    return (
+        <aside className="dock" aria-label="Controls">
+            <nav className="tabs" role="tablist">
+                {TABS.map(([id, label]) => (
+                    <button type="button" key={id} role="tab" aria-selected={tab === id} className={cx('tab', tab === id && 'on')} onClick={() => setTab(id)}>{label}</button>
+                ))}
+            </nav>
+            <div className="dock-scroll" role="tabpanel"><Panel /></div>
+        </aside>
+    );
+}
+
+function SceneBar() {
+    const deck = useDeck();
+    const slots = deck.scenes.slots;
+    const [editing, setEditing] = React.useState(-1);
+    const morphS = deck.morphMs / 1000;
+    return (
+        <footer className="scenebar" aria-label="Scenes">
+            <div className="scene-slots">
+                {slots.map((s, i) => (
+                    <div key={i} className={cx('slot', s ? 'full' : 'empty', deck.activeScene === i && 'on')}>
+                        {s ? (
+                            editing === i ? (
+                                <input className="slot-rename" autoFocus defaultValue={s.name} maxLength={18}
+                                    onBlur={(e) => { deck.renameScene(i, e.target.value || s.name); setEditing(-1); }}
+                                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === 'Escape') e.target.blur(); }} />
+                            ) : (
+                                <button type="button" className="slot-main" onClick={(e) => e.shiftKey ? deck.storeScene(i, s.name) : deck.fireScene(i)}
+                                    onDoubleClick={() => setEditing(i)}
+                                    title={`Scene ${i + 1}: ${s.name} — click to morph, Shift+click to overwrite, double-click to rename`}>
+                                    <span className="slot-n">{i + 1}</span><span className="slot-name">{s.name}</span>
+                                </button>
+                            )
+                        ) : (
+                            <button type="button" className="slot-main" onClick={() => deck.storeScene(i)} title={`Save the current look into scene ${i + 1}`}>
+                                <span className="slot-n">{i + 1}</span><span className="slot-name">+ SAVE</span>
+                            </button>
+                        )}
+                        {s && editing !== i && <button type="button" className="slot-x" aria-label={`Clear scene ${i + 1}`} title="Clear" onClick={() => deck.clearScene(i)}>✕</button>}
+                    </div>
+                ))}
+            </div>
+            <div className="scene-tools">
+                <label className="morph" title="How long scenes take to blend into each other">
+                    <span>MORPH</span>
+                    <input type="range" className="slider" min="0" max="5000" step="100" value={deck.morphMs}
+                        style={{ '--pct': `${deck.morphMs / 50}%` }} onChange={(e) => deck.setMorphMs(+e.target.value)} />
+                    <b>{morphS === 0 ? 'CUT' : `${morphS.toFixed(1)}s`}</b>
+                </label>
+                <Btn small on={deck.auto.on} onClick={() => deck.setAuto(!deck.auto.on)} title="Autopilot: move through saved scenes on its own (A). With audio on it waits for a bass hit.">AUTO</Btn>
+                <select className="select sm" value={deck.auto.every} onChange={(e) => deck.setAutoEvery(+e.target.value)} aria-label="Autopilot interval">
+                    {[4, 8, 16, 32, 64].map(s => <option key={s} value={s}>{s}s</option>)}
+                </select>
+                <Btn small onClick={() => deck.shareLink()} title="Copy a link that opens this exact look">⇪ SHARE</Btn>
+            </div>
+        </footer>
+    );
+}
+
+function Help({ onClose }) {
+    return (
+        <div className="modal" role="dialog" aria-modal="true" aria-labelledby="help-title" onClick={onClose}>
+            <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+                <h2 id="help-title">SHORTCUTS</h2>
+                <dl className="keys">
+                    {SHORTCUTS.map(([k, v]) => <React.Fragment key={k}><dt><kbd>{k}</kbd></dt><dd>{v}</dd></React.Fragment>)}
+                </dl>
+                <p className="hint">Scenes: the bar at the bottom holds 8 saved looks. Click an empty slot to save, a full one to morph to it. AUTO steps through them.</p>
+                <Btn onClick={onClose}>CLOSE</Btn>
+            </div>
+        </div>
+    );
+}
+
+function Toast() {
+    const deck = useDeck();
+    const [shown, setShown] = React.useState(null);
+    React.useEffect(() => {
+        if (!deck.toast) return;
+        setShown(deck.toast);
+        const id = setTimeout(() => setShown(null), deck.toast.kind === 'warn' ? 4500 : 2500);
+        return () => clearTimeout(id);
+    }, [deck.toast && deck.toast.id]);
+    if (!shown) return null;
+    return <div className={cx('toast', shown.kind)} role="status" aria-live="polite">{shown.msg}</div>;
+}
+
+function Sander({ onClose }) {
+    return (
+        <div className="sander">
+            <iframe src="sander.html" title="SANDER — Chladni sand patterns" allow="microphone; camera" />
+        </div>
+    );
+}
+
+function App() {
+    const deck = useDeck();
+    const [started, setStarted] = React.useState(false);
+    const [hidden, setHidden] = React.useState(false);
+    const [dockOpen, setDockOpen] = React.useState(() => window.innerWidth > 720);
+    const [tab, setTab] = React.useState(() => { try { return localStorage.getItem('d4r_tab') || 'fx'; } catch (e) { return 'fx'; } });
+    const [help, setHelp] = React.useState(false);
+    const [sander, setSander] = React.useState(false);
+
+    React.useEffect(() => { try { localStorage.setItem('d4r_tab', tab); } catch (e) {} }, [tab]);
+    React.useEffect(() => { deck.setPaused(sander); }, [sander]);
+
+    // Hidden mode: fade the cursor out when idle.
+    React.useEffect(() => {
+        if (!hidden) { document.body.classList.remove('idle'); return; }
+        let id;
+        const wake = () => { document.body.classList.remove('idle'); clearTimeout(id); id = setTimeout(() => document.body.classList.add('idle'), 2000); };
+        wake();
+        window.addEventListener('pointermove', wake);
+        return () => { clearTimeout(id); window.removeEventListener('pointermove', wake); document.body.classList.remove('idle'); };
+    }, [hidden]);
+
+    React.useEffect(() => {
+        const onMsg = (e) => { if (e.data && (e.data.type === 'CHLADNI_CLOSE' || e.data.type === 'SANDER_CLOSE')) setSander(false); };
+        window.addEventListener('message', onMsg);
+        return () => window.removeEventListener('message', onMsg);
+    }, []);
+
+    React.useEffect(() => {
+        const onKey = (e) => {
+            const tag = (e.target.tagName || '').toLowerCase();
+            if (e.key === 'Escape') { setHelp(false); setSander(false); setHidden(false); return; }
+            if (!started || e.metaKey || e.ctrlKey || e.altKey) return;
+            if (tag === 'input' && e.target.type !== 'range' && e.target.type !== 'checkbox') return;
+            if (tag === 'textarea' || tag === 'select') return;
+            const digit = e.code && e.code.startsWith('Digit') ? parseInt(e.code.slice(5), 10) : NaN;
+            if (digit >= 1 && digit <= 8) { e.preventDefault(); if (e.shiftKey) deck.storeScene(digit - 1); else deck.fireScene(digit - 1); return; }
+            switch (e.key.toLowerCase()) {
+                case 'r': deck.randomize(); break;
+                case 'a': deck.setAuto(!deck.auto.on); break;
+                case 'g': deck.stepGen(e.shiftKey ? -1 : 1); break;
+                case 'h': setHidden(h => !h); break;
+                case 'd': setDockOpen(o => !o); break;
+                case 'f': deck.toggleFullscreen(); break;
+                case 'p': deck.snapshot(); break;
+                case 'v': deck.toggleRecord(); break;
+                case '?': case '/': setHelp(h => !h); break;
+                default: return;
+            }
+            e.preventDefault();
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [started, deck]);
+
+    const start = async (opts) => { await deck.start(opts); setStarted(true); };
+
+    return (
+        <React.Fragment>
+            {!started && <Boot onStart={start} />}
+            {started && !hidden && (
+                <React.Fragment>
+                    <Hud dockOpen={dockOpen} setDockOpen={setDockOpen} setHidden={setHidden} setHelp={setHelp} setSander={setSander} />
+                    {dockOpen && <Dock tab={tab} setTab={setTab} />}
+                    <SceneBar />
+                </React.Fragment>
+            )}
+            {started && hidden && (
+                <button type="button" className="unhide" onClick={() => setHidden(false)} title="Show controls (H or Esc)">D4R</button>
+            )}
+            {help && <Help onClose={() => setHelp(false)} />}
+            {sander && <Sander />}
+            <Toast />
+        </React.Fragment>
+    );
+}
+
+function mount() {
+    const canvas = document.getElementById('stage');
+    const video = document.getElementById('camera');
+    const deck = new D4R.Deck(canvas, video);
+    window.__deck = deck; // handy for debugging from the console
+    if (!deck.renderer.ok) {
+        document.getElementById('root').innerHTML = '<div class="boot"><div class="boot-card"><h1 class="brand">DEAD4RAT</h1><p class="notice">This browser or device has WebGL switched off, so the visuals cannot run. Try a recent Chrome, Edge, Firefox or Safari.</p></div></div>';
+        return;
+    }
+    ReactDOM.createRoot(document.getElementById('root')).render(
+        <DeckContext.Provider value={deck}><App /></DeckContext.Provider>
+    );
+}
+
+mount();

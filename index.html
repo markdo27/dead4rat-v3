@@ -2,52 +2,63 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="mobile-web-app-capable" content="yes">
-    <title>DEAD4RAT - TERMINAL DECAY</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#000000">
+    <meta name="description" content="DEAD4RAT — a live, audio-reactive visual synth that runs in your browser.">
+    <title>DEAD4RAT — Terminal Decay</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%23000'/%3E%3Crect x='3' y='3' width='10' height='10' fill='none' stroke='%23ff5500' stroke-width='2'/%3E%3Crect x='7' y='7' width='2' height='2' fill='%23ff5500'/%3E%3C/svg%3E">
 
-    <!-- Fonts — display=swap so text renders immediately, fonts load async -->
-    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Inter:wght@400;700;900&family=Rubik+Glitch&family=VT323&family=Space+Mono&family=Bungee&family=Roboto+Mono&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=10">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <!-- Only the first two families are used by the interface; the rest are
+         offered for text layers and download only when a layer uses them. -->
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=VT323&family=Rubik+Glitch&family=Space+Mono&family=Bungee&family=Roboto+Mono&family=Inter:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css?v=4">
 
-    <!-- React PRODUCTION builds — ~2x faster parse + execution than dev builds -->
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-
-    <!-- Babel for in-browser JSX — must load synchronously before text/babel scripts -->
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-
-    <!-- MIDI — async, not needed until user enables MIDI -->
-    <script async src="https://cdn.jsdelivr.net/npm/webmidi@3.1.6/dist/iife/webmidi.iife.js"></script>
-
-    <!-- ML Libraries — DEFERRED: huge files (~10MB) not needed until user clicks "Start Human AI"
-         async prevents them from blocking the initial render and Babel compilation -->
-    <script async src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js" crossorigin="anonymous"></script>
-    <script async src="https://cdn.jsdelivr.net/npm/@vladmandic/human/dist/human.js"></script>
+    <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin></script>
 </head>
 <body>
-
-    <!-- React Root -->
+    <canvas id="stage" aria-label="Visual output"></canvas>
+    <video id="camera" muted playsinline></video>
     <div id="root"></div>
 
-    <!-- Hidden webcam source -->
-    <video id="webcam-feed" autoplay playsinline style="display: none;"></video>
+    <!-- Engine: plain scripts, no build step. The AI libraries are NOT loaded
+         here — engine/ai.js fetches them the first time tracking is switched on. -->
+    <script src="engine/fx.js?v=4"></script>
+    <script src="engine/gen.js?v=4"></script>
+    <script src="engine/state.js?v=4"></script>
+    <script src="engine/renderer.js?v=4"></script>
+    <script src="engine/audio.js?v=4"></script>
+    <script src="engine/camera.js?v=4"></script>
+    <script src="engine/media.js?v=4"></script>
+    <script src="engine/tracking.js?v=4"></script>
+    <script src="engine/ai.js?v=4"></script>
+    <script src="engine/scenes.js?v=4"></script>
+    <script src="engine/deck.js?v=4"></script>
 
-    <!-- Core VJ Engines — loaded synchronously (needed before JSX runs) -->
-    <script src="audioEngine.js?v=5"></script>
-    <script src="maskEngine.js?v=2"></script>
-    <script src="humanEngine.js?v=5"></script>
-    <script src="blobTracker.js?v=8"></script>
-    <script src="fluidEngine.js?v=4"></script>
-    <script src="canvasEngine.js?v=106"></script>
-    <script src="mediaManager.js?v=5"></script>
-    <script src="presetManager.js?v=5"></script>
-    <script src="midiController.js?v=4"></script>
-
-    <!-- UI — Babel compiles these in-browser; production React makes this significantly faster -->
-    <script type="text/babel" src="ui_components.jsx?v=1"></script>
-    <script type="text/babel" src="dead4rat.jsx?v=102"></script>
-
+    <!-- UI: ui.bundle.js is ui/*.jsx precompiled by `npm run build`.
+         Add ?dev to the URL (or delete the bundle) to compile ui/*.jsx in the
+         browser with Babel instead — handy while editing, slower to start. -->
+    <script>
+    (function () {
+        var files = ['ui/kit.jsx', 'ui/panels.jsx', 'ui/app.jsx'];
+        function inject(code) { var s = document.createElement('script'); s.text = code; document.body.appendChild(s); }
+        function dev() {
+            var b = document.createElement('script');
+            b.src = 'https://unpkg.com/@babel/standalone@7/babel.min.js';
+            b.onload = function () {
+                Promise.all(files.map(function (f) { return fetch(f + '?t=' + Date.now()).then(function (r) { return r.text(); }); }))
+                    .then(function (srcs) { srcs.forEach(function (src, i) { inject(Babel.transform(src, { presets: ['react'], filename: files[i] }).code); }); });
+            };
+            document.body.appendChild(b);
+        }
+        if (/[?&]dev\b/.test(location.search)) return dev();
+        var s = document.createElement('script');
+        s.src = 'ui.bundle.js?v=4';
+        s.onerror = dev;
+        document.body.appendChild(s);
+    })();
+    </script>
 </body>
 </html>
