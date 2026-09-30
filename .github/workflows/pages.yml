@@ -22,10 +22,21 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      # Rebuild the UI bundle so the deploy never ships a stale one.
+      - run: npm ci
+      - run: npm run build
+      # Publish only what the app serves (no Python prototypes, tooling or node_modules).
+      - name: Assemble site
+        run: |
+          mkdir -p _site
+          cp -r index.html style.css sander.html ui.bundle.js engine ui .nojekyll _site/
       - uses: actions/configure-pages@v5
-      # Plain static site — publish the repo root as-is, no Jekyll.
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: '.'
+          path: '_site'
       - id: deployment
         uses: actions/deploy-pages@v4

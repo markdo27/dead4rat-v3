@@ -1,0 +1,15 @@
+{
+  "name": "dead4rat",
+  "version": "4.0.0",
+  "private": true,
+  "description": "DEAD4RAT — live, audio-reactive visual synth for the browser",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "start": "npx --yes serve -l 8080 ."
+  },
+  "devDependencies": {
+    "@babel/core": "^7.26.0",
+    "@babel/preset-react": "^7.26.3"
+  }
+}
