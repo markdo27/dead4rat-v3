@@ -12,7 +12,7 @@ const TABS = [
 ];
 
 const SHORTCUTS = [
-    ['1 – 8', 'Fire scene (morph)'], ['Shift + 1 – 8', 'Save current look to a scene'],
+    ['1 – 8', 'Fire scene (morph)'], ['Shift + 1 – 8', 'Save / overwrite a scene with the current look'],
     ['R', 'Random look'], ['A', 'Autopilot on / off'], ['G / Shift + G', 'Next / previous generator'],
     ['H', 'Hide / show all controls'], ['D', 'Hide / show the side panel'], ['F', 'Fullscreen'],
     ['P', 'Snapshot (PNG)'], ['V', 'Record video'], ['?', 'This help'], ['Esc', 'Close overlays'],
@@ -62,11 +62,13 @@ function Hud({ dockOpen, setDockOpen, setHidden, setHelp, setSander }) {
     const lvlRef = React.useRef(null);
     const recRef = React.useRef(null);
     useFrame((d) => {
+        if (lvlRef.current) lvlRef.current.style.transform = `scaleX(${d.audio.running ? Math.max(d.audio.level.BASS, d.audio.level.MID) : 0})`;
+    }, 3);
+    useFrame((d) => {
         if (fpsRef.current) {
             fpsRef.current.textContent = `${d.fps} FPS · ${Math.round(d.renderScale * 100)}%`;
             fpsRef.current.dataset.health = d.fps >= 50 ? 'good' : d.fps >= 28 ? 'ok' : 'bad';
         }
-        if (lvlRef.current) lvlRef.current.style.transform = `scaleX(${d.audio.running ? Math.max(d.audio.level.BASS, d.audio.level.MID) : 0})`;
         if (recRef.current && d.recording) {
             const s = Math.floor((performance.now() - d._recStart) / 1000);
             recRef.current.textContent = `● REC ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
@@ -118,6 +120,7 @@ function SceneBar() {
     const deck = useDeck();
     const slots = deck.scenes.slots;
     const [editing, setEditing] = React.useState(-1);
+    const cancelRename = React.useRef(false);
     const morphS = deck.morphMs / 1000;
     return (
         <footer className="scenebar" aria-label="Scenes">
@@ -126,13 +129,13 @@ function SceneBar() {
                     <div key={i} className={cx('slot', s ? 'full' : 'empty', deck.activeScene === i && 'on')}>
                         {s ? (
                             editing === i ? (
-                                <input className="slot-rename" autoFocus defaultValue={s.name} maxLength={18}
-                                    onBlur={(e) => { deck.renameScene(i, e.target.value || s.name); setEditing(-1); }}
-                                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === 'Escape') e.target.blur(); }} />
+                                <input className="slot-rename" autoFocus defaultValue={s.name} maxLength={18} aria-label={`Name for scene ${i + 1}`}
+                                    onFocus={() => { cancelRename.current = false; }}
+                                    onBlur={(e) => { if (!cancelRename.current) deck.renameScene(i, e.target.value || s.name); setEditing(-1); }}
+                                    onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Escape') cancelRename.current = true; if (e.key === 'Enter' || e.key === 'Escape') e.target.blur(); }} />
                             ) : (
-                                <button type="button" className="slot-main" onClick={(e) => e.shiftKey ? deck.storeScene(i, s.name) : deck.fireScene(i)}
-                                    onDoubleClick={() => setEditing(i)}
-                                    title={`Scene ${i + 1}: ${s.name} — click to morph, Shift+click to overwrite, double-click to rename`}>
+                                <button type="button" className="slot-main" onClick={(e) => e.shiftKey ? deck.storeScene(i) : deck.fireScene(i)}
+                                    title={`Scene ${i + 1}: ${s.name} — click to morph, Shift+click to overwrite with the current look`}>
                                     <span className="slot-n">{i + 1}</span><span className="slot-name">{s.name}</span>
                                 </button>
                             )
@@ -141,7 +144,12 @@ function SceneBar() {
                                 <span className="slot-n">{i + 1}</span><span className="slot-name">+ SAVE</span>
                             </button>
                         )}
-                        {s && editing !== i && <button type="button" className="slot-x" aria-label={`Clear scene ${i + 1}`} title="Clear" onClick={() => deck.clearScene(i)}>✕</button>}
+                        {s && editing !== i && (
+                            <span className="slot-tools">
+                                <button type="button" className="slot-tool" aria-label={`Rename scene ${i + 1}`} title="Rename" onClick={() => setEditing(i)}>✎</button>
+                                <button type="button" className="slot-tool" aria-label={`Clear scene ${i + 1}`} title="Clear (can be undone)" onClick={() => deck.clearScene(i)}>✕</button>
+                            </span>
+                        )}
                     </div>
                 ))}
             </div>
@@ -163,6 +171,8 @@ function SceneBar() {
 }
 
 function Help({ onClose }) {
+    const close = React.useRef(null);
+    React.useEffect(() => { const prev = document.activeElement; close.current && close.current.focus(); return () => prev && prev.focus && prev.focus(); }, []);
     return (
         <div className="modal" role="dialog" aria-modal="true" aria-labelledby="help-title" onClick={onClose}>
             <div className="modal-card" onClick={(e) => e.stopPropagation()}>
@@ -170,8 +180,8 @@ function Help({ onClose }) {
                 <dl className="keys">
                     {SHORTCUTS.map(([k, v]) => <React.Fragment key={k}><dt><kbd>{k}</kbd></dt><dd>{v}</dd></React.Fragment>)}
                 </dl>
-                <p className="hint">Scenes: the bar at the bottom holds 8 saved looks. Click an empty slot to save, a full one to morph to it. AUTO steps through them.</p>
-                <Btn onClick={onClose}>CLOSE</Btn>
+                <p className="hint">Scenes: the bar at the bottom holds 8 saved looks. Click an empty slot to save, a full one to morph to it, Shift+click to overwrite. Hover a slot for rename ✎ and clear ✕. AUTO steps through them.</p>
+                <button type="button" ref={close} className="btn" onClick={onClose}>CLOSE</button>
             </div>
         </div>
     );
@@ -183,11 +193,16 @@ function Toast() {
     React.useEffect(() => {
         if (!deck.toast) return;
         setShown(deck.toast);
-        const id = setTimeout(() => setShown(null), deck.toast.kind === 'warn' ? 4500 : 2500);
+        const id = setTimeout(() => setShown(null), deck.toast.action ? 6000 : deck.toast.kind === 'warn' ? 4500 : 2500);
         return () => clearTimeout(id);
     }, [deck.toast && deck.toast.id]);
     if (!shown) return null;
-    return <div className={cx('toast', shown.kind)} role="status" aria-live="polite">{shown.msg}</div>;
+    return (
+        <div className={cx('toast', shown.kind)} role="status" aria-live="polite">
+            {shown.msg}
+            {shown.action && <button type="button" className="toast-act" onClick={() => { shown.action.run(); setShown(null); }}>{shown.action.label}</button>}
+        </div>
+    );
 }
 
 function Sander({ onClose }) {
@@ -208,6 +223,22 @@ function App() {
     const [sander, setSander] = React.useState(false);
 
     React.useEffect(() => { try { localStorage.setItem('d4r_tab', tab); } catch (e) {} }, [tab]);
+
+    // Fit the picture into the part of the screen the controls don't cover.
+    React.useEffect(() => {
+        const apply = () => {
+            if (!started || hidden) { deck.setInsets({}); return; }
+            const phone = window.innerWidth <= 720;
+            deck.setInsets({
+                top: 40,
+                bottom: 58 + (phone && dockOpen ? Math.round(window.innerHeight * 0.46) : 0),
+                right: !phone && dockOpen ? 344 : 0,
+            });
+        };
+        apply();
+        window.addEventListener('resize', apply);
+        return () => window.removeEventListener('resize', apply);
+    }, [started, hidden, dockOpen]);
     React.useEffect(() => { deck.setPaused(sander); }, [sander]);
 
     // Hidden mode: fade the cursor out when idle.
@@ -221,7 +252,7 @@ function App() {
     }, [hidden]);
 
     React.useEffect(() => {
-        const onMsg = (e) => { if (e.data && (e.data.type === 'CHLADNI_CLOSE' || e.data.type === 'SANDER_CLOSE')) setSander(false); };
+        const onMsg = (e) => { if (e.origin === location.origin && e.data && (e.data.type === 'CHLADNI_CLOSE' || e.data.type === 'SANDER_CLOSE')) setSander(false); };
         window.addEventListener('message', onMsg);
         return () => window.removeEventListener('message', onMsg);
     }, []);
@@ -230,7 +261,8 @@ function App() {
         const onKey = (e) => {
             const tag = (e.target.tagName || '').toLowerCase();
             if (e.key === 'Escape') { setHelp(false); setSander(false); setHidden(false); return; }
-            if (!started || e.metaKey || e.ctrlKey || e.altKey) return;
+            if (!started || e.metaKey || e.ctrlKey || e.altKey || e.repeat) return;
+            if (help && e.key !== '?' && e.key !== '/') return;
             if (tag === 'input' && e.target.type !== 'range' && e.target.type !== 'checkbox') return;
             if (tag === 'textarea' || tag === 'select') return;
             const digit = e.code && e.code.startsWith('Digit') ? parseInt(e.code.slice(5), 10) : NaN;
@@ -251,7 +283,7 @@ function App() {
         };
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
-    }, [started, deck]);
+    }, [started, deck, help]);
 
     const start = async (opts) => { await deck.start(opts); setStarted(true); };
 

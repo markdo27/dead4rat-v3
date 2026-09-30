@@ -10,6 +10,22 @@
 (function () {
 const TEXT_FONTS = ['Share Tech Mono', 'VT323', 'Rubik Glitch', 'Space Mono', 'Bungee', 'Roboto Mono', 'Inter'];
 
+// Text-layer fonts are fetched only when a layer picks one (canvas text does
+// not trigger web-font downloads on its own).
+const _fontsAsked = new Set(['Share Tech Mono', 'VT323']);
+function loadFont(family) {
+    if (!_fontsAsked.has(family)) {
+        _fontsAsked.add(family);
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family).replace(/%20/g, '+')}&display=swap`;
+        link.onload = () => document.fonts && document.fonts.load(`48px "${family}"`).catch(() => {});
+        document.head.appendChild(link);
+    } else if (document.fonts) {
+        document.fonts.load(`48px "${family}"`).catch(() => {});
+    }
+}
+
 class MediaLayers {
     constructor() {
         this.canvas = document.createElement('canvas');
@@ -71,8 +87,7 @@ class MediaLayers {
         const l = this.layers.find(x => x.id === id);
         if (!l) return;
         Object.assign(l, patch);
-        // Canvas text does not trigger web-font downloads on its own.
-        if (patch.font && document.fonts) document.fonts.load(`48px "${patch.font}"`).catch(() => {});
+        if (patch.font) loadFont(patch.font);
         if (l.vid) {
             l.vid.playbackRate = l.speed || 1;
             if ('playing' in patch) { if (l.playing) l.vid.play().catch(() => {}); else l.vid.pause(); }

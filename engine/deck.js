@@ -83,11 +83,14 @@ class Deck {
         const shared = qs.get('look') || qs.get('p');
         if (shared) {
             this.sharedLook = D.decodeLook(shared);
+            this.sharedLinkBroken = !this.sharedLook;
             history.replaceState({}, '', location.pathname);
         }
 
         this._applyQuality();
         window.addEventListener('resize', () => { this.renderer.resize(); this.emit(); });
+        canvas.addEventListener('webglcontextlost', () => this.notify('The browser reset the graphics — recovering…', 'warn'));
+        canvas.addEventListener('webglcontextrestored', () => this.notify('Graphics restored'));
         this._loop = this._loop.bind(this);
     }
 
@@ -99,7 +102,7 @@ class Deck {
         this._pending = true;
         queueMicrotask(() => { this._pending = false; this.version++; for (const fn of this._subs) fn(this.version); });
     }
-    notify(msg, kind = 'info') { this.toast = { msg, kind, id: Date.now() + Math.random() }; this.emit(); }
+    notify(msg, kind = 'info', action = null) { this.toast = { msg, kind, action, id: Date.now() + Math.random() }; this.emit(); }
     _savePrefs() {
         try { localStorage.setItem(PREFS_KEY, JSON.stringify({ view: this.view, morphMs: this.morphMs, autoEvery: this.auto.every, mirror: this.camera.mirror })); } catch (e) {}
     }
@@ -108,14 +111,11 @@ class Deck {
     async start({ camera = true, mic = false, demo = false } = {}) {
         if (this.started) return;
         this.demo = demo;
-        if (camera && !demo) {
-            const ok = await this.camera.start();
-            if (!ok) this.notify(`${this.camera.error} — running without camera`, 'warn');
-        }
-        if (mic && !demo) {
-            const ok = await this.audio.startMic();
-            if (!ok) this.notify(this.audio.error, 'warn');
-        }
+        const warnings = [];
+        if (camera && !demo && !(await this.camera.start())) warnings.push(`${this.camera.error} — running without camera`);
+        if (mic && !demo && !(await this.audio.startMic())) warnings.push(this.audio.error);
+        if (this.sharedLinkBroken) warnings.push('That shared link could not be read — starting fresh');
+        if (warnings.length) this.notify(warnings.join(' · '), 'warn');
         if (this.sharedLook) {
             this._applyLook(this.sharedLook);
             this.sharedLook = null;
@@ -124,12 +124,15 @@ class Deck {
             const L = D.defaultLook();
             L.gen.mode = 'GYROID';
             L.fx.rgbsplit.on = true;
-            L.fx.feedback.on = true; L.fx.feedback.params.amount = 0.82; L.fx.feedback.params.rotation = 0;
+            L.fx.feedback.on = true; L.fx.feedback.params.amount = 0.55; L.fx.feedback.params.rotation = 0.3;
+            L.fx.rgbsplit.params.amount = 4;
             L.fx.crt.params.grain = 0.08;
             this._applyLook(L);
         }
         this.started = true;
         this._lastT = performance.now();
+        this._q.startT = this._lastT;
+        this._q.winT = this._lastT;
         requestAnimationFrame(this._loop);
         this.emit();
     }
@@ -205,7 +208,8 @@ class Deck {
             const s = L.fx[d.key];
             s.on = true;
             for (const p of d.params) {
-                if (p.k === 'blend') { s.params.blend = Math.random() < 0.75 ? 0 : 1 + Math.floor(Math.random() * 5); continue; }
+                if (p.k === 'blend') { s.params.blend = Math.random() < 0.7 ? 0 : [1, 3, 5][Math.floor(Math.random() * 3)]; continue; }
+                if (d.key === 'edges' && p.k === 'mode') { s.params.mode = 1; continue; }
                 if (p.opts) { s.params[p.k] = Math.floor(Math.random() * p.opts.length); continue; }
                 const v = p.min + (p.max - p.min) * (0.15 + Math.random() * 0.55);
                 s.params[p.k] = Math.round(v / p.step) * p.step;
@@ -230,11 +234,13 @@ class Deck {
     }
 
     // ── Scenes ─────────────────────────────────────────────────────────────
-    storeScene(i, name) {
+    storeScene(i) {
         if (this.morph) this._finishMorph();
         const gen = this.look.gen.mode;
         const on = FX_DEFS.filter(d => this.look.fx[d.key].on).length;
-        this.scenes.set(i, this.look, name || (gen !== 'OFF' ? gen : `${on} FX`));
+        const prev = this.scenes.slots[i];
+        const keep = prev && prev.custom;
+        this.scenes.set(i, this.look, keep ? prev.name : (gen !== 'OFF' ? gen : `${on} FX`), keep);
         this.activeScene = i;
         if (this.scenes.saveError) this.notify('Browser storage is full — scene kept for this session only', 'warn');
         this.emit();
@@ -246,10 +252,21 @@ class Deck {
         this._startMorph(s.look);
         this.emit();
     }
-    clearScene(i) { this.scenes.clear(i); if (this.activeScene === i) this.activeScene = -1; this.emit(); }
+    clearScene(i) {
+        const old = this.scenes.slots[i];
+        if (!old) return;
+        this.scenes.clear(i);
+        if (this.activeScene === i) this.activeScene = -1;
+        this.notify(`Scene ${i + 1} cleared`, 'info', { label: 'UNDO', run: () => { if (!this.scenes.slots[i]) { this.scenes.restore(i, old); this.emit(); } } });
+    }
     renameScene(i, name) { this.scenes.rename(i, name); this.emit(); }
     setMorphMs(ms) { this.morphMs = ms; this._savePrefs(); this.emit(); }
-    setAuto(on) { this.auto.on = on; this.auto.last = performance.now(); this.emit(); }
+    setAuto(on) {
+        this.auto.on = on;
+        this.auto.last = performance.now();
+        if (on && this.scenes.filled < 2) this.notify('AUTO makes random looks until you save 2 or more scenes');
+        this.emit();
+    }
     setAutoEvery(s) { this.auto.every = s; this._savePrefs(); this.emit(); }
 
     _applyLook(look) {
@@ -310,8 +327,8 @@ class Deck {
         if (this.audio.running && !this.audio.onset.BASS && t - a.last < a.every * 1000 + 2000) return;
         a.last = t;
         const next = this.scenes.next(this.activeScene);
-        if (next >= 0 && next !== this.activeScene) this.fireScene(next);
-        else if (next < 0) this.randomize();
+        if (this.scenes.filled >= 2 && next >= 0 && next !== this.activeScene) this.fireScene(next);
+        else this.randomize();
     }
 
     // ── Output / view ──────────────────────────────────────────────────────
@@ -333,22 +350,36 @@ class Deck {
     }
     get renderScale() { return QUALITY_STEPS[this._q.level].r; }
 
+    // AUTO quality: judge the median frame time over ~1 s windows. Drop fast
+    // (two steps when far over budget), climb slowly, never climb in the first
+    // 5 s, and don't retry a level that just proved too slow.
     _governor(t, dt) {
         const q = this._q;
         q.samples.push(dt);
-        if (q.samples.length < 45) return;
+        if (t - (q.winT || t) < 1000 || q.samples.length < 8) return;
+        q.winT = t;
         const s = q.samples.sort((a, b) => a - b);
         const median = s[s.length >> 1];
         q.samples = [];
         this.frameMs = median;
         if (this.view.quality !== 'AUTO' || this.morph || this.recording) return;
-        if (median > 24 && q.level > 0 && t - q.lastChange > 1500) {
+        if (median > 24 && q.level > 0 && t - q.lastChange > 900) {
             q.droppedFrom = q.level; q.lastDrop = t;
-            q.level--; q.lastChange = t; this._applyQuality(); this.emit();
-        } else if (median < 18.5 && q.level < QUALITY_STEPS.length - 1 && t - q.lastChange > 4000
+            q.level = Math.max(0, q.level - (median > 48 ? 2 : 1));
+            q.lastChange = t; this._applyQuality(); this.emit();
+        } else if (median < 18.5 && q.level < QUALITY_STEPS.length - 1 && t - q.lastChange > 4000 && t - (q.startT || 0) > 5000
                    && !(q.droppedFrom === q.level + 1 && t - q.lastDrop < 30000)) {
             q.level++; q.lastChange = t; this._applyQuality(); this.emit();
         }
+    }
+
+    // UI tells the deck which screen edges it covers so the picture fits beside it.
+    setInsets(ins) {
+        const k = JSON.stringify(ins);
+        if (k === this._insetKey) return;
+        this._insetKey = k;
+        this.renderer.setInsets(ins);
+        this.emit();
     }
 
     async toggleCamera() {
@@ -401,8 +432,14 @@ class Deck {
     toggleOverlay() { this.showOverlay = !this.showOverlay; this.emit(); }
 
     // ── Media layers ───────────────────────────────────────────────────────
-    async addImage(file) { try { await this.media.addImage(file); } catch (e) { this.notify(e.message, 'warn'); } this.emit(); }
-    async addVideo(file) { try { await this.media.addVideo(file); } catch (e) { this.notify(e.message, 'warn'); } this.emit(); }
+    // New image/video layers start at half the frame height, shrunk if needed
+    // so they fit the frame's width (portrait formats).
+    _fitLayer(l) {
+        const frame = this.renderer.disp.w / this.renderer.disp.h;
+        l.scale = Math.min(0.5, (0.8 * frame) / (l.aspect || 1));
+    }
+    async addImage(file) { try { this._fitLayer(await this.media.addImage(file)); } catch (e) { this.notify(e.message, 'warn'); } this.emit(); }
+    async addVideo(file) { try { this._fitLayer(await this.media.addVideo(file)); } catch (e) { this.notify(e.message, 'warn'); } this.emit(); }
     addText() { this.media.addText(); this.emit(); }
     updateLayer(id, patch) { this.media.update(id, patch); this.emit(); }
     removeLayer(id) { this.media.remove(id); this.emit(); }
@@ -419,9 +456,13 @@ class Deck {
 
     snapshot() {
         if (!this.started) return;
+        if (this.paused) { this.notify('Close SANDER to take a snapshot', 'warn'); return; }
         this.renderer.snapshot((c) => {
+            const w = c.width, h = c.height, full = this.renderScale >= 1;
             this._compose(c).toBlob((blob) => {
-                if (blob) { download(blob, `dead4rat_${stamp()}.png`); this.notify('Snapshot saved'); }
+                if (!blob) return;
+                download(blob, `dead4rat_${stamp()}.png`);
+                this.notify(full ? `Snapshot saved (${w}×${h})` : `Snapshot saved (${w}×${h}) — set QUALITY to HIGH for full size`);
             }, 'image/png');
         });
     }
@@ -445,19 +486,24 @@ class Deck {
         } else {
             stream = this.canvas.captureStream(30);
         }
-        let dest = null;
-        if (this.audio.running && this.audio.ctx) {
-            dest = this.audio.ctx.createMediaStreamDestination();
-            this.audio.analyser.connect(dest);
-            dest.stream.getAudioTracks().forEach(tr => stream.addTrack(tr));
-        }
+        // Sound comes from the audio bus, which survives source changes, so
+        // switching mic/file mid-recording (or starting audio later) is recorded too.
+        this.audio.openRecordTap().getAudioTracks().forEach(tr => stream.addTrack(tr));
         const chunks = [];
-        const rec = new MediaRecorder(stream, mimeType ? { mimeType, videoBitsPerSecond: 8e6 } : undefined);
+        let rec;
+        try {
+            rec = new MediaRecorder(stream, mimeType ? { mimeType, videoBitsPerSecond: 8e6 } : undefined);
+        } catch (e) {
+            this.audio.closeRecordTap();
+            this._recCompose = null;
+            this.notify('This browser could not start recording', 'warn');
+            return;
+        }
         rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
         rec.onstop = () => {
             this.recording = false;
             this._recCompose = null;
-            if (dest) { try { this.audio.analyser && this.audio.analyser.disconnect(dest); } catch (e) {} }
+            this.audio.closeRecordTap();
             const type = rec.mimeType || 'video/webm';
             download(new Blob(chunks, { type }), `dead4rat_${stamp()}.${type.includes('mp4') ? 'mp4' : 'webm'}`);
             this.notify('Recording saved');
@@ -499,6 +545,7 @@ class Deck {
         if (t.t === 'fx') spec = FX_BY_KEY[t.key] && FX_BY_KEY[t.key].params.find(p => p.k === t.k);
         else if (t.t === 'gen') spec = GEN_PARAMS.find(p => p.k === t.k);
         if (!spec) return;
+        this._edit();
         const val = Math.round((spec.min + (spec.max - spec.min) * v) / spec.step) * spec.step;
         if (t.t === 'fx') { if (!this.look.fx[t.key].on && v > 0.01) this.look.fx[t.key].on = true; this.look.fx[t.key].params[t.k] = clamp(val, spec.min, spec.max); }
         else this.look.gen.params[t.k] = clamp(val, spec.min, spec.max);
@@ -551,6 +598,7 @@ class Deck {
 
         const handReady = this.human.state === 'on' && this.human.modules.hands;
         this.blobs.enabled = this.blobTrack || (this.gesture.on && this.gesture.source !== 'HAND' && !(handReady && this.human.hands > 0));
+        if (!cam.ready && !this.media.active && this.blobs.blobs.length) this.blobs.reset();
         if (this.blobs.enabled && (fresh || this.media.active)) {
             this.blobs.process((ctx, W, H) => {
                 if (this.media.active) ctx.drawImage(this.media.canvas, 0, 0, W, H);
@@ -559,6 +607,7 @@ class Deck {
         }
 
         this._stepGesture(t, dt);
+        this._dt = dt;
         this.renderer.render(this._frame(t, camMap, maskOn && this.mask.version > 0));
         if (this._recCompose) this.renderer.snapshot(this._recCompose);
         this._drawOverlay();
@@ -573,12 +622,12 @@ class Deck {
         let target = null, pinch = 0, span = 0, via = '';
         const h = this.human;
         if (g.source !== 'MOTION' && h.state === 'on' && h.palm && h.hands > 0) {
-            target = this.camera.toScreen(h.palm.x, h.palm.y, disp.w, disp.h);
+            target = this._toView(...this.camera.toScreen(h.palm.x, h.palm.y, disp.w, disp.h));
             pinch = h.pinch; span = h.span; via = 'HAND';
         } else if (g.source !== 'HAND' && this.blobs.enabled) {
             const L = this.blobs.lead();
             if (L && this.blobs.count > 0) {
-                target = [L.x, L.y];
+                target = this._toView(L.x, L.y);
                 pinch = L.strength;
                 span = L.second ? Math.min(1, Math.hypot((L.second.x0 + L.second.x1) / 2 - L.x, (L.second.y0 + L.second.y1) / 2 - L.y) * 1.5) : 0;
                 via = 'MOTION';
@@ -611,8 +660,9 @@ class Deck {
             const item = { key: d.key, wet, values: D.resolveFxValues(d, s, time, L.mod, levels) };
             if (d.key === 'strobe') {
                 const v = item.values;
+                // Beat mode: stay lit for HOLD × 250 ms after each hit. Rate mode: square wave.
                 item.level = s.band && this.audio.running
-                    ? (this.audio.env[s.band] > 1 - v.hold ? 1 : 0)
+                    ? (t - this.audio.lastOnset[s.band] < v.hold * 250 ? 1 : 0)
                     : ((time * v.rate) % 1 < v.hold ? 1 : 0);
             }
             fx.push(item);
@@ -626,10 +676,12 @@ class Deck {
                 values.colorA = (values.colorA + (EMOTION_HUE[this.human.emotion] || 0)) % 1;
             }
             const band = L.gen.band;
+            // Scene clock runs at SPEED, so SPEED 0 really freezes the scene.
+            this._genT = ((this._genT || 0) + (this._dt || 0) / 1000 * values.speed) % 3600;
             gen = {
-                mode: L.gen.mode, values,
+                mode: L.gen.mode, values, time: this._genT,
                 band: band ? levels[band] : 0,
-                transient: band ? this.audio.env[band] : this.audio.beat,
+                transient: band ? this.audio.env[band] : 0,
                 level: this.genLevel,
             };
         }
@@ -639,8 +691,29 @@ class Deck {
             gestures: g.on && g.present ? g.fx : [],
             palm: g.palm, pinch: g.pinch, span: g.span, shockT: g.shockT,
             cam: camMap, mask: maskOn,
+            maskMap: maskOn ? this.camera.mapping(this.renderer.disp.w, this.renderer.disp.h) : null,
             transform: { flipH: this.view.flipH, flipV: this.view.flipV, rotation: this.view.rotation },
         };
+    }
+
+    // Where a point of the (unflipped, unrotated) source appears on screen:
+    // the inverse of viewUV() in the shader, so overlays and the gesture palm
+    // follow FLIP and ROTATE exactly like the picture does.
+    _toView(u, v) {
+        const a = this.renderer.disp.w / this.renderer.disp.h;
+        const r = this.view.rotation || 0;
+        let x = u - 0.5, y = v - 0.5;
+        if (r) {
+            x *= a;
+            if (r === 1 || r === 3) { const k = Math.max(a, 1 / a); x *= k; y *= k; }
+            const ang = -r * Math.PI / 2, c = Math.cos(ang), s = Math.sin(ang);
+            const nx = c * x - s * y, ny = s * x + c * y;
+            x = nx / a; y = ny;
+        }
+        x += 0.5; y += 0.5;
+        if (this.view.flipV) y = 1 - y;
+        if (this.view.flipH) x = 1 - x;
+        return [x, y];
     }
 
     _drawOverlay() {
@@ -648,15 +721,20 @@ class Deck {
         const showHuman = this.showOverlay && this.human.state === 'on' && !!this.human.raw;
         const vis = showBlobs || showHuman;
         this.overlay.setVisible(vis);
-        if (!vis) return;
-        const disp = this.renderer.disp;
+        if (!vis) { this._ovKey = ''; return; }
+        const disp = this.renderer.disp, v = this.view;
+        // Redraw only when there is something new to draw.
+        const key = `${showBlobs && this.blobs.seq}|${showHuman && this.human.seq}|${disp.w}x${disp.h}+${disp.left}+${disp.top}|${v.flipH}${v.flipV}${v.rotation}|${this.camera.mirror}`;
+        if (key === this._ovKey) return;
+        this._ovKey = key;
         this.overlay.place(disp);
         const cam = this.camera;
         this.overlay.draw({
             blobs: showBlobs ? this.blobs.blobs : null,
-            blobToPx: (x, y) => [x * disp.w, y * disp.h],
+            blobToPx: (x, y) => { const s = this._toView(x, y); return [s[0] * disp.w, s[1] * disp.h]; },
             human: showHuman ? this.human : null,
-            humanToPx: (x, y) => { const s = cam.toScreen(x, y, disp.w, disp.h); return [s[0] * disp.w, s[1] * disp.h]; },
+            humanToPx: (x, y) => { const s = this._toView(...cam.toScreen(x, y, disp.w, disp.h)); return [s[0] * disp.w, s[1] * disp.h]; },
+            persist: this.blobs.persist,
         });
     }
 }

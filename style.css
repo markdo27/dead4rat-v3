@@ -16,7 +16,7 @@
     --accent-dim: rgba(255, 85, 0, 0.14);
     --text: #efe6dc;
     --dim: #a89886;
-    --muted: #6f6254;
+    --muted: #908070;
     --ok: #33ff99;
     --warn: #ffcc33;
     --rec: #ff3344;
@@ -255,9 +255,12 @@ button.hud-chip:hover { border-color: var(--line-hi); color: #fff; }
 .slot-name { font-size: 11px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .slot.full .slot-name { color: var(--text); }
 .slot-main:hover .slot-name { color: #fff; }
-.slot-x { position: absolute; top: 1px; right: 1px; width: 20px; height: 20px; padding: 0; background: none; border: 0; color: var(--muted); font-size: 10px; opacity: 0; }
-.slot:hover .slot-x, .slot-x:focus-visible { opacity: 1; }
-.slot-x:hover { color: var(--rec); }
+.slot-tools { position: absolute; top: 1px; right: 1px; display: flex; }
+.slot-tool { width: 20px; height: 20px; padding: 0; background: none; border: 0; color: var(--muted); font-size: 10px; opacity: 0.35; }
+.slot:hover .slot-tool, .slot-tool:focus-visible { opacity: 1; }
+.slot-tool:hover { color: var(--accent-3); }
+.slot-tool:last-child:hover { color: var(--rec); }
+.toast-act { margin-left: 12px; background: none; border: 1px solid currentColor; color: var(--accent-3); padding: 2px 8px; font-size: 11px; letter-spacing: 0.08em; }
 .slot-rename { width: 100%; height: 100%; background: #000; border: 0; color: #fff; padding: 0 8px; }
 .scene-tools { display: flex; align-items: center; gap: 6px; flex: none; }
 .morph { display: flex; align-items: center; gap: 6px; color: var(--dim); font-size: 10.5px; }

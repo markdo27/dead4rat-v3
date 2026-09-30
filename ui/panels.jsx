@@ -45,8 +45,8 @@ function GenPanel() {
 function FxRow({ def }) {
     const deck = useDeck();
     const s = deck.look.fx[def.key];
-    const [open, setOpen] = React.useState(false);
-    const expanded = s.on || open;
+    const [open, setOpen] = React.useState(null); // null = follow the switch
+    const expanded = open === null ? s.on : open;
     const bandLive = React.useRef(null);
     useFrame((d) => {
         if (!bandLive.current) return;
@@ -123,13 +123,20 @@ function Spectrum() {
         ctx.clearRect(0, 0, W, H);
         const data = d.audio.spectrum();
         if (!data) return;
-        const n = 96;
-        const bw = W / n;
+        const n = 96, bw = W / n, bins = data.length;
+        const hzPerBin = d.audio.sampleRate / 2 / bins;
+        const lo = Math.log(30), hi = Math.log(d.audio.sampleRate / 2);
+        let prevEnd = 1;
         for (let i = 0; i < n; i++) {
-            // log-spaced bins so bass is not squashed
-            const idx = Math.min(data.length - 1, Math.floor(Math.pow(data.length, i / n)));
-            const v = data[idx] / 255;
-            ctx.fillStyle = i < n * 0.3 ? '#FF5500' : i < n * 0.75 ? '#FF9900' : '#FFDD00';
+            // Log-spaced bars; each bar shows the loudest bin in its range.
+            const f1 = Math.exp(lo + (hi - lo) * (i + 1) / n);
+            const end = Math.max(prevEnd + 1, Math.min(bins, Math.round(f1 / hzPerBin)));
+            let v = 0;
+            for (let b = prevEnd; b < end; b++) if (data[b] > v) v = data[b];
+            const fMid = (prevEnd + end) / 2 * hzPerBin;
+            prevEnd = end;
+            v /= 255;
+            ctx.fillStyle = fMid < 250 ? '#FF5500' : fMid < 4000 ? '#FF9900' : '#FFDD00';
             ctx.fillRect(i * bw, H - v * H, Math.max(1, bw - 1), v * H);
         }
     }, 2);
@@ -221,7 +228,7 @@ function AiPanel() {
                     ))}
                 </div>
                 <LiveMeter label="PINCH" read={(d) => d.gesture.present ? d.gesture.pinch : 0} />
-                <LiveText className="hint" read={(d) => !d.gesture.on ? 'Switch on to start.' : d.gesture.present ? `Tracking via ${d.gesture.via}. Pinch (or move more) to push harder; two hands drive THEREMIN.` : 'Waiting for a hand or movement…'} />
+                <LiveText className="hint" read={(d) => !d.gesture.on ? 'Switch on to start.' : d.gesture.present ? `Tracking via ${d.gesture.via}. Pinch (or move more) to push harder; two hands drive THEREMIN.` : (d.gesture.source === 'HAND' && d.human.state !== 'on') ? 'HAND needs AI TRACKING (below) switched on.' : 'Waiting for a hand or movement…'} />
             </Section>
 
             <Section title="AI TRACKING" right={<Switch on={h.state === 'on' || loading} disabled={camOff} onChange={() => deck.toggleHuman()} label={loading ? 'LOADING' : h.state === 'on' ? 'ON' : 'OFF'} />}
@@ -250,7 +257,7 @@ function AiPanel() {
             </Section>
 
             <Section title="PERSON CUT-OUT" right={<Switch on={deck.isolate} disabled={camOff} onChange={() => deck.toggleIsolate()} label={deck.isolate && deck.mask.state === 'loading' ? 'LOADING' : deck.isolate ? 'ON' : 'OFF'} />}
-                hint="Removes the background behind you. With a generator running you appear inside the scene.">
+                hint="Removes the background behind you (first use downloads about 6 MB). With a generator running you appear inside the scene.">
             </Section>
 
             <Section title="MOTION BLOBS" right={<Switch on={deck.blobTrack} disabled={camOff} onChange={() => deck.toggleBlobs()} label={deck.blobTrack ? 'ON' : 'OFF'} />}
@@ -324,7 +331,7 @@ function MediaPanel() {
                     <Param spec={{ label: 'ROTATE', min: -180, max: 180, step: 1 }} value={l.rotation} onChange={(v) => up({ rotation: v })} />
                     <Param spec={{ label: 'OPACITY', min: 0, max: 1, step: 0.01 }} value={l.opacity} onChange={(v) => up({ opacity: v })} />
                     {l.type === 'video' && <Param spec={{ label: 'SPEED', min: 0.25, max: 4, step: 0.05 }} value={l.speed} onChange={(v) => up({ speed: v })} />}
-                    <div className="row-end"><Btn small kind="ghost" onClick={() => up({ x: 0.5, y: 0.5, scale: l.type === 'text' ? 0.12 : 0.5, rotation: 0, opacity: 1 })}>CENTRE & RESET</Btn></div>
+                    <div className="row-end"><Btn small kind="ghost" onClick={() => up({ x: 0.5, y: 0.5, scale: l.type === 'text' ? 0.12 : Math.min(0.5, 0.8 * deck.renderer.disp.w / deck.renderer.disp.h / (l.aspect || 1)), rotation: 0, opacity: 1, ...(l.type === 'video' ? { speed: 1 } : {}) })}>CENTRE & RESET</Btn></div>
                 </Section>
             )}
         </div>
@@ -371,7 +378,7 @@ function OutputPanel() {
                     <div className="btn-row">
                         <Btn small on={m.learn} onClick={() => deck.setMidiLearn(!m.learn)}>{m.learn ? (m.armed ? 'TURN A KNOB…' : 'TOUCH A SLIDER…') : 'LEARN'}</Btn>
                         <Btn small kind="ghost" onClick={() => { m.forget(); deck.emit(); }}>FORGET ({Object.keys(m.map).length})</Btn>
-                        <span className="readout">{m.last}</span>
+                        <LiveText className="readout" read={(d) => d.midi.last} />
                     </div>
                 )}
             </Section>

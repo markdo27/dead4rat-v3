@@ -129,8 +129,11 @@ function BandPicker({ value, onChange, label = 'AUDIO' }) {
 function LiveMeter({ read, color = 'var(--accent)', label, every = 1 }) {
     const bar = React.useRef(null);
     const txt = React.useRef(null);
+    const last = React.useRef(-1);
     useFrame((d) => {
-        const v = Math.max(0, Math.min(1, read(d) || 0));
+        const v = Math.round(Math.max(0, Math.min(1, read(d) || 0)) * 200) / 200;
+        if (v === last.current) return; // no DOM write when nothing changed
+        last.current = v;
         if (bar.current) bar.current.style.transform = `scaleX(${v})`;
         if (txt.current) txt.current.textContent = Math.round(v * 100);
     }, every);

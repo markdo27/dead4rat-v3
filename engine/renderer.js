@@ -40,8 +40,8 @@ precision mediump float;
 varying vec2 v_uv;
 uniform float u_time, u_aspect;
 uniform vec2 u_res, u_disp;
-uniform sampler2D u_cam, u_gen, u_mask, u_prev, u_base, u_prevBase;
-uniform vec2 u_camScale, u_camOffset;
+uniform sampler2D u_cam, u_gen, u_mask, u_prev, u_base, u_prevBase, u_out;
+uniform vec2 u_camScale, u_camOffset, u_maskScale, u_maskOffset;
 uniform float u_camOn, u_camKey, u_genOn;
 uniform float u_flipH, u_flipV, u_rotation;
 uniform vec2 u_palm;
@@ -66,7 +66,7 @@ vec3 src(vec2 uv) {
     vec2 cuv = uv * u_camScale + u_camOffset;
     vec3 cam = texture2D(u_cam, cuv).rgb * u_camOn;
 #ifdef HAS_MASK
-    float m = texture2D(u_mask, cuv).r;
+    float m = texture2D(u_mask, uv * u_maskScale + u_maskOffset).r;
 #endif
 #ifdef HAS_GEN
     vec3 g = texture2D(u_gen, fboUV(uv)).rgb;
@@ -219,7 +219,7 @@ class Renderer {
             this.stats.failed.push(p.key);
         } else {
             gl.useProgram(p.prog);
-            const unit = { u_tex: 0, u_cam: 0, u_gen: 1, u_prev: 2, u_base: 3, u_mask: 4, u_prevBase: 5 };
+            const unit = { u_tex: 0, u_cam: 0, u_gen: 1, u_prev: 2, u_base: 3, u_mask: 4, u_prevBase: 5, u_out: 6 };
             for (const [name, u] of Object.entries(unit)) {
                 const loc = gl.getUniformLocation(p.prog, name);
                 if (loc) gl.uniform1i(loc, u);
@@ -242,6 +242,7 @@ class Renderer {
         let p = this.programs.get(key);
         if (!p) {
             p = build();
+            p.used = performance.now(); // newest first, so eviction never removes the program just built
             this.programs.set(key, p);
             this._evict();
         }
@@ -314,9 +315,9 @@ class Renderer {
                 PASS_HEADER,
                 defs.map(fxUniformDecls).join('\n'),
                 'void main() {',
-                '  vec2 uv = viewUV(v_uv);',
+                '  vec2 uv = v_uv;',
                 uvKeys.map(k => fxChunk(FX_BY_KEY[k])).join('\n'),
-                '  vec3 c = src(uv);',
+                '  vec3 c = src(viewUV(uv));  // flips/rotation apply to the source only, never to the feedback loop',
                 timeKeys.map(k => fxChunk(FX_BY_KEY[k])).join('\n'),
                 '  gl_FragColor = vec4(clamp(c, 0.0, 1.0), 1.0);',
                 '}',
@@ -325,12 +326,16 @@ class Renderer {
         });
     }
 
-    _passBProgram(colorKeys, finalKeys, gestureKeys, flags) {
+    // withFinal = false: CRT / STROBE / gesture glows are left to pass C so they
+    // are never fed back into the feedback loop.
+    _passBProgram(colorKeys, finalKeys, gestureKeys, flags, withFinal) {
+        if (!withFinal) { finalKeys = []; gestureKeys = gestureKeys.filter(k => GESTURE_BY_KEY[k].kind !== 'overlay'); }
         const key = `B:${colorKeys.join(',')}|${finalKeys.join(',')}|${gestureKeys.join(',')}|${flags}`;
         return this._cached(key, () => {
             const defs = [...colorKeys, ...finalKeys].map(k => FX_BY_KEY[k]);
             const warps = gestureKeys.filter(k => GESTURE_BY_KEY[k].kind === 'warp');
             const overlays = gestureKeys.filter(k => GESTURE_BY_KEY[k].kind === 'overlay');
+            const pres = gestureKeys.filter(k => GESTURE_BY_KEY[k].kind === 'pre');
             const hasA = flags.includes('a');
             const src = [
                 flags.includes('g') ? '#define HAS_GEN' : '',
@@ -345,7 +350,29 @@ class Renderer {
                 warps.map(k => GESTURE_BY_KEY[k].glsl).join('\n'),
                 '  vec2 uv = puv;',
                 '  vec3 c = img(uv);',
+                pres.map(k => GESTURE_BY_KEY[k].glsl).join('\n'),
                 colorKeys.map(k => fxChunk(FX_BY_KEY[k])).join('\n'),
+                overlays.map(k => GESTURE_BY_KEY[k].glsl).join('\n'),
+                finalKeys.map(k => fxChunk(FX_BY_KEY[k])).join('\n'),
+                '  gl_FragColor = vec4(clamp(c, 0.0, 1.0), 1.0);',
+                '}',
+            ].join('\n');
+            return this._program(key, this._vs.image, src);
+        });
+    }
+
+    // Pass C: final stage on top of the feedback-safe frame, drawn to screen.
+    _passCProgram(finalKeys, gestureKeys) {
+        const overlays = gestureKeys.filter(k => GESTURE_BY_KEY[k].kind === 'overlay');
+        const key = `C:${finalKeys.join(',')}|${overlays.join(',')}`;
+        return this._cached(key, () => {
+            const src = [
+                PASS_HEADER,
+                finalKeys.map(k => fxUniformDecls(FX_BY_KEY[k])).join('\n'),
+                'vec3 img(vec2 uv) { return texture2D(u_out, fboUV(clamp(uv, 0.0, 1.0))).rgb; }',
+                'void main() {',
+                '  vec2 uv = v_uv;',
+                '  vec3 c = img(uv);',
                 overlays.map(k => GESTURE_BY_KEY[k].glsl).join('\n'),
                 finalKeys.map(k => fxChunk(FX_BY_KEY[k])).join('\n'),
                 '  gl_FragColor = vec4(clamp(c, 0.0, 1.0), 1.0);',
@@ -362,9 +389,17 @@ class Renderer {
         this.resize();
     }
 
+    // Screen space the UI covers (px). The picture is fitted into the rest.
+    setInsets(ins) {
+        this.insets = { top: 0, right: 0, bottom: 0, left: 0, ...ins };
+        this.resize();
+    }
+
     resize() {
         if (!this.gl) return;
-        const vw = window.innerWidth, vh = window.innerHeight;
+        const ins = this.insets || { top: 0, right: 0, bottom: 0, left: 0 };
+        const vw = Math.max(64, window.innerWidth - ins.left - ins.right);
+        const vh = Math.max(64, window.innerHeight - ins.top - ins.bottom);
         const ratios = { '16:9': 16 / 9, '9:16': 9 / 16, '1:1': 1 };
         let dw = vw, dh = vh;
         const r = ratios[this.view.format];
@@ -373,11 +408,12 @@ class Renderer {
         const s = this.canvas.style;
         s.position = 'fixed';
         s.width = dw + 'px'; s.height = dh + 'px';
-        s.left = Math.round((vw - dw) / 2) + 'px';
-        s.top = Math.round((vh - dh) / 2) + 'px';
+        const left = ins.left + Math.round((vw - dw) / 2), top = ins.top + Math.round((vh - dh) / 2);
+        s.left = left + 'px';
+        s.top = top + 'px';
         const w = Math.max(16, Math.round(dw * this.view.renderScale));
         const h = Math.max(16, Math.round(dh * this.view.renderScale));
-        this.disp = { w: dw, h: dh, left: Math.round((vw - dw) / 2), top: Math.round((vh - dh) / 2) };
+        this.disp = { w: dw, h: dh, left, top };
         if (this.canvas.width !== w || this.canvas.height !== h) {
             this.canvas.width = w;
             this.canvas.height = h;
@@ -417,17 +453,26 @@ class Renderer {
     _plan(f) {
         const byStage = { uv: [], time: [], color: [], final: [] };
         for (const fx of f.fx) byStage[FX_BY_KEY[fx.key].stage].push(fx.key);
+        // Effects that sample neighbours read the pre-colour image, so run them
+        // first; per-pixel colour effects then apply on top of their result.
+        byStage.color.sort((a, b) => (FX_BY_KEY[b].taps ? 1 : 0) - (FX_BY_KEY[a].taps ? 1 : 0));
         const flags = (f.gen ? 'g' : '') + (f.mask ? 'm' : '');
         const needsPrevBase = byStage.color.some(k => FX_BY_KEY[k].prevBase);
-        const needA = byStage.uv.length > 0 || byStage.time.length > 0 || needsPrevBase;
+        // Neighbour-sampling effects call img() many times. When the source is
+        // costly to rebuild per tap (generator or cut-out mixed in), render it
+        // once in pass A so each tap is a single texture read.
+        const taps = byStage.color.some(k => FX_BY_KEY[k].taps) || f.gestures.includes('freeze');
+        const needA = byStage.uv.length > 0 || byStage.time.length > 0 || needsPrevBase || (taps && (f.gen || f.mask));
+        const needsPrev = byStage.time.length > 0;
         const plan = {
             gen: f.gen ? this._genProgram(f.gen.mode) : null,
             A: needA ? this._passAProgram(byStage.uv, byStage.time, flags) : null,
-            B: this._passBProgram(byStage.color, byStage.final, f.gestures, flags + (needA ? 'a' : '')),
-            needsPrev: byStage.time.length > 0,
+            B: this._passBProgram(byStage.color, byStage.final, f.gestures, flags + (needA ? 'a' : ''), !needsPrev),
+            C: needsPrev ? this._passCProgram(byStage.final, f.gestures) : null,
+            needsPrev,
             needsPrevBase,
         };
-        plan.keys = [plan.gen, plan.A, plan.B].filter(Boolean).map(p => p.key);
+        plan.keys = [plan.gen, plan.A, plan.B, plan.C].filter(Boolean).map(p => p.key);
         plan.id = plan.keys.join('#');
         return plan;
     }
@@ -446,14 +491,14 @@ class Renderer {
         this.stats.passes = 0;
 
         let plan = this._plan(f);
-        const ready = [plan.gen, plan.A, plan.B].every(p => !p || this._ready(p));
+        const ready = [plan.gen, plan.A, plan.B, plan.C].every(p => !p || this._ready(p));
         if (ready) {
             this._pipeline = plan;
         } else if (this._pipeline && this._pipeline.keys.every(k => { const p = this.programs.get(k); return p && !p.failed; })) {
             plan = this._pipeline; // keep drawing the previous pipeline until the new one is linked
         } else {
-            for (const p of [plan.gen, plan.A, plan.B]) if (p && !p.ready) this._finish(p);
-            if ([plan.gen, plan.A, plan.B].some(p => p && p.failed)) return;
+            for (const p of [plan.gen, plan.A, plan.B, plan.C]) if (p && !p.ready) this._finish(p);
+            if ([plan.gen, plan.A, plan.B, plan.C].some(p => p && p.failed)) return;
             this._pipeline = plan;
         }
 
@@ -473,11 +518,11 @@ class Renderer {
             gl.useProgram(p.prog);
             const v = f.gen.values;
             this._u2(p, 'u_res', gw, gh);
-            this._u1(p, 'u_time', f.time);
+            this._u1(p, 'u_time', f.gen.time);
             this._u1(p, 'u_transient', f.gen.transient);
             this._u1(p, 'u_genBand', f.gen.band);
             this._u1(p, 'u_level', f.gen.level);
-            this._u1(p, 'u_genSpeed', v.speed);
+            this._u1(p, 'u_genSpeed', 1); // speed is already folded into f.gen.time
             this._u1(p, 'u_genScale', v.zoom);
             this._u1(p, 'u_genWarp', v.warp);
             this._u1(p, 'u_genDensity', v.density);
@@ -516,6 +561,7 @@ class Renderer {
             this._u2(p, 'u_disp', this.disp.w, this.disp.h);
             this._u2(p, 'u_camScale', f.cam.scale[0], f.cam.scale[1]);
             this._u2(p, 'u_camOffset', f.cam.offset[0], f.cam.offset[1]);
+            if (f.maskMap) { this._u2(p, 'u_maskScale', f.maskMap.scale[0], f.maskMap.scale[1]); this._u2(p, 'u_maskOffset', f.maskMap.offset[0], f.maskMap.offset[1]); }
             this._u1(p, 'u_camOn', f.cam.on ? 1 : 0);
             this._u1(p, 'u_camKey', f.camKey);
             this._u1(p, 'u_flipH', f.transform.flipH ? 1 : 0);
@@ -538,6 +584,7 @@ class Renderer {
             this._draw(plan.A);
             gl.activeTexture(gl.TEXTURE3);
             gl.bindTexture(gl.TEXTURE_2D, t.tex);
+            if (plan.needsPrevBase && !this._prevBaseValid) { gl.activeTexture(gl.TEXTURE5); gl.bindTexture(gl.TEXTURE_2D, t.tex); }
             if (plan.needsPrevBase) { this._baseIndex ^= 1; this._prevBaseValid = true; }
             else this._prevBaseValid = false;
         }
@@ -563,10 +610,15 @@ class Renderer {
         if (out) {
             gl.bindFramebuffer(gl.FRAMEBUFFER, null);
             gl.viewport(0, 0, W, H);
-            gl.useProgram(this.blit.prog);
-            gl.activeTexture(gl.TEXTURE0);
+            const C = plan.C;
+            gl.useProgram(C.prog);
+            gl.activeTexture(gl.TEXTURE6);
             gl.bindTexture(gl.TEXTURE_2D, out.tex);
-            this._draw(this.blit);
+            common(C);
+            this._u2(C, 'u_palm', f.palm[0], f.palm[1]);
+            this._u1(C, 'u_pinch', f.pinch);
+            this._u1(C, 'u_span', f.span);
+            this._draw(C);
             this._outIndex ^= 1;
             this._prevValid = true;
         } else {

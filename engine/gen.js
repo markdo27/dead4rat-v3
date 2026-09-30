@@ -17,7 +17,7 @@ const GEN_PARAMS = [
     { k: 'density', label: 'DENSITY', min: 0.1, max: 3, step: 0.01, def: 1.0 },
     { k: 'iterations', label: 'DETAIL', min: 0, max: 1, step: 0.01, def: 0.5 },
     { k: 'colorA', label: 'PALETTE', min: 0, max: 1, step: 0.01, def: 0.0 },
-    { k: 'colorB', label: 'CHROMA', min: 0, max: 1, step: 0.01, def: 0.5 },
+    { k: 'colorB', label: 'SATURATION', min: 0, max: 1, step: 0.01, def: 0.5 },
     { k: 'rotateX', label: 'TILT X', min: 0, max: 6.28, step: 0.01, def: 0 },
     { k: 'rotateY', label: 'TILT Y', min: 0, max: 6.28, step: 0.01, def: 0 },
     { k: 'rotateZ', label: 'ROLL', min: 0, max: 6.28, step: 0.01, def: 0 },
@@ -38,7 +38,7 @@ const GEN_DEFS = [
             q.xy *= rot(q.z * 0.07 * u_genWarp + ABnd * 0.4);
             q = mod(q + 2.0, 4.0) - 2.0;
             float noiseR = snoise(vec2(p.x * 0.7 + u_time * 0.2, p.y * 0.7)) * 0.5 + 0.5;
-            float r = (0.045 + noiseR * 0.045) * u_genDensity + ABnd * 0.18 * u_genWarp;
+            float r = (0.045 + noiseR * 0.09 * u_genIter) * u_genDensity + ABnd * 0.18 * u_genWarp;
             float bX = max(abs(q.y), abs(q.z)) - r;
             float bY = max(abs(q.x), abs(q.z)) - r;
             float bZ = max(abs(q.x), abs(q.y)) - r;
@@ -49,7 +49,7 @@ const GEN_DEFS = [
         glsl: `
             p.z -= u_time * u_genSpeed * 4.5;
             float fbmD = fbm3(p * 0.45 + u_time * 0.07) * u_genWarp * 1.5;
-            float detail = snoise(vec2(p.x * 2.0 + u_time * 0.2, p.y * 2.0)) * 0.28 * u_genWarp;
+            float detail = snoise(vec2(p.x * 2.0 + u_time * 0.2, p.y * 2.0)) * 0.56 * u_genIter * u_genWarp;
             float tunnelR = 2.1 + fbmD + ABnd * 0.9 * u_genWarp;
             float d = tunnelR - length(p.xy + vec2(detail));
             float bump = sin(p.x * 3.0 + u_time * 0.3) * sin(p.y * 2.7) * sin(p.z * 1.5 + u_time * 0.2);
@@ -70,12 +70,12 @@ const GEN_DEFS = [
             float tubeR = (0.12 + ABnd * 0.1 * u_genWarp) * u_genDensity;
             float s1 = length(p.xy - h1) - tubeR;
             float s2 = length(p.xy + h1) - tubeR;
-            float rungPhase = fract(p.z * freq2 / 3.14159);
-            float rungWeight = 1.0 - abs(rungPhase - 0.5) * 4.0;
-            float rungAngle = floor(p.z * freq2 / 3.14159) * 3.14159;
-            vec2 rungMid = vec2(cos(rungAngle + 1.5708), sin(rungAngle + 1.5708)) * helixR * 0.5;
-            float rung = length(p.xy - rungMid * clamp(rungWeight, 0.0, 1.0)) - tubeR * 0.5;
-            return min(min(s1, s2), rungWeight > 0.0 ? rung : 10.0);`,
+            // Rungs: a bar between the two strands at evenly spaced heights (nearest one).
+            float spacing = 3.14159 / freq2 * (1.5 - u_genIter);
+            float zr = floor(p.z / spacing + 0.5) * spacing;
+            vec2 hr = vec2(cos(zr * freq2), sin(zr * freq2)) * helixR;
+            float rung = sdCapsule(p, vec3(hr, zr), vec3(-hr, zr), tubeR * 0.45);
+            return min(min(s1, s2), rung);`,
     },
     {
         key: 'CUBE FIELD', group: 'TUNNELS', fog: [0.08, 0.02, 0.02],
@@ -83,7 +83,8 @@ const GEN_DEFS = [
             p.z -= u_time * u_genSpeed * 8.0 + ABnd * 6.0 * u_genWarp;
             p.x += (snoise(vec2(p.y * 0.25 + u_time * 0.09, p.z * 0.15)) - 0.5) * u_genWarp * 1.6;
             p.y += (snoise(vec2(p.z * 0.25 + u_time * 0.07, p.x * 0.15 + 7.1)) - 0.5) * u_genWarp * 1.6;
-            p = mod(p + 3.0, 6.0) - 3.0;
+            float cell = 6.0 / max(0.3, u_genDensity);
+            p = mod(p + cell * 0.5, cell) - cell * 0.5;
             p.xy *= rot(u_time * 0.6 + ABnd * u_genWarp * 1.2);
             p.xz *= rot(u_time * 0.4 + u_transient * 0.8);
             vec3 qm = p; float msc = 1.0;
@@ -92,8 +93,9 @@ const GEN_DEFS = [
                 qm = mengerSort(qm);
                 qm.z -= 0.5 * (1.2 + u_genIter * 0.6) / msc;
                 qm.xy *= rot(0.35 + u_time * 0.04 + u_transient * 0.3);
-                qm *= 1.6 + u_transient * u_genWarp * 0.4;
-                msc *= 1.6;
+                float k = 1.6 + u_transient * u_genWarp * 0.4;
+                qm *= k;
+                msc *= k;
             }
             return max(sdBox(qm / msc, vec3(1.0)), -sdBox(qm / msc, vec3(0.82 + u_transient * 0.12)));`,
     },
@@ -123,25 +125,30 @@ const GEN_DEFS = [
             p.xz *= rot(u_time * u_genSpeed * 0.15);
             p.yz *= rot(u_time * u_genSpeed * 0.09);
             float sc = 2.0 + ABnd * u_genWarp * 0.15;
-            vec3 sp = p * 0.55;
-            for (int i = 0; i < 8; i++) {
+            float zoom = 0.55 / max(0.3, u_genDensity);
+            vec3 sp = p * zoom;
+            float depth = 4.0 + u_genIter * 5.0;
+            float n = 0.0;
+            for (int i = 0; i < 9; i++) {
+                if (float(i) >= depth) break;
                 if (sp.x + sp.y < 0.0) sp.xy = -sp.yx;
                 if (sp.x + sp.z < 0.0) sp.xz = -sp.zx;
                 if (sp.y + sp.z < 0.0) sp.yz = -sp.zy;
+                sp.xy *= rot(u_genWarp * 0.06 * sin(u_time * 0.4 + float(i)));
                 sp = sp * sc - vec3(sc - 1.0);
+                n += 1.0;
             }
-            return (length(sp) - 2.0) * pow(sc, -8.0) / 0.55;`,
+            return (length(sp) - 2.0) * pow(sc, -n) / zoom;`,
     },
     {
         key: 'SOLAR CORONA', group: 'FORMS', fog: [0.12, 0.06, 0.01],
         glsl: `
             p.z -= u_time * u_genSpeed * 6.0;
             p.xy *= rot(u_time * 0.12 + ABnd * u_genWarp * 0.25);
-            float numLines = 10.0 + u_genDensity * 8.0;
-            float seg = 6.28318 / numLines;
-            float fAng = mod(atan(p.y, p.x) + seg * 0.5, seg) - seg * 0.5;
+            float numLines = floor(8.0 + u_genDensity * 6.0 + u_genIter * 8.0);
             float r = length(p.xy);
-            float potential = r - (1.5 + sin(fAng * 3.0 + u_time * 0.5) * 0.4 * u_genWarp
+            // cos(angle * n) is continuous all the way round (the old sector fold broke the field at seams).
+            float potential = r - (1.5 + cos(atan(p.y, p.x) * numLines + u_time * 0.5) * 0.12 * u_genWarp
                                 + fbm3(p * 0.3 + u_time * 0.06) * 0.5 * u_genWarp);
             float fieldLine = abs(potential) - (0.035 + ABnd * 0.13 * u_genWarp);
             float eruptR = r - (1.65 + cos(p.z * 1.1 + u_time * 0.9) * ABnd * 0.7 * u_genWarp);
@@ -158,27 +165,22 @@ const GEN_DEFS = [
             float b1 = abs(length(q1 / 1.6) - (0.4 + ABnd * 0.1 * u_genWarp)) - wall;
             vec3 q2 = mod(p * 0.9 + 0.55, 1.0) - 0.5;
             float b2 = abs(length(q2 / 0.9) - (0.38 + ABnd * 0.08 * u_genWarp)) - wall;
-            return min(b1, b2);`,
+            return min(b1, mix(b1 + 1.0, b2, u_genIter * 2.0));`,
     },
     {
         key: 'FLOW FIELD', group: 'FIELDS', fog: [0.02, 0.02, 0.08],
         glsl: `
             p.z -= u_time * u_genSpeed * 6.0;
-            // Forward differences: 4 noise lookups instead of 6.
-            float eps = 0.1;
-            float n0 = snoise3(p);
-            float nx = snoise3(p + vec3(eps, 0.0, 0.0)) - n0;
-            float ny = snoise3(p + vec3(0.0, eps, 0.0)) - n0;
-            float nz = snoise3(p + vec3(0.0, 0.0, eps)) - n0;
-            vec3 curl = vec3(nz - ny, nx - nz, ny - nx) / eps * u_genWarp * 0.12;
-            vec3 qf = p + curl * sin(p.z * 0.5 + u_time) * 0.3;
-            qf.xy = mod(qf.xy + 1.5, 3.0) - 1.5;
-            float flowR = (0.038 + ABnd * 0.09 * u_genWarp) * u_genDensity;
-            float tube1 = length(qf.xy) - flowR;
-            vec3 qf2 = p * 1.618 + curl * cos(p.z * 0.7 + u_time * 1.3) * 0.2;
-            qf2.xy = mod(qf2.xy + 1.0, 2.0) - 1.0;
-            float tube2 = length(qf2.xy) - flowR * 0.65;
-            return min(tube1, tube2);`,
+            // Streamlines bent by a smooth analytic swirl (a noise curl cost 4x more
+            // and barely moved them). DETAIL = how far they bend.
+            float bend = u_genWarp * (0.3 + u_genIter * 1.2);
+            vec2 sw = vec2(sin(p.z * 0.35 + p.y * 0.25 + u_time * 0.7), cos(p.z * 0.3 + p.x * 0.25 - u_time * 0.5)) * bend;
+            vec2 q1 = mod(p.xy + sw + 1.5, 3.0) - 1.5;
+            float flowR = (0.05 + ABnd * 0.09 * u_genWarp) * u_genDensity;
+            float tube1 = length(q1) - flowR;
+            vec2 q2 = mod((p.xy - sw * 0.7) * 1.618 + 1.0, 2.0) - 1.0;
+            float tube2 = (length(q2) - flowR * 0.65 * 1.618) / 1.618;
+            return min(tube1, tube2) * 0.8;`,
     },
     {
         key: 'WAVE COLLAPSE', group: 'FIELDS', fog: [0.05, 0.01, 0.08],
@@ -190,7 +192,7 @@ const GEN_DEFS = [
             float w1 = sin(p.x * f1 + u_time * 1.2) * sin(p.y * f1 + u_time * 0.8);
             float w2 = sin((p.x * 0.866 + p.y * 0.5) * f2 + u_time * 0.95) * sin(p.z * f2 * 0.4);
             float w3 = sin((p.x * 0.5 - p.y * 0.866) * f3 + u_time * 1.1 + ABnd * u_genWarp * 2.0);
-            float surface = abs((w1 + w2 + w3) / 3.0) - (0.09 + ABnd * 0.18 * u_genWarp);
+            float surface = abs((w1 + w2 + w3 * u_genIter * 2.0) / (2.0 + u_genIter * 2.0)) - (0.09 + ABnd * 0.18 * u_genWarp);
             float nodal = abs(sin(length(p.xy) * f1 * 0.8 - u_time * u_genSpeed)) - 0.045;
             return min(surface, nodal) * 0.5;`,
     },
@@ -204,7 +206,7 @@ const GEN_DEFS = [
             float g1 = sin(gp.x) * cos(gp.y) + sin(gp.y) * cos(gp.z) + sin(gp.z) * cos(gp.x);
             float g2 = sin(gp.x * 2.0) * cos(gp.y * 2.0) + sin(gp.y * 2.0) * cos(gp.z * 2.0) + sin(gp.z * 2.0) * cos(gp.x * 2.0);
             float wall = (0.07 + ABnd * 0.18 * u_genWarp) * u_genDensity;
-            return abs(g1 + g2 * 0.28) / (freq * 1.8) - wall / freq;`,
+            return abs(g1 + g2 * 0.56 * u_genIter) / (freq * 1.8) - wall / freq;`,
     },
 ];
 
@@ -230,7 +232,8 @@ float snoise3(vec3 p) {
 }
 float fbm3(vec3 p) {
     float v = 0.0, amp = 0.5;
-    for (int i = 0; i < 4; i++) { v += amp * snoise3(p); p = p * 2.02 + vec3(1.7, 9.2, 5.4); amp *= 0.5; }
+    float oct = 2.0 + u_genIter * 2.0;
+    for (int i = 0; i < 4; i++) { if (float(i) >= oct) break; v += amp * snoise3(p); p = p * 2.02 + vec3(1.7, 9.2, 5.4); amp *= 0.5; }
     return v;
 }
 // Sort components descending (x >= y >= z) — the Menger sponge fold.
@@ -300,8 +303,7 @@ void main() {
     vec3 col = u_fog * 0.3;
     if (colAccum >= 0.001) {
         col = mix(u_fog * 0.4, colorAccum, colAccum);
-        col.r *= 1.0 + u_genColor2 * 0.35;
-        col.b *= 1.0 + (1.0 - u_genColor2) * 0.35;
+        col = mix(vec3(dot(col, vec3(0.299, 0.587, 0.114))), col, u_genColor2 * 2.0);
         col += 0.18 * u_genWarp * vec3(1.0, 0.5, 0.15) * colAccum * u_transient;
     }
     gl_FragColor = vec4(clamp(col, 0.0, 1.0) * u_level, 1.0);

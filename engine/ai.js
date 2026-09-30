@@ -56,6 +56,7 @@ class HumanEngine {
 
     async start(video) {
         if (this.state === 'on' || this.state === 'loading') return;
+        const token = this._token = (this._token || 0) + 1;
         this.state = 'loading'; this.error = '';
         try {
             await loadScript(HUMAN_URL);
@@ -74,20 +75,23 @@ class HumanEngine {
                 await human.warmup();
                 this.human = human; // only cache an instance that loaded fully, so RETRY really retries
             }
+            if (token !== this._token) return; // switched off while loading
             this._apply();
             this.video = video;
             this.state = 'on';
             this._loop();
         } catch (e) {
+            if (token !== this._token) return;
             this.state = 'error';
-            this.error = (e && e.message) || 'AI failed to load';
+            this.error = 'Couldn\'t download the AI models — check the connection, then RETRY';
             console.error('[HumanEngine]', e);
         }
     }
 
     stop() {
+        this._token = (this._token || 0) + 1; // cancels a load in progress
         clearTimeout(this._timer);
-        this.state = this.human ? 'off' : 'off';
+        this.state = 'off';
         this.reset();
     }
 
@@ -178,6 +182,7 @@ class HumanEngine {
         }
         this.gesture = (r.gesture || []).map(g => g.gesture).filter((g, i, a) => a.indexOf(g) === i).slice(0, 3).join(' · ');
         this.raw = raw;
+        this.seq = (this.seq || 0) + 1;
     }
 }
 
@@ -199,16 +204,17 @@ class MaskEngine {
         try {
             await loadScript(`${SELFIE_BASE}/selfie_segmentation.js`);
             if (!this._model) {
-                this._model = new window.SelfieSegmentation({ locateFile: (f) => `${SELFIE_BASE}/${f}` });
-                this._model.setOptions({ modelSelection: 1, selfieMode: false });
-                this._model.onResults((res) => this._onResults(res));
+                const model = new window.SelfieSegmentation({ locateFile: (f) => `${SELFIE_BASE}/${f}` });
+                model.setOptions({ modelSelection: 1, selfieMode: false });
+                model.onResults((res) => this._onResults(res));
                 const warm = document.createElement('canvas'); warm.width = warm.height = 64;
-                await this._model.send({ image: warm });
+                await model.send({ image: warm });
+                this._model = model; // keep only a model that warmed up, so RETRY really retries
             }
             this.state = 'on';
         } catch (e) {
             this.state = 'error';
-            this.error = (e && e.message) || 'Cut-out model failed to load';
+            this.error = "Couldn't download the cut-out model — check the connection, then try again";
             console.error('[MaskEngine]', e);
         }
     }

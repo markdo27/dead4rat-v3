@@ -155,11 +155,11 @@ function encodeLook(look) {
 
 function decodeLook(str) {
     try {
-        let b64 = str.replace(/-/g, '+').replace(/_/g, '/');
+        let b64 = str.trim().replace(/ /g, '+').replace(/-/g, '+').replace(/_/g, '/');
         while (b64.length % 4) b64 += '=';
-        let json;
-        try { json = decodeURIComponent(escape(atob(b64))); }
-        catch (e) { json = decodeURIComponent(atob(b64)); } // v1 links: btoa(encodeURIComponent(json))
+        const raw = atob(b64);
+        // v1 links were btoa(encodeURIComponent(json)) → starts with '%'; v2 is UTF-8 bytes.
+        const json = raw.startsWith('%') ? decodeURIComponent(raw) : decodeURIComponent(escape(raw));
         const d = JSON.parse(json);
         if (d.v === 2) {
             const look = { fx: {}, gen: {}, mod: { rate: d.r?.[0], depth: d.r?.[1] } };
@@ -218,7 +218,7 @@ function migrateLegacy(g, genMode, genParams) {
         x: val('videoFeedback', 'moveX', 0), y: val('videoFeedback', 'moveY', 0),
         hue: on('videoFeedback') ? val('videoFeedback', 'hueShift', 2) : 0,
         key: val('videoFeedback', 'lumaThresh', 1),
-        spread: on('chromaDelay') ? Math.min(0.05, Math.abs(val('chromaDelay', 'scaleR', 1.01) - val('chromaDelay', 'scaleB', 0.99))) : 0,
+        spread: on('chromaDelay') ? Math.min(0.05, Math.abs(val('chromaDelay', 'scaleR', 1.01) - val('chromaDelay', 'scaleB', 0.99)) / 8) : 0,
         blend: blend('videoFeedback'),
     }, on('videoFeedback') ? 'videoFeedback' : 'chromaDelay');
     set('melt', on('acidMelt'), { amount: val('acidMelt', 'amount', 0.9), gravity: val('acidMelt', 'gravity', 0.01), turbulence: val('acidMelt', 'turbulence', 0.05), blend: blend('acidMelt') }, 'acidMelt');
@@ -254,7 +254,7 @@ function migrateLegacy(g, genMode, genParams) {
         : { bands: val('splitScan', 'bands', 8), shift: val('splitScan', 'shift', 50), speed: 2, order: 1, warp: val('splitScan', 'warp', 0.3) },
         on('glitchSlicer') ? 'glitchSlicer' : 'splitScan');
     set('thermal', on('thermalVision'), { intensity: val('thermalVision', 'intensity', 1), bias: val('thermalVision', 'bias', 0), blend: blend('thermalVision') }, 'thermalVision');
-    set('strobe', on('stroboscope'), { rate: Math.min(20, val('stroboscope', 'rate', 4)), hold: Math.max(0.05, Math.min(0.95, 1 - val('stroboscope', 'hold', 0.5))) }, 'stroboscope');
+    set('strobe', false, { rate: Math.min(20, val('stroboscope', 'rate', 4)), hold: Math.max(0.05, Math.min(0.95, 1 - val('stroboscope', 'hold', 0.5))) }, 'stroboscope');
     for (const k of Object.keys(F)) delete F[k].touched;
 
     const mode = GEN_ALIASES[genMode] || genMode;

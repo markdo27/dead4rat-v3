@@ -34,7 +34,7 @@ class BlobTracker {
 
     get count() { return this.blobs.filter(b => b.fresh).length; }
 
-    reset() { this.blobs = []; this._prev = null; }
+    reset() { this.blobs = []; this._prev = null; this.seq = (this.seq || 0) + 1; }
 
     // source: <video> or <canvas>; drawFn optionally draws the source (for cover/mirror)
     process(drawFn) {
@@ -71,6 +71,7 @@ class BlobTracker {
         }
         found.sort((a, b) => b.area - a.area);
         this._merge(found.slice(0, this.maxBlobs));
+        this.seq = (this.seq || 0) + 1;
     }
 
     _merge(found) {
@@ -126,7 +127,7 @@ class TrackingOverlay {
     }
 
     // toPx(nx, ny) maps source-normalised coords → overlay pixels.
-    draw({ blobs, blobToPx, human, humanToPx }) {
+    draw({ blobs, blobToPx, human, humanToPx, persist = 45 }) {
         const ctx = this.ctx, W = this.canvas.width, H = this.canvas.height;
         ctx.clearRect(0, 0, W, H);
         ctx.lineJoin = 'miter';
@@ -136,7 +137,7 @@ class TrackingOverlay {
             blobs.forEach((b, i) => {
                 const [ax, ay] = blobToPx(b.x0, b.y0), [bx, by] = blobToPx(b.x1, b.y1);
                 const x = Math.min(ax, bx), y = Math.min(ay, by), w = Math.abs(bx - ax), h = Math.abs(by - ay);
-                const a = Math.max(0, b.ttl) / 45 * (i === 0 ? 1 : 0.65);
+                const a = Math.min(1, Math.max(0, b.ttl) / persist) * (i === 0 ? 1 : 0.65);
                 ctx.strokeStyle = `rgba(255,${i === 0 ? 85 : 136},0,${a})`;
                 ctx.lineWidth = i === 0 ? 2.5 : 1.25;
                 ctx.strokeRect(x, y, w, h);

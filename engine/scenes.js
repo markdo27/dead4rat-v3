@@ -31,7 +31,7 @@ class SceneBank {
         try {
             const data = JSON.parse(read(KEY) || 'null');
             if (Array.isArray(data)) data.slice(0, SLOTS).forEach((s, i) => {
-                if (s && s.look) this.slots[i] = { name: String(s.name || `SCENE ${i + 1}`).slice(0, 18), look: normalizeLook(s.look), at: s.at || 0 };
+                if (s && s.look) this.slots[i] = { name: String(s.name || `SCENE ${i + 1}`).slice(0, 18), look: normalizeLook(s.look), at: s.at || 0, custom: !!s.custom };
             });
         } catch (e) { /* corrupt storage: start empty */ }
         this._importLegacy();
@@ -56,14 +56,20 @@ class SceneBank {
         this.saveError = !store(KEY, JSON.stringify(this.slots));
     }
 
-    set(i, look, name) {
-        this.slots[i] = { name: (name || `SCENE ${i + 1}`).toUpperCase().slice(0, 18), look: clone(look), at: Date.now() };
+    // custom = the name was typed by the user (kept when the slot is overwritten)
+    set(i, look, name, custom = false) {
+        this.slots[i] = { name: (name || `SCENE ${i + 1}`).toUpperCase().slice(0, 18), look: clone(look), at: Date.now(), custom };
         this._save();
     }
+
+    restore(i, slot) { this.slots[i] = slot; this._save(); }
+
+    get filled() { return this.slots.filter(Boolean).length; }
 
     rename(i, name) {
         if (!this.slots[i]) return;
         this.slots[i].name = String(name).toUpperCase().slice(0, 18);
+        this.slots[i].custom = true;
         this._save();
     }
 

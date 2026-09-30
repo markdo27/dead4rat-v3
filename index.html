@@ -10,10 +10,9 @@
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <!-- Only the first two families are used by the interface; the rest are
-         offered for text layers and download only when a layer uses them.
-         Loaded non-blocking (media=print swap) so a slow font server never delays the page. -->
-    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=VT323&family=Rubik+Glitch&family=Space+Mono&family=Bungee&family=Roboto+Mono&family=Inter:wght@400;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+    <!-- Interface fonts only, loaded without blocking the page (text-layer
+         fonts are fetched by engine/media.js when a layer picks one). -->
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=VT323&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <noscript><link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=VT323&display=swap" rel="stylesheet"></noscript>
     <link rel="stylesheet" href="style.css?v=4">
 

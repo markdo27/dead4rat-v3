@@ -124,7 +124,8 @@ const FX_DEFS = [
         glsl: `{
             vec2 m = uv;
             float lineY = floor(uv.y * u_disp.y * 0.5);
-            float tear = step(1.0 - u_vhs_tear * 0.1, rand(vec2(lineY, floor(u_time * 15.0))));
+            float band = floor(uv.y * u_disp.y / 12.0);
+            float tear = step(1.0 - u_vhs_tear * 0.35, rand(vec2(band, floor(u_time * 15.0))));
             m.x += tear * (rand(vec2(u_time, lineY)) - 0.5) * u_vhs_horizontal * 0.02;
             m.y += sin(u_time * 0.7) * u_vhs_vertical * 0.003;
             m.x += (rand(vec2(u_time * 7.0, lineY)) - 0.5) * u_vhs_horizontal * 0.003;
@@ -206,7 +207,7 @@ const FX_DEFS = [
 
     // ── COLOR ─────────────────────────────────────────────────────────────
     {
-        key: 'rgbsplit', name: 'RGB SPLIT', cat: 'COLOR', stage: 'color',
+        key: 'rgbsplit', name: 'RGB SPLIT', cat: 'COLOR', stage: 'color', taps: true,
         desc: 'Pull the red and blue channels apart; WOBBLE adds noisy chroma drift',
         params: [
             { k: 'amount', label: 'AMOUNT', min: 0, max: 50, step: 0.5, def: 6 },
@@ -232,8 +233,8 @@ const FX_DEFS = [
         desc: 'Hue rotate, saturation, contrast and a monochrome tint',
         params: [
             { k: 'hue', label: 'HUE', min: 0, max: 360, step: 1, def: 0 },
-            { k: 'saturation', label: 'SATURATION', min: 0, max: 3, step: 0.01, def: 1 },
-            { k: 'contrast', label: 'CONTRAST', min: 0, max: 2, step: 0.01, def: 1 },
+            { k: 'saturation', label: 'SATURATION', min: 0, max: 3, step: 0.01, def: 1.4 },
+            { k: 'contrast', label: 'CONTRAST', min: 0, max: 2, step: 0.01, def: 1.15 },
             { k: 'tint', label: 'TINT HUE', min: 0, max: 360, step: 1, def: 200 },
             { k: 'tintAmt', label: 'TINT', min: 0, max: 1, step: 0.01, def: 0 },
             blendParam,
@@ -288,7 +289,7 @@ const FX_DEFS = [
 
     // ── TEXTURE ───────────────────────────────────────────────────────────
     {
-        key: 'halftone', name: 'HALFTONE', cat: 'TEXTURE', stage: 'color',
+        key: 'halftone', name: 'HALFTONE', cat: 'TEXTURE', stage: 'color', taps: true,
         desc: 'Image rebuilt from a grid of dots sized by brightness',
         params: [
             { k: 'cell', label: 'CELL', min: 3, max: 40, step: 1, def: 10 },
@@ -304,16 +305,16 @@ const FX_DEFS = [
             vec3 s = img(cc / u_disp);
             float r = cs * 0.5 * u_halftone_size * mix(1.0, luma(s) * 1.4, u_halftone_depth);
             float m = 1.0 - smoothstep(r - 1.0, r, length(px - cc));
-            vec3 e = mix(c * 0.08, s, m);
+            vec3 e = mix(c * 0.25, s, m);
             FX_MIX(halftone)
         }`,
     },
     {
-        key: 'pixelsort', name: 'PIXEL SORT', cat: 'TEXTURE', stage: 'color',
+        key: 'pixelsort', name: 'PIXEL SORT', cat: 'TEXTURE', stage: 'color', taps: true,
         desc: 'Bright pixels smear into streaks; SCATTER sprays them like particles',
         params: [
             { k: 'threshold', label: 'THRESHOLD', min: 0, max: 1, step: 0.01, def: 0.5 },
-            { k: 'length', label: 'LENGTH', min: 0, max: 1, step: 0.01, def: 0.4 },
+            { k: 'length', label: 'LENGTH', min: 0, max: 1, step: 0.01, def: 0.6 },
             { k: 'angle', label: 'ANGLE', min: 0, max: 360, step: 1, def: 0 },
             { k: 'scatter', label: 'SCATTER', min: 0, max: 1, step: 0.01, def: 0 },
             blendParam,
@@ -321,20 +322,23 @@ const FX_DEFS = [
         audio: { p: 'threshold', op: 'sub', k: 0.5 },
         glsl: `{
             float th = u_pixelsort_threshold;
-            float l = luma(c);
-            float k = smoothstep(th, th + 0.08, l);
             float h = rand(floor(uv * u_disp * 0.5));
             float a = radians(u_pixelsort_angle) + (h - 0.5) * 3.14159 * u_pixelsort_scatter;
             float len = u_pixelsort_length * 0.25 * mix(1.0, fract(u_time * 0.3 + h), u_pixelsort_scatter);
             vec2 dir = vec2(cos(a), sin(a) * u_aspect) * len;
+            // Look back along the streak: any pixel brighter than THRESHOLD is dragged forward, fading with distance.
             vec3 acc = c;
-            for (int i = 1; i <= 6; i++) acc = max(acc, img(uv - dir * (float(i) / 6.0)));
-            vec3 e = mix(c, acc, k);
+            for (int i = 1; i <= 6; i++) {
+                float t = float(i) / 6.0;
+                vec3 s = img(uv - dir * t);
+                acc = max(acc, s * smoothstep(th, th + 0.06, luma(s)) * (1.0 - t * 0.5));
+            }
+            vec3 e = acc;
             FX_MIX(pixelsort)
         }`,
     },
     {
-        key: 'edges', name: 'EDGES', cat: 'TEXTURE', stage: 'color',
+        key: 'edges', name: 'EDGES', cat: 'TEXTURE', stage: 'color', taps: true,
         desc: 'Sobel outline — mono, coloured or inverted',
         params: [
             { k: 'threshold', label: 'THRESHOLD', min: 1, max: 255, step: 1, def: 50 },
@@ -446,9 +450,9 @@ const GESTURE_DEFS = [
         float dist = length(d);
         float horizon = 0.08 + u_pinch * 0.12;
         if (dist < horizon) puv = u_palm + (puv - u_palm) * (1.0 - (1.0 - dist / horizon) * u_pinch * 0.5);
-        else puv -= normalize(d) * u_pinch * 0.0075 / (dist * dist + 0.01);
+        else puv -= normalize(d) * u_pinch * 0.0075 / (dist * dist + 0.01) * (1.0 - smoothstep(0.3, 0.6, dist));
       }` },
-    { key: 'freeze', name: 'FREEZE', kind: 'overlay', desc: 'Radial motion blur pulled toward the palm',
+    { key: 'freeze', name: 'FREEZE', kind: 'pre', desc: 'Radial motion blur pulled toward the palm',
       glsl: `{
         vec2 d = uv - u_palm; d.x *= u_aspect;
         float f = pow(max(0.0, 1.0 - smoothstep(0.0, 0.15 + u_pinch * 0.25, length(d))), 1.5) * u_pinch;
@@ -481,14 +485,16 @@ const GESTURE_DEFS = [
         vec3 col = 0.5 + 0.5 * sin(u_time * 3.0 + vec3(0.0, 2.09, 4.19));
         c = mix(c, col, p * f * u_pinch * 1.05);
       }` },
-    { key: 'theremin', name: 'THEREMIN', kind: 'overlay', desc: 'Two hands: interference grid whose pitch follows hand distance',
+    { key: 'theremin', name: 'THEREMIN', kind: 'overlay', desc: 'Two hands: interference rings around your hand whose pitch follows the distance between hands',
       glsl: `{
         if (u_span > 0.05) {
+            vec2 d = uv - u_palm; d.x *= u_aspect;
+            float dist = length(d);
             float fr = 10.0 + u_span * 60.0;
-            float pt = (sin((uv.x + uv.y) * fr + u_time * 3.0) + sin((uv.x - uv.y) * fr * 0.7 - u_time * 2.3)
-                      + sin(length(uv - 0.5) * fr * 1.3 + u_time * 1.7)) / 3.0;
+            float pt = (sin((d.x + d.y) * fr + u_time * 3.0) + sin((d.x - d.y) * fr * 0.7 - u_time * 2.3)
+                      + sin(dist * fr * 1.3 - u_time * 1.7)) / 3.0;
             vec3 col = 0.5 + 0.5 * sin(pt * 3.14 + vec3(0.0, 2.09, 4.19));
-            c = mix(c, col, u_span * 0.5 * abs(pt));
+            c = mix(c, col, u_span * 0.6 * abs(pt) * (1.0 - smoothstep(0.1, 0.25 + u_span * 0.6, dist)));
         }
       }` },
 ];

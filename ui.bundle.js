@@ -191,8 +191,11 @@ function LiveMeter({
 }) {
   const bar = React.useRef(null);
   const txt = React.useRef(null);
+  const last = React.useRef(-1);
   useFrame(d => {
-    const v = Math.max(0, Math.min(1, read(d) || 0));
+    const v = Math.round(Math.max(0, Math.min(1, read(d) || 0)) * 200) / 200;
+    if (v === last.current) return;
+    last.current = v;
     if (bar.current) bar.current.style.transform = `scaleX(${v})`;
     if (txt.current) txt.current.textContent = Math.round(v * 100);
   }, every);
@@ -350,8 +353,8 @@ function FxRow({
 }) {
   const deck = useDeck();
   const s = deck.look.fx[def.key];
-  const [open, setOpen] = React.useState(false);
-  const expanded = s.on || open;
+  const [open, setOpen] = React.useState(null);
+  const expanded = open === null ? s.on : open;
   const bandLive = React.useRef(null);
   useFrame(d => {
     if (!bandLive.current) return;
@@ -486,12 +489,22 @@ function Spectrum() {
     ctx.clearRect(0, 0, W, H);
     const data = d.audio.spectrum();
     if (!data) return;
-    const n = 96;
-    const bw = W / n;
+    const n = 96,
+      bw = W / n,
+      bins = data.length;
+    const hzPerBin = d.audio.sampleRate / 2 / bins;
+    const lo = Math.log(30),
+      hi = Math.log(d.audio.sampleRate / 2);
+    let prevEnd = 1;
     for (let i = 0; i < n; i++) {
-      const idx = Math.min(data.length - 1, Math.floor(Math.pow(data.length, i / n)));
-      const v = data[idx] / 255;
-      ctx.fillStyle = i < n * 0.3 ? '#FF5500' : i < n * 0.75 ? '#FF9900' : '#FFDD00';
+      const f1 = Math.exp(lo + (hi - lo) * (i + 1) / n);
+      const end = Math.max(prevEnd + 1, Math.min(bins, Math.round(f1 / hzPerBin)));
+      let v = 0;
+      for (let b = prevEnd; b < end; b++) if (data[b] > v) v = data[b];
+      const fMid = (prevEnd + end) / 2 * hzPerBin;
+      prevEnd = end;
+      v /= 255;
+      ctx.fillStyle = fMid < 250 ? '#FF5500' : fMid < 4000 ? '#FF9900' : '#FFDD00';
       ctx.fillRect(i * bw, H - v * H, Math.max(1, bw - 1), v * H);
     }
   }, 2);
@@ -711,7 +724,7 @@ function AiPanel() {
     read: d => d.gesture.present ? d.gesture.pinch : 0
   }), React.createElement(LiveText, {
     className: "hint",
-    read: d => !d.gesture.on ? 'Switch on to start.' : d.gesture.present ? `Tracking via ${d.gesture.via}. Pinch (or move more) to push harder; two hands drive THEREMIN.` : 'Waiting for a hand or movement…'
+    read: d => !d.gesture.on ? 'Switch on to start.' : d.gesture.present ? `Tracking via ${d.gesture.via}. Pinch (or move more) to push harder; two hands drive THEREMIN.` : d.gesture.source === 'HAND' && d.human.state !== 'on' ? 'HAND needs AI TRACKING (below) switched on.' : 'Waiting for a hand or movement…'
   })), React.createElement(Section, {
     title: "AI TRACKING",
     right: React.createElement(Switch, {
@@ -764,7 +777,7 @@ function AiPanel() {
       onChange: () => deck.toggleIsolate(),
       label: deck.isolate && deck.mask.state === 'loading' ? 'LOADING' : deck.isolate ? 'ON' : 'OFF'
     }),
-    hint: "Removes the background behind you. With a generator running you appear inside the scene."
+    hint: "Removes the background behind you (first use downloads about 6 MB). With a generator running you appear inside the scene."
   }), React.createElement(Section, {
     title: "MOTION BLOBS",
     right: React.createElement(Switch, {
@@ -971,9 +984,12 @@ function MediaPanel() {
     onClick: () => up({
       x: 0.5,
       y: 0.5,
-      scale: l.type === 'text' ? 0.12 : 0.5,
+      scale: l.type === 'text' ? 0.12 : Math.min(0.5, 0.8 * deck.renderer.disp.w / deck.renderer.disp.h / (l.aspect || 1)),
       rotation: 0,
-      opacity: 1
+      opacity: 1,
+      ...(l.type === 'video' ? {
+        speed: 1
+      } : {})
     })
   }, "CENTRE & RESET"))));
 }
@@ -1081,9 +1097,10 @@ function OutputPanel() {
       m.forget();
       deck.emit();
     }
-  }, "FORGET (", Object.keys(m.map).length, ")"), React.createElement("span", {
-    className: "readout"
-  }, m.last))));
+  }, "FORGET (", Object.keys(m.map).length, ")"), React.createElement(LiveText, {
+    className: "readout",
+    read: d => d.midi.last
+  }))));
 }
 Object.assign(window, {
   GenPanel,
@@ -1096,7 +1113,7 @@ Object.assign(window, {
 
 // ── ui/app.jsx ──
 const TABS = [['gen', 'SCENE', GenPanel], ['fx', 'FX', FxPanel], ['audio', 'AUDIO', AudioPanel], ['ai', 'TRACK', AiPanel], ['media', 'MEDIA', MediaPanel], ['out', 'OUTPUT', OutputPanel]];
-const SHORTCUTS = [['1 – 8', 'Fire scene (morph)'], ['Shift + 1 – 8', 'Save current look to a scene'], ['R', 'Random look'], ['A', 'Autopilot on / off'], ['G / Shift + G', 'Next / previous generator'], ['H', 'Hide / show all controls'], ['D', 'Hide / show the side panel'], ['F', 'Fullscreen'], ['P', 'Snapshot (PNG)'], ['V', 'Record video'], ['?', 'This help'], ['Esc', 'Close overlays']];
+const SHORTCUTS = [['1 – 8', 'Fire scene (morph)'], ['Shift + 1 – 8', 'Save / overwrite a scene with the current look'], ['R', 'Random look'], ['A', 'Autopilot on / off'], ['G / Shift + G', 'Next / previous generator'], ['H', 'Hide / show all controls'], ['D', 'Hide / show the side panel'], ['F', 'Fullscreen'], ['P', 'Snapshot (PNG)'], ['V', 'Record video'], ['?', 'This help'], ['Esc', 'Close overlays']];
 function Boot({
   onStart
 }) {
@@ -1184,11 +1201,13 @@ function Hud({
   const lvlRef = React.useRef(null);
   const recRef = React.useRef(null);
   useFrame(d => {
+    if (lvlRef.current) lvlRef.current.style.transform = `scaleX(${d.audio.running ? Math.max(d.audio.level.BASS, d.audio.level.MID) : 0})`;
+  }, 3);
+  useFrame(d => {
     if (fpsRef.current) {
       fpsRef.current.textContent = `${d.fps} FPS · ${Math.round(d.renderScale * 100)}%`;
       fpsRef.current.dataset.health = d.fps >= 50 ? 'good' : d.fps >= 28 ? 'ok' : 'bad';
     }
-    if (lvlRef.current) lvlRef.current.style.transform = `scaleX(${d.audio.running ? Math.max(d.audio.level.BASS, d.audio.level.MID) : 0})`;
     if (recRef.current && d.recording) {
       const s = Math.floor((performance.now() - d._recStart) / 1000);
       recRef.current.textContent = `● REC ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
@@ -1300,6 +1319,7 @@ function SceneBar() {
   const deck = useDeck();
   const slots = deck.scenes.slots;
   const [editing, setEditing] = React.useState(-1);
+  const cancelRename = React.useRef(false);
   const morphS = deck.morphMs / 1000;
   return React.createElement("footer", {
     className: "scenebar",
@@ -1314,19 +1334,24 @@ function SceneBar() {
     autoFocus: true,
     defaultValue: s.name,
     maxLength: 18,
+    "aria-label": `Name for scene ${i + 1}`,
+    onFocus: () => {
+      cancelRename.current = false;
+    },
     onBlur: e => {
-      deck.renameScene(i, e.target.value || s.name);
+      if (!cancelRename.current) deck.renameScene(i, e.target.value || s.name);
       setEditing(-1);
     },
     onKeyDown: e => {
+      e.stopPropagation();
+      if (e.key === 'Escape') cancelRename.current = true;
       if (e.key === 'Enter' || e.key === 'Escape') e.target.blur();
     }
   }) : React.createElement("button", {
     type: "button",
     className: "slot-main",
-    onClick: e => e.shiftKey ? deck.storeScene(i, s.name) : deck.fireScene(i),
-    onDoubleClick: () => setEditing(i),
-    title: `Scene ${i + 1}: ${s.name} — click to morph, Shift+click to overwrite, double-click to rename`
+    onClick: e => e.shiftKey ? deck.storeScene(i) : deck.fireScene(i),
+    title: `Scene ${i + 1}: ${s.name} — click to morph, Shift+click to overwrite with the current look`
   }, React.createElement("span", {
     className: "slot-n"
   }, i + 1), React.createElement("span", {
@@ -1340,13 +1365,21 @@ function SceneBar() {
     className: "slot-n"
   }, i + 1), React.createElement("span", {
     className: "slot-name"
-  }, "+ SAVE")), s && editing !== i && React.createElement("button", {
+  }, "+ SAVE")), s && editing !== i && React.createElement("span", {
+    className: "slot-tools"
+  }, React.createElement("button", {
     type: "button",
-    className: "slot-x",
+    className: "slot-tool",
+    "aria-label": `Rename scene ${i + 1}`,
+    title: "Rename",
+    onClick: () => setEditing(i)
+  }, "\u270E"), React.createElement("button", {
+    type: "button",
+    className: "slot-tool",
     "aria-label": `Clear scene ${i + 1}`,
-    title: "Clear",
+    title: "Clear (can be undone)",
     onClick: () => deck.clearScene(i)
-  }, "\u2715")))), React.createElement("div", {
+  }, "\u2715"))))), React.createElement("div", {
     className: "scene-tools"
   }, React.createElement("label", {
     className: "morph",
@@ -1384,6 +1417,12 @@ function SceneBar() {
 function Help({
   onClose
 }) {
+  const close = React.useRef(null);
+  React.useEffect(() => {
+    const prev = document.activeElement;
+    close.current && close.current.focus();
+    return () => prev && prev.focus && prev.focus();
+  }, []);
   return React.createElement("div", {
     className: "modal",
     role: "dialog",
@@ -1401,7 +1440,10 @@ function Help({
     key: k
   }, React.createElement("dt", null, React.createElement("kbd", null, k)), React.createElement("dd", null, v)))), React.createElement("p", {
     className: "hint"
-  }, "Scenes: the bar at the bottom holds 8 saved looks. Click an empty slot to save, a full one to morph to it. AUTO steps through them."), React.createElement(Btn, {
+  }, "Scenes: the bar at the bottom holds 8 saved looks. Click an empty slot to save, a full one to morph to it, Shift+click to overwrite. Hover a slot for rename \u270E and clear \u2715. AUTO steps through them."), React.createElement("button", {
+    type: "button",
+    ref: close,
+    className: "btn",
     onClick: onClose
   }, "CLOSE")));
 }
@@ -1411,7 +1453,7 @@ function Toast() {
   React.useEffect(() => {
     if (!deck.toast) return;
     setShown(deck.toast);
-    const id = setTimeout(() => setShown(null), deck.toast.kind === 'warn' ? 4500 : 2500);
+    const id = setTimeout(() => setShown(null), deck.toast.action ? 6000 : deck.toast.kind === 'warn' ? 4500 : 2500);
     return () => clearTimeout(id);
   }, [deck.toast && deck.toast.id]);
   if (!shown) return null;
@@ -1419,7 +1461,14 @@ function Toast() {
     className: cx('toast', shown.kind),
     role: "status",
     "aria-live": "polite"
-  }, shown.msg);
+  }, shown.msg, shown.action && React.createElement("button", {
+    type: "button",
+    className: "toast-act",
+    onClick: () => {
+      shown.action.run();
+      setShown(null);
+    }
+  }, shown.action.label));
 }
 function Sander({
   onClose
@@ -1452,6 +1501,23 @@ function App() {
     } catch (e) {}
   }, [tab]);
   React.useEffect(() => {
+    const apply = () => {
+      if (!started || hidden) {
+        deck.setInsets({});
+        return;
+      }
+      const phone = window.innerWidth <= 720;
+      deck.setInsets({
+        top: 40,
+        bottom: 58 + (phone && dockOpen ? Math.round(window.innerHeight * 0.46) : 0),
+        right: !phone && dockOpen ? 344 : 0
+      });
+    };
+    apply();
+    window.addEventListener('resize', apply);
+    return () => window.removeEventListener('resize', apply);
+  }, [started, hidden, dockOpen]);
+  React.useEffect(() => {
     deck.setPaused(sander);
   }, [sander]);
   React.useEffect(() => {
@@ -1475,7 +1541,7 @@ function App() {
   }, [hidden]);
   React.useEffect(() => {
     const onMsg = e => {
-      if (e.data && (e.data.type === 'CHLADNI_CLOSE' || e.data.type === 'SANDER_CLOSE')) setSander(false);
+      if (e.origin === location.origin && e.data && (e.data.type === 'CHLADNI_CLOSE' || e.data.type === 'SANDER_CLOSE')) setSander(false);
     };
     window.addEventListener('message', onMsg);
     return () => window.removeEventListener('message', onMsg);
@@ -1489,7 +1555,8 @@ function App() {
         setHidden(false);
         return;
       }
-      if (!started || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (!started || e.metaKey || e.ctrlKey || e.altKey || e.repeat) return;
+      if (help && e.key !== '?' && e.key !== '/') return;
       if (tag === 'input' && e.target.type !== 'range' && e.target.type !== 'checkbox') return;
       if (tag === 'textarea' || tag === 'select') return;
       const digit = e.code && e.code.startsWith('Digit') ? parseInt(e.code.slice(5), 10) : NaN;
@@ -1534,7 +1601,7 @@ function App() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [started, deck]);
+  }, [started, deck, help]);
   const start = async opts => {
     await deck.start(opts);
     setStarted(true);
