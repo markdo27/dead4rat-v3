@@ -116,6 +116,10 @@ class Deck {
         if (mic && !demo && !(await this.audio.startMic())) warnings.push(this.audio.error);
         if (this.sharedLinkBroken) warnings.push('That shared link could not be read — starting fresh');
         if (warnings.length) this.notify(warnings.join(' · '), 'warn');
+        else if (this.scenes.imported) {
+            this.notify(`${this.scenes.imported} presets from the old version are in the scene bar` +
+                (this.scenes.importedStrobe ? ' (STROBE starts switched off — turn it on in FX)' : ''));
+        }
         if (this.sharedLook) {
             this._applyLook(this.sharedLook);
             this.sharedLook = null;
@@ -137,7 +141,7 @@ class Deck {
         this.emit();
     }
 
-    setPaused(p) { this.paused = p; this.emit(); }
+    setPaused(p) { this.paused = p; this.human.paused = p; this.emit(); }
 
     // ── Look editing ───────────────────────────────────────────────────────
     _edit() { if (this.morph) this._finishMorph(); this.activeScene = -1; }
@@ -225,11 +229,15 @@ class Deck {
         this.emit();
     }
 
+    // Effects and LFO back to factory settings; the generator is left alone.
     reset() {
+        if (this.morph) this._finishMorph();
+        const before = clone(this.look), scene = this.activeScene;
         const L = D.defaultLook();
-        L.gen.mode = this.look.gen.mode;
+        L.gen = clone(this.look.gen);
         this.activeScene = -1;
         this._startMorph(L, 400);
+        this.notify('Effects reset', 'info', { label: 'UNDO', run: () => { this.activeScene = scene; this._startMorph(before, 400); this.emit(); } });
         this.emit();
     }
 
@@ -298,7 +306,8 @@ class Deck {
             const a = m.from.fx[d.key], b = m.to.fx[d.key], s = L.fx[d.key];
             s.on = a.on || b.on;
             for (const p of d.params) {
-                s.params[p.k] = p.opts ? (e < 0.5 ? a.params[p.k] : b.params[p.k]) : a.params[p.k] + (b.params[p.k] - a.params[p.k]) * e;
+                const v = p.opts ? (e < 0.5 ? a.params[p.k] : b.params[p.k]) : a.params[p.k] + (b.params[p.k] - a.params[p.k]) * e;
+                s.params[p.k] = p.step >= 1 ? Math.round(v) : v; // whole-number settings stay whole
             }
             s.lfo = e < 0.5 ? a.lfo : b.lfo;
             s.band = e < 0.5 ? a.band : b.band;
@@ -452,11 +461,12 @@ class Deck {
     removeLayer(id) { this.media.remove(id); this.emit(); }
 
     // ── Capture ────────────────────────────────────────────────────────────
-    _compose(src) {
+    _compose(src, w = src.width, h = src.height) {
         const out = document.createElement('canvas');
-        out.width = src.width; out.height = src.height;
+        out.width = w; out.height = h;
         const ctx = out.getContext('2d');
-        ctx.drawImage(src, 0, 0);
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(src, 0, 0, w, h);
         if (this.overlay.visible) ctx.drawImage(this.overlay.canvas, 0, 0, out.width, out.height);
         return out;
     }
@@ -465,11 +475,14 @@ class Deck {
         if (!this.started) return;
         if (this.paused) { this.notify('Close SANDER to take a snapshot', 'warn'); return; }
         this.renderer.snapshot((c) => {
-            const w = c.width, h = c.height, full = this.renderScale >= 1;
-            this._compose(c).toBlob((blob) => {
+            // Saved at the size it is shown; below full quality the frame is scaled up.
+            const { w, h } = this.renderer.disp;
+            const full = c.width >= w;
+            this._compose(c, full ? c.width : w, full ? c.height : h).toBlob((blob) => {
                 if (!blob) return;
                 download(blob, `dead4rat_${stamp()}.png`);
-                this.notify(full ? `Snapshot saved (${w}×${h})` : `Snapshot saved (${w}×${h}) — set QUALITY to HIGH for full size`);
+                this.notify(full ? `Snapshot saved (${c.width}×${c.height})`
+                    : `Snapshot saved (${w}×${h}, rendered at ${c.width}×${c.height}) — QUALITY HIGH gives full detail`);
             }, 'image/png');
         });
     }
@@ -698,6 +711,9 @@ class Deck {
                 level: this.genLevel,
             };
         }
+        // What the sliders actually resolve to this frame (LFO + audio), for the UI.
+        this.liveFx = fx;
+        this.liveGen = gen && gen.values;
         const g = this.gesture;
         return {
             time, fx, gen, camKey: L.gen.camKey,

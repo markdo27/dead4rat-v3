@@ -45,6 +45,8 @@ class SceneBank {
                 const i = this.slots.indexOf(null);
                 if (i < 0) break;
                 if (!p || !p.settings) continue;
+                this.imported = (this.imported || 0) + 1;
+                if (p.settings.stroboscope && p.settings.stroboscope.enabled) this.importedStrobe = true;
                 this.slots[i] = { name: String(p.name || 'PRESET').toUpperCase().slice(0, 18), look: migrateLegacy(p.settings, p.genMode, null), at: Date.parse(p.timestamp) || Date.now() };
             }
             this._save();

@@ -31,6 +31,7 @@ function GenPanel() {
                     <Param key={p.k} spec={p} value={g.params[p.k]} disabled={!on}
                         onChange={(v) => deck.setGenParam(p.k, v)}
                         lfo={g.lfo[p.k]} onLfo={() => deck.cycleLfo('gen', null, p.k)}
+                        live={(d) => d.liveGen ? d.liveGen[p.k] : undefined}
                         onArm={() => deck.armMidi({ t: 'gen', k: p.k })} />
                 ))}
                 <Param spec={{ label: 'CAMERA MIX', min: 0, max: 1, step: 0.01 }} value={g.camKey} disabled={!on}
@@ -42,11 +43,13 @@ function GenPanel() {
 }
 
 // ── EFFECTS ────────────────────────────────────────────────────────────────
-function FxRow({ def }) {
+// Only the effect you just switched on opens by itself (others stay compact);
+// clicking a name opens or closes that row for good.
+function FxRow({ def, focus, setFocus }) {
     const deck = useDeck();
     const s = deck.look.fx[def.key];
-    const [open, setOpen] = React.useState(null); // null = follow the switch
-    const expanded = open === null ? s.on : open;
+    const [open, setOpen] = React.useState(null); // null = open while it is the focused row
+    const expanded = open === null ? s.on && focus === def.key : open;
     const bandLive = React.useRef(null);
     useFrame((d) => {
         if (!bandLive.current) return;
@@ -56,7 +59,7 @@ function FxRow({ def }) {
     return (
         <div className={cx('fx', s.on && 'on')}>
             <div className="fx-head">
-                <Switch on={s.on} onChange={() => deck.toggleFx(def.key)} title={`${s.on ? 'Switch off' : 'Switch on'} ${def.name}`} />
+                <Switch on={s.on} onChange={() => { setFocus(s.on ? null : def.key); setOpen(null); deck.toggleFx(def.key); }} title={`${s.on ? 'Switch off' : 'Switch on'} ${def.name}`} />
                 <button type="button" className="fx-name" onClick={() => setOpen(!expanded)} title={def.desc} aria-expanded={expanded}>
                     {def.name}
                     <span ref={bandLive} className="fx-band-dot" style={{ background: s.band ? BAND_COLORS[s.band] : 'transparent' }} />
@@ -79,6 +82,7 @@ function FxRow({ def }) {
                         <Param key={p.k} spec={p} value={s.params[p.k]}
                             onChange={(v) => deck.setFxParam(def.key, p.k, v)}
                             lfo={s.lfo[p.k]} onLfo={() => deck.cycleLfo('fx', def.key, p.k)}
+                            live={(d) => { const it = d.liveFx && d.liveFx.find(x => x.key === def.key); return it ? it.values[p.k] : undefined; }}
                             onArm={() => deck.armMidi({ t: 'fx', key: def.key, k: p.k })} />
                     ))}
                     <div className="row-end"><Btn small kind="ghost" onClick={() => deck.resetFx(def.key)}>RESET</Btn></div>
@@ -92,12 +96,13 @@ function FxPanel() {
     const deck = useDeck();
     const { FX_DEFS, FX_CATS } = D4R;
     const active = FX_DEFS.filter(d => deck.look.fx[d.key].on);
+    const [focus, setFocus] = React.useState(null);
     return (
         <div className="panel-body">
             <div className="toolbar">
                 <span className="count">{active.length} ON</span>
                 <Btn small onClick={() => deck.randomize()} title="Morph to a random combination (R)">⚄ RANDOM</Btn>
-                <Btn small kind="ghost" onClick={() => deck.reset()} title="Back to factory settings">RESET ALL</Btn>
+                <Btn small kind="ghost" onClick={() => deck.reset()} title="All effects and the LFO back to factory settings (the generator is kept; can be undone)">RESET FX</Btn>
             </div>
             <Section title="LFO" hint="The ~ button beside a slider makes it wobble. These set the speed and range for all of them.">
                 <Param spec={{ label: 'RATE HZ', min: 0.1, max: 10, step: 0.1 }} value={deck.look.mod.rate} onChange={(v) => deck.setMod('rate', v)} />
@@ -105,7 +110,7 @@ function FxPanel() {
             </Section>
             {FX_CATS.map(cat => (
                 <Section key={cat} title={cat}>
-                    {FX_DEFS.filter(d => d.cat === cat).map(d => <FxRow key={d.key} def={d} />)}
+                    {FX_DEFS.filter(d => d.cat === cat).map(d => <FxRow key={d.key} def={d} focus={focus} setFocus={setFocus} />)}
                 </Section>
             ))}
         </div>
@@ -250,7 +255,7 @@ function AiPanel() {
                     <span className="param-label">FACE DRIVE</span>
                     <Switch on={deck.faceDrive} onChange={() => deck.toggleFaceDrive()} title="Head turn steers the generator camera; your expression tints its palette" />
                 </div>
-                {deck.faceDrive && deck.look.gen.mode === 'OFF' && <p className="hint warn">FACE DRIVE steers the generator — pick one in the SCENE tab.</p>}
+                {deck.faceDrive && deck.look.gen.mode === 'OFF' && <p className="hint warn">FACE DRIVE steers the generator — pick one in the GEN tab.</p>}
                 <div className="param param-opts">
                     <span className="param-label">OVERLAY</span>
                     <Switch on={deck.showOverlay} onChange={() => deck.toggleOverlay()} title="Draw tracking boxes and skeleton on screen" />

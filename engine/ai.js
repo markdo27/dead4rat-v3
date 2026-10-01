@@ -111,7 +111,7 @@ class HumanEngine {
         if (this.state !== 'on') return;
         const t0 = performance.now();
         const v = this.video;
-        if (v && v.readyState >= 2 && !document.hidden) {
+        if (v && v.readyState >= 2 && !document.hidden && !this.paused) { // paused: SANDER is open
             try {
                 this._parse(await this.human.detect(v), v.videoWidth || 640, v.videoHeight || 480);
             } catch (e) {

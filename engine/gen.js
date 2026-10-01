@@ -30,15 +30,16 @@ const GEN_DEFS = [
         key: 'GRID TUNNEL', group: 'TUNNELS', fog: [0.02, 0.04, 0.12],
         glsl: `
             p.z -= u_time * u_genSpeed * 5.0 + ABnd * 4.0 * u_genWarp;
+            // Low-frequency analytic swirl (4 noise lookups per step cost more and looked the same).
             vec3 warp = vec3(
-                snoise(vec2(p.y * 0.4 + u_time * 0.11, p.z * 0.4)),
-                snoise(vec2(p.z * 0.4 + u_time * 0.09, p.x * 0.4 + 5.3)),
-                snoise(vec2(p.x * 0.4 + u_time * 0.13, p.y * 0.4 + 11.7))) * u_genWarp * 0.65;
+                sin(p.y * 0.4 + p.z * 0.3 + u_time * 0.7),
+                sin(p.z * 0.4 + p.x * 0.3 - u_time * 0.55),
+                sin(p.x * 0.4 + p.y * 0.3 + u_time * 0.8)) * u_genWarp * 0.33;
             vec3 q = p + warp;
             q.xy *= rot(q.z * 0.07 * u_genWarp + ABnd * 0.4);
             q = mod(q + 2.0, 4.0) - 2.0;
-            float noiseR = snoise(vec2(p.x * 0.7 + u_time * 0.2, p.y * 0.7)) * 0.5 + 0.5;
-            float r = (0.045 + noiseR * 0.09 * u_genIter) * u_genDensity + ABnd * 0.18 * u_genWarp;
+            float noiseR = 0.5 + 0.5 * sin(p.x * 0.9 + u_time * 0.4) * sin(p.y * 0.8 - u_time * 0.3);
+            float r = (0.07 + noiseR * 0.09 * u_genIter) * u_genDensity + ABnd * 0.18 * u_genWarp;
             float bX = max(abs(q.y), abs(q.z)) - r;
             float bY = max(abs(q.x), abs(q.z)) - r;
             float bZ = max(abs(q.x), abs(q.y)) - r;
@@ -48,7 +49,11 @@ const GEN_DEFS = [
         key: 'BIO ABYSS', group: 'TUNNELS', fog: [0.0, 0.06, 0.04],
         glsl: `
             p.z -= u_time * u_genSpeed * 4.5;
-            float fbmD = fbm3(p * 0.45 + u_time * 0.07) * u_genWarp * 1.5;
+            // Wall wobble: 2D noise of (direction round the tunnel, depth) — a 3D fbm
+            // here cost ~36 hash calls per step for the same look.
+            vec2 dir = p.xy / max(length(p.xy), 0.001);
+            float fbmD = (snoise(dir * 1.3 + vec2(p.z * 0.45, u_time * 0.07))
+                        + snoise(dir * 2.6 + vec2(p.z * 0.9 + 3.1, -u_time * 0.05)) * 0.5 * u_genIter) * 0.6 * u_genWarp * 1.5;
             float detail = snoise(vec2(p.x * 2.0 + u_time * 0.2, p.y * 2.0)) * 0.56 * u_genIter * u_genWarp;
             float tunnelR = 2.1 + fbmD + ABnd * 0.9 * u_genWarp;
             float d = tunnelR - length(p.xy + vec2(detail));
@@ -85,6 +90,10 @@ const GEN_DEFS = [
             p.y += (snoise(vec2(p.z * 0.25 + u_time * 0.07, p.x * 0.15 + 7.1)) - 0.5) * u_genWarp * 1.6;
             float cell = 6.0 / max(0.3, u_genDensity);
             p = mod(p + cell * 0.5, cell) - cell * 0.5;
+            // Distance to the cell wall (+ margin): a step never jumps into the
+            // neighbouring cell, whose rotated cube this cell can't see.
+            vec3 cw = cell * 0.5 - abs(p);
+            float wall = min(cw.x, min(cw.y, cw.z)) + max(0.3, cell * 0.5 - 1.8);
             p.xy *= rot(u_time * 0.6 + ABnd * u_genWarp * 1.2);
             p.xz *= rot(u_time * 0.4 + u_transient * 0.8);
             vec3 qm = p; float msc = 1.0;
@@ -97,14 +106,17 @@ const GEN_DEFS = [
                 qm *= k;
                 msc *= k;
             }
-            return max(sdBox(qm / msc, vec3(1.0)), -sdBox(qm / msc, vec3(0.82 + u_transient * 0.12)));`,
+            return min(wall, max(sdBox(qm / msc, vec3(1.0)), -sdBox(qm / msc, vec3(0.82 + u_transient * 0.12))));`,
     },
     {
         key: 'MANDELBULB', group: 'FORMS', fog: [0.01, 0.02, 0.08],
         glsl: `
             p.xz *= rot(u_time * u_genSpeed * 0.25);
             p.yz *= rot(u_time * u_genSpeed * 0.15 + ABnd * u_genWarp * 0.4);
-            p *= 0.8;
+            // DENSITY = size (the field is rescaled back, so steps stay safe).
+            float bsc = 0.8 / max(0.3, u_genDensity);
+            p *= bsc;
+            p.xy *= rot(p.z * u_genWarp * 0.5);
             float power = 3.0 + u_genIter * 5.0 + ABnd * 2.0 * u_genWarp;
             vec3 mz = p; float dr = 1.0; float rr = 1.0;
             for (int i = 0; i < 7; i++) {
@@ -117,7 +129,7 @@ const GEN_DEFS = [
                 theta *= power; phi *= power;
                 mz = zr * vec3(sin(theta) * cos(phi), sin(theta) * sin(phi), cos(theta)) + p;
             }
-            return max(0.5 * log(max(rr, 1.0)) * rr / max(dr, 0.001), 0.001);`,
+            return max(0.5 * log(max(rr, 1.0)) * rr / max(dr, 0.001), 0.001) / bsc;`,
     },
     {
         key: 'SIERPINSKI', group: 'FORMS', fog: [0.08, 0.04, 0.0],
@@ -148,8 +160,12 @@ const GEN_DEFS = [
             float numLines = floor(8.0 + u_genDensity * 6.0 + u_genIter * 8.0);
             float r = length(p.xy);
             // cos(angle * n) is continuous all the way round (the old sector fold broke the field at seams).
-            float potential = r - (1.5 + cos(atan(p.y, p.x) * numLines + u_time * 0.5) * 0.12 * u_genWarp
-                                + fbm3(p * 0.3 + u_time * 0.06) * 0.5 * u_genWarp);
+            // Ripple amplitude shrinks as lines get denser and near the axis, so the
+            // field never changes faster than the marcher's step assumes.
+            vec2 dir = p.xy / max(r, 0.001);
+            float ripple = cos(atan(p.y, p.x) * numLines + u_time * 0.5) * (1.4 / numLines) * min(r, 1.0);
+            float flare = snoise(dir * 1.5 + vec2(p.z * 0.12, u_time * 0.06)) + snoise(dir * 3.0 + vec2(-p.z * 0.25, u_time * 0.1)) * 0.5;
+            float potential = (r - (1.5 + (ripple + flare * 0.33) * u_genWarp)) / (1.0 + 0.6 * u_genWarp);
             float fieldLine = abs(potential) - (0.035 + ABnd * 0.13 * u_genWarp);
             float eruptR = r - (1.65 + cos(p.z * 1.1 + u_time * 0.9) * ABnd * 0.7 * u_genWarp);
             float plume = abs(eruptR) - (0.05 + ABnd * 0.22);
@@ -162,7 +178,7 @@ const GEN_DEFS = [
             p.xy *= rot(u_time * 0.05 + ABnd * u_genWarp * 0.1);
             float wall = (0.02 + ABnd * 0.04 * u_genWarp) * u_genDensity;
             vec3 q1 = mod(p * 1.6 + 0.5, 1.0) - 0.5;
-            float b1 = abs(length(q1 / 1.6) - (0.4 + ABnd * 0.1 * u_genWarp)) - wall;
+            float b1 = abs(length(q1 / 1.6) - (0.27 + ABnd * 0.04 * u_genWarp)) - wall;
             vec3 q2 = mod(p * 0.9 + 0.55, 1.0) - 0.5;
             float b2 = abs(length(q2 / 0.9) - (0.38 + ABnd * 0.08 * u_genWarp)) - wall;
             return min(b1, mix(b1 + 1.0, b2, u_genIter * 2.0));`,
@@ -176,11 +192,11 @@ const GEN_DEFS = [
             float bend = u_genWarp * (0.3 + u_genIter * 1.2);
             vec2 sw = vec2(sin(p.z * 0.35 + p.y * 0.25 + u_time * 0.7), cos(p.z * 0.3 + p.x * 0.25 - u_time * 0.5)) * bend;
             vec2 q1 = mod(p.xy + sw + 1.5, 3.0) - 1.5;
-            float flowR = (0.05 + ABnd * 0.09 * u_genWarp) * u_genDensity;
+            float flowR = (0.08 + ABnd * 0.09 * u_genWarp) * u_genDensity;
             float tube1 = length(q1) - flowR;
             vec2 q2 = mod((p.xy - sw * 0.7) * 1.618 + 1.0, 2.0) - 1.0;
             float tube2 = (length(q2) - flowR * 0.65 * 1.618) / 1.618;
-            return min(tube1, tube2) * 0.8;`,
+            return min(tube1, tube2);`,
     },
     {
         key: 'WAVE COLLAPSE', group: 'FIELDS', fog: [0.05, 0.01, 0.08],
@@ -227,15 +243,6 @@ float sdCapsule(vec3 p, vec3 a, vec3 b, float r) {
     return length(pa - ba * h) - r;
 }
 float smin(float a, float b, float k) { float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0); return mix(b, a, h) - k * h * (1.0 - h); }
-float snoise3(vec3 p) {
-    return snoise(vec2(p.x + p.z * 0.47, p.y)) * 0.55 + snoise(vec2(p.x, p.z + p.y * 0.31)) * 0.30 + snoise(vec2(p.y + p.x * 0.59, p.z)) * 0.15;
-}
-float fbm3(vec3 p) {
-    float v = 0.0, amp = 0.5;
-    float oct = 2.0 + u_genIter * 2.0;
-    for (int i = 0; i < 4; i++) { if (float(i) >= oct) break; v += amp * snoise3(p); p = p * 2.02 + vec3(1.7, 9.2, 5.4); amp *= 0.5; }
-    return v;
-}
 // Sort components descending (x >= y >= z) — the Menger sponge fold.
 vec3 mengerSort(vec3 q) {
     float t;
@@ -282,7 +289,7 @@ void main() {
     for (int i = 0; i < MAX_STEPS; i++) {
         vec3 pos = ro + rd * t;
         float d = mapGen(pos);
-        if (d < 0.015) {
+        if (d < 0.015 + t * 0.0015) {   // far pixels cover more space: looser hit test
             float depthFog = 1.0 - clamp(t / MAX_DIST, 0.0, 1.0);
             depthFog *= depthFog;
             float tVal = fract(t * 0.18 + length(pos.xy) * 0.14 + u_time * 0.04 + u_genColor1);
@@ -294,11 +301,15 @@ void main() {
             colorAccum += contrib * mix(albedo * light, u_fog, 1.0 - depthFog * 0.8);
             d = 0.015;
         } else {
-            d = max(d * (d > 0.08 ? 1.25 : 1.0), 0.004);
+            d = max(d * (d > 0.08 ? 1.25 : 1.0), 0.004 + t * 0.002);
         }
         t += d;
-        if (t > MAX_DIST || colAccum > 1.8) break;
+        if (t > MAX_DIST || colAccum > 1.2) break;
     }
+    // Stopping once the pixel is opaque saves ~10 steps per hit pixel. The
+    // samples we skip sit just behind the surface and would add the same
+    // colour, so scale up to the brightness a typical full run reached.
+    if (colAccum > 1.2) colorAccum *= 1.5 / colAccum;
     colAccum = clamp(colAccum, 0.0, 1.0);
     vec3 col = u_fog * 0.3;
     if (colAccum >= 0.001) {
