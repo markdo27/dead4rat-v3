@@ -218,16 +218,18 @@ function LiveMeter({
 }
 function LiveText({
   read,
-  every = 10,
-  className
+  className,
+  ms = 150
 }) {
   const ref = React.useRef(null);
+  const last = React.useRef(0);
   useFrame(d => {
-    if (ref.current) {
-      const s = read(d);
-      if (ref.current.textContent !== s) ref.current.textContent = s;
-    }
-  }, every);
+    const now = performance.now();
+    if (!ref.current || now - last.current < ms) return;
+    last.current = now;
+    const s = read(d);
+    if (ref.current.textContent !== s) ref.current.textContent = s;
+  });
   return React.createElement("span", {
     ref: ref,
     className: className
@@ -761,7 +763,9 @@ function AiPanel() {
     on: deck.faceDrive,
     onChange: () => deck.toggleFaceDrive(),
     title: "Head turn steers the generator camera; your expression tints its palette"
-  })), React.createElement("div", {
+  })), deck.faceDrive && deck.look.gen.mode === 'OFF' && React.createElement("p", {
+    className: "hint warn"
+  }, "FACE DRIVE steers the generator \u2014 pick one in the SCENE tab."), React.createElement("div", {
     className: "param param-opts"
   }, React.createElement("span", {
     className: "param-label"

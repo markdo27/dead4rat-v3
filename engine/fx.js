@@ -472,9 +472,9 @@ const GESTURE_DEFS = [
         float dist = length(d);
         float gr = 0.08 + u_pinch * 0.35;
         vec3 col = hue2rgb(fract(u_time * 0.1 + u_pinch * 0.5));
-        c += col * exp(-dist * dist / (gr * gr * 0.5)) * (0.4 + u_pinch * 1.2);
+        c += col * exp(-dist * dist / (gr * gr * 0.5)) * (0.4 + u_pinch * 1.2) * u_gfade;
         float ring = smoothstep(gr - 0.02, gr, dist) * smoothstep(gr + 0.04, gr, dist);
-        c += col * ring * (0.5 + 0.5 * sin(u_time * 8.0)) * u_pinch;
+        c += col * ring * (0.5 + 0.5 * sin(u_time * 8.0)) * u_pinch * u_gfade;
       }` },
     { key: 'pulse', name: 'PULSE', kind: 'overlay', desc: 'Rings pulse outward from the palm',
       glsl: `{
@@ -483,7 +483,7 @@ const GESTURE_DEFS = [
         float p = sin(dist * (8.0 + u_pinch * 12.0) - u_time * 8.0) * 0.5 + 0.5;
         float f = 1.0 - smoothstep(0.0, 0.1 + u_pinch * 0.3, dist);
         vec3 col = 0.5 + 0.5 * sin(u_time * 3.0 + vec3(0.0, 2.09, 4.19));
-        c = mix(c, col, p * f * u_pinch * 1.05);
+        c = mix(c, col, p * f * u_pinch * 1.05 * u_gfade);
       }` },
     { key: 'theremin', name: 'THEREMIN', kind: 'overlay', desc: 'Two hands: interference rings around your hand whose pitch follows the distance between hands',
       glsl: `{
@@ -494,7 +494,7 @@ const GESTURE_DEFS = [
             float pt = (sin((d.x + d.y) * fr + u_time * 3.0) + sin((d.x - d.y) * fr * 0.7 - u_time * 2.3)
                       + sin(dist * fr * 1.3 - u_time * 1.7)) / 3.0;
             vec3 col = 0.5 + 0.5 * sin(pt * 3.14 + vec3(0.0, 2.09, 4.19));
-            c = mix(c, col, u_span * 0.6 * abs(pt) * (1.0 - smoothstep(0.1, 0.25 + u_span * 0.6, dist)));
+            c = mix(c, col, u_span * 0.6 * abs(pt) * (1.0 - smoothstep(0.1, 0.25 + u_span * 0.6, dist)) * u_gfade);
         }
       }` },
 ];

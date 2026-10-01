@@ -250,6 +250,7 @@ function AiPanel() {
                     <span className="param-label">FACE DRIVE</span>
                     <Switch on={deck.faceDrive} onChange={() => deck.toggleFaceDrive()} title="Head turn steers the generator camera; your expression tints its palette" />
                 </div>
+                {deck.faceDrive && deck.look.gen.mode === 'OFF' && <p className="hint warn">FACE DRIVE steers the generator — pick one in the SCENE tab.</p>}
                 <div className="param param-opts">
                     <span className="param-label">OVERLAY</span>
                     <Switch on={deck.showOverlay} onChange={() => deck.toggleOverlay()} title="Draw tracking boxes and skeleton on screen" />

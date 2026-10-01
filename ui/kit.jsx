@@ -147,9 +147,17 @@ function LiveMeter({ read, color = 'var(--accent)', label, every = 1 }) {
 }
 
 // Text that updates live (e.g. fps); read(deck) → string
-function LiveText({ read, every = 10, className }) {
+// Text that updates live; refreshed about every 150 ms whatever the frame rate.
+function LiveText({ read, className, ms = 150 }) {
     const ref = React.useRef(null);
-    useFrame((d) => { if (ref.current) { const s = read(d); if (ref.current.textContent !== s) ref.current.textContent = s; } }, every);
+    const last = React.useRef(0);
+    useFrame((d) => {
+        const now = performance.now();
+        if (!ref.current || now - last.current < ms) return;
+        last.current = now;
+        const s = read(d);
+        if (ref.current.textContent !== s) ref.current.textContent = s;
+    });
     return <span ref={ref} className={className} />;
 }
 

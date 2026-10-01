@@ -563,7 +563,8 @@ class Deck {
     // ── Frame loop ─────────────────────────────────────────────────────────
     _loop(t) {
         requestAnimationFrame(this._loop);
-        const dt = Math.min(250, t - (this._lastT || t));
+        this._rawDt = t - (this._lastT || t);
+        const dt = Math.min(250, this._rawDt);
         this._lastT = t;
         if (this.paused || !this.renderer.ok) return;
 
@@ -604,8 +605,11 @@ class Deck {
         }
 
         const handReady = this.human.state === 'on' && this.human.modules.hands;
-        this.blobs.enabled = this.blobTrack || (this.gesture.on && this.gesture.source !== 'HAND' && !(handReady && this.human.hands > 0));
-        if (!cam.ready && !this.media.active && this.blobs.blobs.length) this.blobs.reset();
+        const g0 = this.gesture;
+        this.blobs.enabled = this.blobTrack || (g0.on && (g0.source === 'MOTION' || (g0.source === 'AUTO' && !(handReady && this.human.hands > 0))));
+        if (fresh || this.media.active) this._lastFresh = t;
+        const stalled = !this.media.active && (!cam.ready || t - (this._lastFresh || t) > 1500);
+        if (stalled && this.blobs.blobs.length) this.blobs.reset();
         if (this.blobs.enabled && (fresh || this.media.active)) {
             this.blobs.process((ctx, W, H) => {
                 if (this.media.active) ctx.drawImage(this.media.canvas, 0, 0, W, H);
@@ -652,7 +656,9 @@ class Deck {
         const pinched = g.pinch > 0.7;
         if (pinched && !g._pinched) g.shockT = 0.001;
         g._pinched = pinched;
-        if (g.shockT > 0) { g.shockT += dt / 1000; if (g.shockT >= 1) g.shockT = 0; }
+        if (g.shockT > 0) { g.shockT += (this._rawDt || dt) / 1000; if (g.shockT >= 1) g.shockT = 0; }
+        // Glow-type gestures fade out over ~0.3 s instead of vanishing when the hand is lost.
+        g.fade = Math.max(0, Math.min(1, (g.fade || 0) + (g.present ? 1 : -1) * dt / 300));
     }
 
     _frame(t, camMap, maskOn) {
@@ -695,8 +701,8 @@ class Deck {
         const g = this.gesture;
         return {
             time, fx, gen, camKey: L.gen.camKey,
-            gestures: g.on && g.present ? g.fx : [],
-            palm: g.palm, pinch: g.pinch, span: g.span, shockT: g.shockT,
+            gestures: g.on && (g.present || g.fade > 0.01) ? g.fx : [],
+            palm: g.palm, pinch: g.pinch, span: g.span, shockT: g.shockT, gfade: g.fade || 0,
             cam: camMap, mask: maskOn,
             maskMap: maskOn ? this.camera.mapping(this.renderer.disp.w, this.renderer.disp.h) : null,
             transform: { flipH: this.view.flipH, flipV: this.view.flipV, rotation: this.view.rotation },
