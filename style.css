@@ -82,7 +82,7 @@ a { color: var(--accent-2); }
 .seg-btn:hover { color: #fff; }
 .seg-btn.on { background: var(--accent); color: #000; }
 .seg-sm { margin: 0; flex: 1; }
-.seg-sm .seg-btn { min-height: 24px; font-size: 10px; }
+.seg-sm .seg-btn { min-height: 24px; font-size: 11px; }
 
 .switch { display: inline-flex; align-items: center; gap: 7px; background: none; border: 0; padding: 2px 0; color: var(--dim); letter-spacing: 0.06em; }
 .switch-track { width: 30px; height: 16px; border: 1px solid var(--line-hi); background: #000; position: relative; flex: none; transition: background-color 0.12s, border-color 0.12s; }
@@ -113,6 +113,9 @@ a { color: var(--accent-2); }
 .slider:disabled { opacity: 0.35; }
 
 .param { display: grid; grid-template-columns: 86px 1fr 44px 24px; align-items: center; gap: 6px; min-height: 26px; }
+.slider-wrap { position: relative; display: block; min-width: 0; }
+/* Where LFO / audio has pushed the value right now. */
+.param-live { position: absolute; top: 4px; bottom: 4px; width: 2px; margin-left: -1px; background: var(--ok); pointer-events: none; opacity: 0.85; }
 .param.disabled { opacity: 0.45; }
 .param-opts { grid-template-columns: 86px 1fr auto; margin: 3px 0; }
 .param-label { color: var(--dim); font-size: 10.5px; letter-spacing: 0.06em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -152,7 +155,7 @@ a { color: var(--accent-2); }
 
 /* ── Audio band picker ───────────────────────────────────────────────────── */
 .bands { display: inline-flex; align-items: center; gap: 2px; }
-.bands-label { color: var(--muted); font-size: 10px; margin-right: 4px; letter-spacing: 0.08em; }
+.bands-label { color: var(--muted); font-size: 11px; margin-right: 4px; letter-spacing: 0.08em; }
 .band {
     width: 22px; height: 22px; padding: 0; background: transparent; border: 1px solid var(--line); color: var(--muted);
     font-size: 10.5px;
@@ -182,6 +185,9 @@ button.hud-chip:hover { border-color: var(--line-hi); color: #fff; }
 .hud-chip[data-health="ok"] { color: var(--warn); }
 .hud-chip[data-health="bad"] { color: var(--rec); }
 .hud-level { width: 28px; height: 4px; background: #1f1812; overflow: hidden; }
+.hud-dots { display: none; gap: 4px; align-items: center; }
+.hud-dots i { width: 7px; height: 7px; border: 1px solid var(--muted); display: block; }
+.hud-dots i.on { background: var(--accent-2); border-color: var(--accent-2); }
 .hud-level > span { display: block; height: 100%; background: var(--accent); transform-origin: left; transform: scaleX(0); }
 
 /* ── Dock ────────────────────────────────────────────────────────────────── */
@@ -201,7 +207,7 @@ button.hud-chip:hover { border-color: var(--line-hi); color: #fff; }
 
 /* Generator tiles */
 .gen-group { margin-top: 8px; }
-.gen-group-name { color: var(--muted); font-size: 10px; letter-spacing: 0.16em; margin-bottom: 4px; }
+.gen-group-name { color: var(--muted); font-size: 11px; letter-spacing: 0.16em; margin-bottom: 4px; }
 .gen-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
 .gen-tile {
     min-height: 32px; padding: 4px 8px; text-align: left; font-size: 11px; letter-spacing: 0.04em;
@@ -250,16 +256,24 @@ button.hud-chip:hover { border-color: var(--line-hi); color: #fff; }
 .slot.full { border-color: var(--line-hi); background: var(--panel-2); }
 .slot.on { border-color: var(--accent); box-shadow: inset 0 -3px 0 var(--accent); }
 .slot-main { width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; gap: 2px; padding: 3px 8px; background: none; border: 0; text-align: left; min-width: 0; }
-.slot-n { font-size: 10px; color: var(--muted); }
+.slot-n { font-size: 11px; color: var(--muted); }
 .slot.full .slot-n, .slot.on .slot-n { color: var(--accent); }
 .slot-name { font-size: 11px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .slot.full .slot-name { color: var(--text); }
 .slot-main:hover .slot-name { color: #fff; }
-.slot-tools { position: absolute; top: 1px; right: 1px; display: flex; }
-.slot-tool { width: 20px; height: 20px; padding: 0; background: none; border: 0; color: var(--muted); font-size: 10px; opacity: 0.35; }
-.slot:hover .slot-tool, .slot-tool:focus-visible { opacity: 1; }
-.slot-tool:hover { color: var(--accent-3); }
-.slot-tool:last-child:hover { color: var(--rec); }
+/* ⋯ sits in the top-right corner only, so the middle of a slot always fires it. */
+.slot-more {
+    position: absolute; top: 0; right: 0; width: 22px; height: 22px; padding: 0;
+    background: none; border: 0; color: var(--muted); font-size: 13px; line-height: 1; opacity: 0.6;
+}
+.slot:hover .slot-more, .slot-more:focus-visible { opacity: 1; }
+.slot-more:hover { color: var(--accent-3); }
+/* Slot options replace the slot row while open, so every button is full size. */
+.slot-bar { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; }
+.slot-bar-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font-size: 11px; }
+.slot-bar-name b { color: var(--accent); margin-right: 4px; }
+.slot-bar .btn { flex: none; }
+.slot-bar .danger:hover, .slot-bar .danger:focus-visible { border-color: var(--rec); color: var(--rec); }
 .toast-act { margin-left: 12px; background: none; border: 1px solid currentColor; color: var(--accent-3); padding: 2px 8px; font-size: 11px; letter-spacing: 0.08em; }
 .slot-rename { width: 100%; height: 100%; background: #000; border: 0; color: #fff; padding: 0 8px; }
 .scene-tools { display: flex; align-items: center; gap: 6px; flex: none; }
@@ -317,6 +331,9 @@ body.idle .unhide { opacity: 0; }
     .hud-right .btn-sm { padding: 3px 7px; }
     .hud-left .hud-chip { display: none; }
     .hud-left .hud-chip.rec { display: inline-flex; }
+    .hud-dots { display: inline-flex; }
+    .sb-txt { display: none; }
+    .scenebar:has(.slot-bar) .scene-tools { display: none; }
     .hud-right { flex: 1; justify-content: flex-end; }
     .hud-opt, .hud-txt { display: none; }
     .scenebar { gap: 6px; }
@@ -326,6 +343,19 @@ body.idle .unhide { opacity: 0; }
     .scene-tools .select { display: none; }
     .brand { font-size: 52px; }
     .param { grid-template-columns: 76px 1fr 40px 24px; }
+}
+
+/* ── Touch screens: bigger targets ───────────────────────────────────────── */
+@media (pointer: coarse) {
+    .btn-sm, .select, .select.sm, .chip, .seg-btn, .seg-sm .seg-btn { min-height: 34px; }
+    .hud .btn-sm { min-height: 32px; min-width: 34px; }
+    .lfo { width: 32px; height: 30px; }
+    .param { grid-template-columns: 80px 1fr 40px 32px; min-height: 34px; }
+    .slider { height: 30px; }
+    .switch { padding: 6px 0; }
+    .slot-more { width: 28px; height: 28px; opacity: 1; }
+    .slot-bar .btn { min-width: 40px; }
+    .tab { min-height: 42px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

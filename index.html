@@ -14,7 +14,7 @@
          fonts are fetched by engine/media.js when a layer picks one). -->
     <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=VT323&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <noscript><link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=VT323&display=swap" rel="stylesheet"></noscript>
-    <link rel="stylesheet" href="style.css?v=4">
+    <link rel="stylesheet" href="style.css?v=87eb0cee">
 
     <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin></script>
@@ -26,17 +26,17 @@
 
     <!-- Engine: plain scripts, no build step. The AI libraries are NOT loaded
          here — engine/ai.js fetches them the first time tracking is switched on. -->
-    <script src="engine/fx.js?v=4"></script>
-    <script src="engine/gen.js?v=4"></script>
-    <script src="engine/state.js?v=4"></script>
-    <script src="engine/renderer.js?v=4"></script>
-    <script src="engine/audio.js?v=4"></script>
-    <script src="engine/camera.js?v=4"></script>
-    <script src="engine/media.js?v=4"></script>
-    <script src="engine/tracking.js?v=4"></script>
-    <script src="engine/ai.js?v=4"></script>
-    <script src="engine/scenes.js?v=4"></script>
-    <script src="engine/deck.js?v=4"></script>
+    <script src="engine/fx.js?v=5831ef3f"></script>
+    <script src="engine/gen.js?v=69107b40"></script>
+    <script src="engine/state.js?v=ffd25d13"></script>
+    <script src="engine/renderer.js?v=bf4a6f6b"></script>
+    <script src="engine/audio.js?v=5f63c0f1"></script>
+    <script src="engine/camera.js?v=93438f36"></script>
+    <script src="engine/media.js?v=d50266c0"></script>
+    <script src="engine/tracking.js?v=4f5ce202"></script>
+    <script src="engine/ai.js?v=b073f379"></script>
+    <script src="engine/scenes.js?v=ce324d4d"></script>
+    <script src="engine/deck.js?v=66d00fa8"></script>
 
     <!-- UI: ui.bundle.js is ui/*.jsx precompiled by `npm run build`.
          Add ?dev to the URL (or delete the bundle) to compile ui/*.jsx in the
@@ -56,7 +56,7 @@
         }
         if (/[?&]dev\b/.test(location.search)) return dev();
         var s = document.createElement('script');
-        s.src = 'ui.bundle.js?v=4';
+        s.src = 'ui.bundle.js?v=b050e8e4';
         s.onerror = dev;
         document.body.appendChild(s);
     })();
