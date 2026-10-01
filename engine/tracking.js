@@ -32,7 +32,7 @@ class BlobTracker {
         this._queue = new Int32Array(n);
     }
 
-    get count() { return this.blobs.filter(b => b.fresh).length; }
+    get count() { return this.blobs.filter(b => b.ttl > this.persist - 10).length; }
 
     reset() { this.blobs = []; this._prev = null; this.seq = (this.seq || 0) + 1; }
 
@@ -71,10 +71,10 @@ class BlobTracker {
         }
         found.sort((a, b) => b.area - a.area);
         this._merge(found.slice(0, this.maxBlobs));
-        this.seq = (this.seq || 0) + 1;
     }
 
     _merge(found) {
+        if (found.length || this.blobs.length) this.seq = (this.seq || 0) + 1; // nothing moved and nothing shown: no redraw
         for (const b of this.blobs) { b.ttl--; b.fresh = false; }
         for (const f of found) {
             const fx = (f.x0 + f.x1) / 2, fy = (f.y0 + f.y1) / 2;
@@ -114,7 +114,10 @@ class TrackingOverlay {
 
     place(disp) {
         const c = this.canvas;
-        if (c.width !== disp.w || c.height !== disp.h) { c.width = disp.w; c.height = disp.h; }
+        const dpr = Math.min(2, window.devicePixelRatio || 1);
+        const w = Math.round(disp.w * dpr), h = Math.round(disp.h * dpr);
+        if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+        this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0); // draw in CSS pixels, sharp on HiDPI
         c.style.left = disp.left + 'px'; c.style.top = disp.top + 'px';
         c.style.width = disp.w + 'px'; c.style.height = disp.h + 'px';
     }
@@ -129,7 +132,7 @@ class TrackingOverlay {
     // toPx(nx, ny) maps source-normalised coords → overlay pixels.
     draw({ blobs, blobToPx, human, humanToPx, persist = 45 }) {
         const ctx = this.ctx, W = this.canvas.width, H = this.canvas.height;
-        ctx.clearRect(0, 0, W, H);
+        ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, W, H); ctx.restore();
         ctx.lineJoin = 'miter';
         const mono = '"Share Tech Mono", monospace';
 

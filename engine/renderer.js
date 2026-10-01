@@ -45,7 +45,7 @@ uniform vec2 u_camScale, u_camOffset, u_maskScale, u_maskOffset;
 uniform float u_camOn, u_camKey, u_genOn;
 uniform float u_flipH, u_flipV, u_rotation;
 uniform vec2 u_palm;
-uniform float u_pinch, u_span, u_shockT;
+uniform float u_pinch, u_span, u_shockT, u_gfade;
 ${GLSL_COMMON}
 vec2 fboUV(vec2 uv) { return vec2(uv.x, 1.0 - uv.y); }
 vec2 viewUV(vec2 uv) {
@@ -605,6 +605,7 @@ class Renderer {
         this._u1(B, 'u_pinch', f.pinch);
         this._u1(B, 'u_span', f.span);
         this._u1(B, 'u_shockT', f.shockT);
+        this._u1(B, 'u_gfade', f.gfade);
         this._draw(B);
 
         if (out) {
@@ -618,6 +619,7 @@ class Renderer {
             this._u2(C, 'u_palm', f.palm[0], f.palm[1]);
             this._u1(C, 'u_pinch', f.pinch);
             this._u1(C, 'u_span', f.span);
+            this._u1(C, 'u_gfade', f.gfade);
             this._draw(C);
             this._outIndex ^= 1;
             this._prevValid = true;
