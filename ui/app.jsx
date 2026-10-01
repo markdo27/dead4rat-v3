@@ -56,7 +56,7 @@ function Boot({ onStart }) {
     );
 }
 
-function Hud({ dockOpen, setDockOpen, setHidden, setHelp, setSander }) {
+function Hud({ dockOpen, setDockOpen, setHidden, setHelp, setSander, openTab }) {
     const deck = useDeck();
     const fpsRef = React.useRef(null);
     const lvlRef = React.useRef(null);
@@ -81,10 +81,10 @@ function Hud({ dockOpen, setDockOpen, setHidden, setHelp, setSander }) {
                 <span className="hud-brand">D4R</span>
                 <span ref={fpsRef} className="hud-chip" title={`Frames per second · render resolution (quality: ${deck.view.quality})`} />
                 <button type="button" className={cx('hud-chip', deck.camera.on && 'live')} onClick={() => deck.toggleCamera()} title="Camera on/off">CAM {deck.camera.on ? 'ON' : 'OFF'}</button>
-                <span className={cx('hud-chip', a.running && 'live')} title="Audio input">
+                <button type="button" className={cx('hud-chip', a.running && 'live')} title="Audio input — open the AUDIO tab" onClick={() => openTab('audio')}>
                     {a.kind === 'off' ? 'AUDIO OFF' : a.kind === 'mic' ? 'MIC' : 'FILE'}
                     <span className="hud-level"><span ref={lvlRef} /></span>
-                </span>
+                </button>
                 {deck.demo && <span className="hud-chip dim">DEMO</span>}
                 {deck.recording && <span ref={recRef} className="hud-chip rec">● REC</span>}
             </div>
@@ -292,7 +292,7 @@ function App() {
             {!started && <Boot onStart={start} />}
             {started && !hidden && (
                 <React.Fragment>
-                    <Hud dockOpen={dockOpen} setDockOpen={setDockOpen} setHidden={setHidden} setHelp={setHelp} setSander={setSander} />
+                    <Hud dockOpen={dockOpen} setDockOpen={setDockOpen} setHidden={setHidden} setHelp={setHelp} setSander={setSander} openTab={(t) => { setTab(t); setDockOpen(true); }} />
                     {dockOpen && <Dock tab={tab} setTab={setTab} />}
                     <SceneBar />
                 </React.Fragment>

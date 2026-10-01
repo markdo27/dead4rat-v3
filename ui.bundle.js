@@ -1194,7 +1194,8 @@ function Hud({
   setDockOpen,
   setHidden,
   setHelp,
-  setSander
+  setSander,
+  openTab
 }) {
   const deck = useDeck();
   const fpsRef = React.useRef(null);
@@ -1229,9 +1230,11 @@ function Hud({
     className: cx('hud-chip', deck.camera.on && 'live'),
     onClick: () => deck.toggleCamera(),
     title: "Camera on/off"
-  }, "CAM ", deck.camera.on ? 'ON' : 'OFF'), React.createElement("span", {
+  }, "CAM ", deck.camera.on ? 'ON' : 'OFF'), React.createElement("button", {
+    type: "button",
     className: cx('hud-chip', a.running && 'live'),
-    title: "Audio input"
+    title: "Audio input \u2014 open the AUDIO tab",
+    onClick: () => openTab('audio')
   }, a.kind === 'off' ? 'AUDIO OFF' : a.kind === 'mic' ? 'MIC' : 'FILE', React.createElement("span", {
     className: "hud-level"
   }, React.createElement("span", {
@@ -1613,7 +1616,11 @@ function App() {
     setDockOpen: setDockOpen,
     setHidden: setHidden,
     setHelp: setHelp,
-    setSander: setSander
+    setSander: setSander,
+    openTab: t => {
+      setTab(t);
+      setDockOpen(true);
+    }
   }), dockOpen && React.createElement(Dock, {
     tab: tab,
     setTab: setTab

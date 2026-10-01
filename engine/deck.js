@@ -390,7 +390,14 @@ class Deck {
 
     // ── Audio ──────────────────────────────────────────────────────────────
     async useMic() { if (!(await this.audio.startMic())) this.notify(this.audio.error, 'warn'); this.emit(); }
-    async useFile(file) { if (!(await this.audio.startFile(file))) this.notify(this.audio.error, 'warn'); this.emit(); }
+    async useFile(file) {
+        if (!(await this.audio.startFile(file))) {
+            this.notify(this.audio.error, 'warn');
+            clearTimeout(this._audioErrT);
+            this._audioErrT = setTimeout(() => { this.audio.error = ''; this.emit(); }, 6000);
+        }
+        this.emit();
+    }
     audioOff() { this.audio.stop(); this.emit(); }
     setAudio(patch) {
         for (const [k, v] of Object.entries(patch)) {

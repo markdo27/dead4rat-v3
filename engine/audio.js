@@ -93,7 +93,14 @@ class AudioEngine {
         this.beat = 0; this.transient = false; this.bpm = 0; this._onsetTimes = [];
     }
 
-    async startMic() {
+    // A second click while the permission prompt is open reuses that request.
+    startMic() {
+        if (this._micPending) return this._micPending;
+        this._micPending = this._startMic().finally(() => { this._micPending = null; });
+        return this._micPending;
+    }
+
+    async _startMic() {
         const token = ++this._token;
         this.error = '';
         let stream;
@@ -133,7 +140,7 @@ class AudioEngine {
             // The new file failed: keep whatever was already playing.
             try { src && src.disconnect(); } catch (_) {}
             el.pause(); el.removeAttribute('src'); URL.revokeObjectURL(url);
-            if (token === this._token) this.error = 'Could not play that file';
+            if (token === this._token) this.error = `Could not play "${file.name}"`;
             console.warn('[Audio] file failed', e);
             return false;
         }
@@ -209,7 +216,7 @@ class AudioEngine {
         const k = Math.pow(this.smoothing, dt * 60);
         const envDecay = Math.pow(0.001, dt / 0.35);
         const avgK = Math.pow(0.5, dt / 0.5);
-        const rise = 1.5 - this.sensitivity * 0.6;       // must jump 0.9-1.5× above its average
+        const rise = 1.6 - this.sensitivity * 0.5;       // must jump 1.1-1.6× above its average
         const floor = 0.05 - this.sensitivity * 0.035;
         let beat = 0;
         for (const b of BAND_NAMES) {
@@ -219,7 +226,8 @@ class AudioEngine {
             const avg = this._avg[b];
             const threshold = avg * rise + floor;
             let isOnset = false;
-            if (this._armed[b] && raw > threshold && now - this.lastOnset[b] > 100) {
+            // A band whose EQ is at 0 is switched off: no beats from it either.
+            if (this._armed[b] && this.bandGain[b] > 0 && raw > threshold && now - this.lastOnset[b] > 100) {
                 isOnset = true;
                 this._armed[b] = false;
                 this.lastOnset[b] = now;
@@ -251,8 +259,12 @@ class AudioEngine {
             iois.push(d);
         }
         if (iois.length < 3) { this.bpm = 0; return; }
+        // Mean of the middle half: at low frame rates gaps alternate long/short
+        // around the true beat, and a plain median would pick one side.
         iois.sort((a, b) => a - b);
-        this.bpm = Math.round(60000 / iois[iois.length >> 1]);
+        const q = Math.floor(iois.length / 4);
+        const mid = iois.slice(q, iois.length - q);
+        this.bpm = Math.round(60000 / (mid.reduce((s, x) => s + x, 0) / mid.length));
     }
 }
 
