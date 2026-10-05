@@ -26,14 +26,11 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      # Rebuild the UI bundle so the deploy never ships a stale one.
+      # Rebuild the UI bundle so the deploy never ships a stale one, and copy
+      # only what the app serves into _site/ (no Python prototypes, tooling or
+      # node_modules).
       - run: npm ci
-      - run: npm run build
-      # Publish only what the app serves (no Python prototypes, tooling or node_modules).
-      - name: Assemble site
-        run: |
-          mkdir -p _site
-          cp -r index.html style.css sander.html ui.bundle.js engine ui .nojekyll _site/
+      - run: npm run build:site
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

@@ -103,7 +103,7 @@ const FX_DEFS = [
         key: 'pixelate', name: 'PIXELATE', cat: 'DISTORT', stage: 'uv',
         desc: 'Chunky pixel blocks',
         params: [
-            { k: 'size', label: 'SIZE', min: 1, max: 64, step: 1, def: 6 },
+            { k: 'size', label: 'SIZE', min: 1, max: 64, step: 1, def: 10 },
         ],
         audio: { p: 'size', op: 'mul', k: 4 },
         glsl: `{
@@ -117,7 +117,7 @@ const FX_DEFS = [
         desc: 'Tape tearing, jitter and vertical roll',
         params: [
             { k: 'vertical', label: 'ROLL', min: 0, max: 10, step: 0.1, def: 1 },
-            { k: 'horizontal', label: 'JITTER', min: 0, max: 10, step: 0.1, def: 2 },
+            { k: 'horizontal', label: 'JITTER', min: 0, max: 10, step: 0.1, def: 4 },
             { k: 'tear', label: 'TEAR', min: 0, max: 1, step: 0.01, def: 0.5 },
         ],
         audio: { p: 'horizontal', op: 'mul', k: 3 },
@@ -125,8 +125,10 @@ const FX_DEFS = [
             vec2 m = uv;
             float lineY = floor(uv.y * u_disp.y * 0.5);
             float band = floor(uv.y * u_disp.y / 12.0);
-            float tear = step(1.0 - u_vhs_tear * 0.35, rand(vec2(band, floor(u_time * 15.0))));
-            m.x += tear * (rand(vec2(u_time, lineY)) - 0.5) * u_vhs_horizontal * 0.02;
+            float tick = floor(u_time * 15.0);
+            float tear = step(1.0 - u_vhs_tear * 0.35, rand(vec2(band, tick)));
+            // A torn band slides sideways as one piece; TEAR sets how far.
+            m.x += tear * (rand(vec2(band + 0.5, tick)) - 0.5) * u_vhs_tear * 0.14;
             m.y += sin(u_time * 0.7) * u_vhs_vertical * 0.003;
             m.x += (rand(vec2(u_time * 7.0, lineY)) - 0.5) * u_vhs_horizontal * 0.003;
             uv = mix(uv, m, u_vhs_wet);
@@ -188,7 +190,7 @@ const FX_DEFS = [
     },
     {
         key: 'motion', name: 'MOTION', cat: 'TIME', stage: 'color', prevBase: true,
-        desc: 'Only what moved lights up (difference from the last frame)',
+        desc: 'Moving areas glow with HEAT colour; still areas keep the picture (difference from the last frame)',
         params: [
             { k: 'threshold', label: 'THRESHOLD', min: 1, max: 255, step: 1, def: 25 },
             { k: 'tint', label: 'HEAT', min: 0, max: 1, step: 0.01, def: 0.5 },
@@ -197,7 +199,9 @@ const FX_DEFS = [
         ],
         audio: { p: 'threshold', op: 'sub', k: 0.8 },
         glsl: `{
-            vec3 d = abs(c - prevBase(uv));
+            // Compare the unprocessed frames: earlier effects (EDGES, HALFTONE…)
+            // would otherwise read as motion on a still picture.
+            vec3 d = abs(img(uv) - prevBase(uv));
             float th = u_motion_threshold / 255.0;
             float k = smoothstep(th * 0.7, th * 1.3, dot(d, vec3(0.333)));
             vec3 e = mix(c * (1.0 - k), mix(d, d * vec3(1.0, 0.3, 0.1), u_motion_tint) * u_motion_boost, k);
@@ -313,7 +317,7 @@ const FX_DEFS = [
         key: 'pixelsort', name: 'PIXEL SORT', cat: 'TEXTURE', stage: 'color', taps: true,
         desc: 'Bright pixels smear into streaks; SCATTER sprays them like particles',
         params: [
-            { k: 'threshold', label: 'THRESHOLD', min: 0, max: 1, step: 0.01, def: 0.5 },
+            { k: 'threshold', label: 'THRESHOLD', min: 0, max: 1, step: 0.01, def: 0.4 },
             { k: 'length', label: 'LENGTH', min: 0, max: 1, step: 0.01, def: 0.6 },
             { k: 'angle', label: 'ANGLE', min: 0, max: 360, step: 1, def: 0 },
             { k: 'scatter', label: 'SCATTER', min: 0, max: 1, step: 0.01, def: 0 },
@@ -472,9 +476,9 @@ const GESTURE_DEFS = [
         float dist = length(d);
         float gr = 0.08 + u_pinch * 0.35;
         vec3 col = hue2rgb(fract(u_time * 0.1 + u_pinch * 0.5));
-        c += col * exp(-dist * dist / (gr * gr * 0.5)) * (0.4 + u_pinch * 1.2);
+        c += col * exp(-dist * dist / (gr * gr * 0.5)) * (0.4 + u_pinch * 1.2) * u_gfade;
         float ring = smoothstep(gr - 0.02, gr, dist) * smoothstep(gr + 0.04, gr, dist);
-        c += col * ring * (0.5 + 0.5 * sin(u_time * 8.0)) * u_pinch;
+        c += col * ring * (0.5 + 0.5 * sin(u_time * 8.0)) * u_pinch * u_gfade;
       }` },
     { key: 'pulse', name: 'PULSE', kind: 'overlay', desc: 'Rings pulse outward from the palm',
       glsl: `{
@@ -483,7 +487,7 @@ const GESTURE_DEFS = [
         float p = sin(dist * (8.0 + u_pinch * 12.0) - u_time * 8.0) * 0.5 + 0.5;
         float f = 1.0 - smoothstep(0.0, 0.1 + u_pinch * 0.3, dist);
         vec3 col = 0.5 + 0.5 * sin(u_time * 3.0 + vec3(0.0, 2.09, 4.19));
-        c = mix(c, col, p * f * u_pinch * 1.05);
+        c = mix(c, col, p * f * u_pinch * 1.05 * u_gfade);
       }` },
     { key: 'theremin', name: 'THEREMIN', kind: 'overlay', desc: 'Two hands: interference rings around your hand whose pitch follows the distance between hands',
       glsl: `{
@@ -494,7 +498,7 @@ const GESTURE_DEFS = [
             float pt = (sin((d.x + d.y) * fr + u_time * 3.0) + sin((d.x - d.y) * fr * 0.7 - u_time * 2.3)
                       + sin(dist * fr * 1.3 - u_time * 1.7)) / 3.0;
             vec3 col = 0.5 + 0.5 * sin(pt * 3.14 + vec3(0.0, 2.09, 4.19));
-            c = mix(c, col, u_span * 0.6 * abs(pt) * (1.0 - smoothstep(0.1, 0.25 + u_span * 0.6, dist)));
+            c = mix(c, col, u_span * 0.6 * abs(pt) * (1.0 - smoothstep(0.1, 0.25 + u_span * 0.6, dist)) * u_gfade);
         }
       }` },
 ];

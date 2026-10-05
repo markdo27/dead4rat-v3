@@ -3,7 +3,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 const TABS = [
-    ['gen', 'SCENE', GenPanel],
+    ['gen', 'GEN', GenPanel],
     ['fx', 'FX', FxPanel],
     ['audio', 'AUDIO', AudioPanel],
     ['ai', 'TRACK', AiPanel],
@@ -56,13 +56,17 @@ function Boot({ onStart }) {
     );
 }
 
-function Hud({ dockOpen, setDockOpen, setHidden, setHelp, setSander }) {
+function Hud({ dockOpen, setDockOpen, setHidden, setHelp, setSander, openTab }) {
     const deck = useDeck();
     const fpsRef = React.useRef(null);
     const lvlRef = React.useRef(null);
     const recRef = React.useRef(null);
+    const lvlLast = React.useRef(-1);
     useFrame((d) => {
-        if (lvlRef.current) lvlRef.current.style.transform = `scaleX(${d.audio.running ? Math.max(d.audio.level.BASS, d.audio.level.MID) : 0})`;
+        const v = d.audio.running ? Math.round(Math.max(d.audio.level.BASS, d.audio.level.MID) * 50) / 50 : 0;
+        if (v === lvlLast.current || !lvlRef.current) return; // no DOM write when nothing changed
+        lvlLast.current = v;
+        lvlRef.current.style.transform = `scaleX(${v})`;
     }, 3);
     useFrame((d) => {
         if (fpsRef.current) {
@@ -79,12 +83,15 @@ function Hud({ dockOpen, setDockOpen, setHidden, setHelp, setSander }) {
         <header className="hud">
             <div className="hud-left">
                 <span className="hud-brand">D4R</span>
+                <span className="hud-dots" title={`Camera ${deck.camera.on ? 'on' : 'off'} · audio ${a.kind}`}>
+                    <i className={cx(deck.camera.on && 'on')} /><i className={cx(a.running && 'on')} />
+                </span>
                 <span ref={fpsRef} className="hud-chip" title={`Frames per second · render resolution (quality: ${deck.view.quality})`} />
                 <button type="button" className={cx('hud-chip', deck.camera.on && 'live')} onClick={() => deck.toggleCamera()} title="Camera on/off">CAM {deck.camera.on ? 'ON' : 'OFF'}</button>
-                <span className={cx('hud-chip', a.running && 'live')} title="Audio input">
+                <button type="button" className={cx('hud-chip', a.running && 'live')} title="Audio input — open the AUDIO tab" onClick={() => openTab('audio')}>
                     {a.kind === 'off' ? 'AUDIO OFF' : a.kind === 'mic' ? 'MIC' : 'FILE'}
                     <span className="hud-level"><span ref={lvlRef} /></span>
-                </span>
+                </button>
                 {deck.demo && <span className="hud-chip dim">DEMO</span>}
                 {deck.recording && <span ref={recRef} className="hud-chip rec">● REC</span>}
             </div>
@@ -104,14 +111,25 @@ function Hud({ dockOpen, setDockOpen, setHidden, setHelp, setSander }) {
 
 function Dock({ tab, setTab }) {
     const Panel = (TABS.find(t => t[0] === tab) || TABS[0])[2];
+    const onKey = (e) => {
+        const i = Math.max(0, TABS.findIndex(t => `tab-${t[0]}` === e.target.id));
+        const j = e.key === 'ArrowRight' ? i + 1 : e.key === 'ArrowLeft' ? i - 1 : e.key === 'Home' ? 0 : e.key === 'End' ? TABS.length - 1 : null;
+        if (j === null) return;
+        e.preventDefault(); e.stopPropagation();
+        const next = TABS[(j + TABS.length) % TABS.length][0];
+        setTab(next);
+        const el = document.getElementById(`tab-${next}`);
+        el && el.focus();
+    };
     return (
         <aside className="dock" aria-label="Controls">
-            <nav className="tabs" role="tablist">
+            <nav className="tabs" role="tablist" aria-label="Control panels" onKeyDown={onKey}>
                 {TABS.map(([id, label]) => (
-                    <button type="button" key={id} role="tab" aria-selected={tab === id} className={cx('tab', tab === id && 'on')} onClick={() => setTab(id)}>{label}</button>
+                    <button type="button" key={id} id={`tab-${id}`} role="tab" aria-selected={tab === id} aria-controls="dock-panel"
+                        tabIndex={tab === id ? 0 : -1} className={cx('tab', tab === id && 'on')} onClick={() => setTab(id)}>{label}</button>
                 ))}
             </nav>
-            <div className="dock-scroll" role="tabpanel"><Panel /></div>
+            <div className="dock-scroll" id="dock-panel" role="tabpanel" aria-labelledby={`tab-${tab}`}><Panel /></div>
         </aside>
     );
 }
@@ -120,10 +138,22 @@ function SceneBar() {
     const deck = useDeck();
     const slots = deck.scenes.slots;
     const [editing, setEditing] = React.useState(-1);
+    const [menu, setMenu] = React.useState(-1);
     const cancelRename = React.useRef(false);
     const morphS = deck.morphMs / 1000;
     return (
         <footer className="scenebar" aria-label="Scenes">
+            {slots[menu] ? (
+                <div className="slot-bar" role="group" aria-label={`Scene ${menu + 1} options`}
+                    onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setMenu(-1); }}
+                    onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); setMenu(-1); } }}>
+                    <span className="slot-bar-name"><b>{menu + 1}</b> {slots[menu].name}</span>
+                    <button type="button" className="btn btn-sm" autoFocus onClick={() => { setEditing(menu); setMenu(-1); }}>✎<span className="sb-txt"> RENAME</span></button>
+                    <button type="button" className="btn btn-sm" title="Overwrite with the current look" onClick={() => { deck.storeScene(menu); setMenu(-1); }}>⤓<span className="sb-txt"> OVERWRITE</span></button>
+                    <button type="button" className="btn btn-sm danger" title="Clear (can be undone)" onClick={() => { deck.clearScene(menu); setMenu(-1); }}>✕<span className="sb-txt"> CLEAR</span></button>
+                    <button type="button" className="btn btn-sm btn-ghost" onClick={() => setMenu(-1)} aria-label="Back to scenes">‹<span className="sb-txt"> BACK</span></button>
+                </div>
+            ) : (
             <div className="scene-slots">
                 {slots.map((s, i) => (
                     <div key={i} className={cx('slot', s ? 'full' : 'empty', deck.activeScene === i && 'on')}>
@@ -145,14 +175,13 @@ function SceneBar() {
                             </button>
                         )}
                         {s && editing !== i && (
-                            <span className="slot-tools">
-                                <button type="button" className="slot-tool" aria-label={`Rename scene ${i + 1}`} title="Rename" onClick={() => setEditing(i)}>✎</button>
-                                <button type="button" className="slot-tool" aria-label={`Clear scene ${i + 1}`} title="Clear (can be undone)" onClick={() => deck.clearScene(i)}>✕</button>
-                            </span>
+                            <button type="button" className="slot-more" aria-label={`Scene ${i + 1} options`} aria-haspopup="true"
+                                title="Rename, overwrite or clear" onClick={() => setMenu(i)}>⋯</button>
                         )}
                     </div>
                 ))}
             </div>
+            )}
             <div className="scene-tools">
                 <label className="morph" title="How long scenes take to blend into each other">
                     <span>MORPH</span>
@@ -180,7 +209,7 @@ function Help({ onClose }) {
                 <dl className="keys">
                     {SHORTCUTS.map(([k, v]) => <React.Fragment key={k}><dt><kbd>{k}</kbd></dt><dd>{v}</dd></React.Fragment>)}
                 </dl>
-                <p className="hint">Scenes: the bar at the bottom holds 8 saved looks. Click an empty slot to save, a full one to morph to it, Shift+click to overwrite. Hover a slot for rename ✎ and clear ✕. AUTO steps through them.</p>
+                <p className="hint">Scenes: the bar at the bottom holds 8 saved looks. Click an empty slot to save, a full one to morph to it, Shift+click to overwrite. The ⋯ corner of a slot renames ✎, overwrites ⤓ or clears ✕ it. AUTO steps through them.</p>
                 <button type="button" ref={close} className="btn" onClick={onClose}>CLOSE</button>
             </div>
         </div>
@@ -292,7 +321,7 @@ function App() {
             {!started && <Boot onStart={start} />}
             {started && !hidden && (
                 <React.Fragment>
-                    <Hud dockOpen={dockOpen} setDockOpen={setDockOpen} setHidden={setHidden} setHelp={setHelp} setSander={setSander} />
+                    <Hud dockOpen={dockOpen} setDockOpen={setDockOpen} setHidden={setHidden} setHelp={setHelp} setSander={setSander} openTab={(t) => { setTab(t); setDockOpen(true); }} />
                     {dockOpen && <Dock tab={tab} setTab={setTab} />}
                     <SceneBar />
                 </React.Fragment>

@@ -15,7 +15,7 @@ Open the page, choose **START** (camera and microphone switches) or **DEMO**
 - **HUD (top)** — frame rate and resolution, camera and audio status, random,
   snapshot, record, fullscreen, SANDER, help, panel toggle, hide.
 - **Panel (right; bottom sheet on phones)** — six tabs:
-  - **SCENE**: 11 generative 3D scenes and their motion/colour controls. CAMERA
+  - **GEN**: 11 generative 3D scenes and their motion/colour controls. CAMERA
     MIX sets how much of the camera shows over the scene.
   - **FX**: 17 effects in four groups (distort, time, colour, texture). Each has
     a switch, sliders, an optional LFO (`~`) per slider, a blend mode, and
@@ -30,7 +30,8 @@ Open the page, choose **START** (camera and microphone switches) or **DEMO**
     (AUTO adapts resolution to your GPU), flips and rotation, snapshot,
     recording (with sound), MIDI.
 - **Scene bar (bottom)** — 8 slots. Click an empty slot to save the current look;
-  click a full one to morph to it. Shift+click overwrites, double-click renames.
+  click a full one to morph to it. Shift+click overwrites; the ⋯ corner button
+  renames, overwrites or clears a slot (clearing can be undone).
   AUTO steps through your scenes (on the beat when audio is on). SHARE copies a
   link that opens the exact look.
 
@@ -74,12 +75,14 @@ Then open the printed localhost address.
   - `deck.js`: the app controller and its single animation loop.
   - Engines: `audio.js`, `camera.js`, `media.js`, `tracking.js`, `ai.js`, `scenes.js`.
 - `ui/*.jsx` — the React interface. After editing, run `npm install` once and
-  then `npm run build` to regenerate `ui.bundle.js`. While editing you can skip
+  then `npm run build` to regenerate `ui.bundle.js` (it also stamps every file
+  link in `index.html` with a content hash for cache busting). While editing you can skip
   the build by adding `?dev` to the URL, which compiles the JSX in the browser.
 - `sander.html` — the SANDER Chladni sand overlay, a standalone page.
 
-GitHub Pages deploys from `main`: the workflow rebuilds the bundle and
-publishes only the app files.
+Deploys: `npm run build:site` rebuilds the bundle and copies only the app
+files into `_site/`. GitHub Pages (from `main`, via the workflow) and Vercel
+(`vercel.json`) both publish that folder.
 
 ### How it stays fast
 

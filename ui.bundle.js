@@ -100,6 +100,34 @@ const LFO_NAME = {
   saw: 'saw',
   rnd: 'random steps'
 };
+function LiveTick({
+  spec,
+  value,
+  read
+}) {
+  const ref = React.useRef(null);
+  const last = React.useRef(-1);
+  useFrame(d => {
+    const el = ref.current;
+    if (!el) return;
+    const v = read(d);
+    const range = spec.max - spec.min;
+    let pct = -1;
+    if (v !== undefined && Math.abs(v - value) > range * 0.005) pct = Math.round(Math.max(0, Math.min(1, (v - spec.min) / range)) * 400) / 4;
+    if (pct === last.current) return;
+    last.current = pct;
+    el.style.display = pct < 0 ? 'none' : '';
+    el.style.left = `${pct}%`;
+  }, 2);
+  return React.createElement("span", {
+    ref: ref,
+    className: "param-live",
+    style: {
+      display: 'none'
+    },
+    "aria-hidden": "true"
+  });
+}
 function Param({
   spec,
   value,
@@ -107,7 +135,8 @@ function Param({
   lfo,
   onLfo,
   onArm,
-  disabled
+  disabled,
+  live
 }) {
   const id = React.useId();
   const pct = (value - spec.min) / (spec.max - spec.min) * 100;
@@ -116,7 +145,9 @@ function Param({
   }, React.createElement("label", {
     htmlFor: id,
     className: "param-label"
-  }, spec.label), React.createElement("input", {
+  }, spec.label), React.createElement("span", {
+    className: "slider-wrap"
+  }, React.createElement("input", {
     id: id,
     type: "range",
     className: "slider",
@@ -130,7 +161,11 @@ function Param({
     disabled: disabled,
     onPointerDown: onArm,
     onChange: e => onChange(parseFloat(e.target.value))
-  }), React.createElement("span", {
+  }), live && React.createElement(LiveTick, {
+    spec: spec,
+    value: value,
+    read: live
+  })), React.createElement("span", {
     className: "param-value"
   }, fmt(value, spec.step)), onLfo && React.createElement("button", {
     type: "button",
@@ -218,16 +253,18 @@ function LiveMeter({
 }
 function LiveText({
   read,
-  every = 10,
-  className
+  className,
+  ms = 150
 }) {
   const ref = React.useRef(null);
+  const last = React.useRef(0);
   useFrame(d => {
-    if (ref.current) {
-      const s = read(d);
-      if (ref.current.textContent !== s) ref.current.textContent = s;
-    }
-  }, every);
+    const now = performance.now();
+    if (!ref.current || now - last.current < ms) return;
+    last.current = now;
+    const s = read(d);
+    if (ref.current.textContent !== s) ref.current.textContent = s;
+  });
   return React.createElement("span", {
     ref: ref,
     className: className
@@ -330,6 +367,7 @@ function GenPanel() {
     onChange: v => deck.setGenParam(p.k, v),
     lfo: g.lfo[p.k],
     onLfo: () => deck.cycleLfo('gen', null, p.k),
+    live: d => d.liveGen ? d.liveGen[p.k] : undefined,
     onArm: () => deck.armMidi({
       t: 'gen',
       k: p.k
@@ -349,12 +387,14 @@ function GenPanel() {
   }, "CAMERA MIX: 0 = generator only. Raise it to let the camera's bright areas (and text layers) show on top.")));
 }
 function FxRow({
-  def
+  def,
+  focus,
+  setFocus
 }) {
   const deck = useDeck();
   const s = deck.look.fx[def.key];
   const [open, setOpen] = React.useState(null);
-  const expanded = open === null ? s.on : open;
+  const expanded = open === null ? s.on && focus === def.key : open;
   const bandLive = React.useRef(null);
   useFrame(d => {
     if (!bandLive.current) return;
@@ -367,7 +407,11 @@ function FxRow({
     className: "fx-head"
   }, React.createElement(Switch, {
     on: s.on,
-    onChange: () => deck.toggleFx(def.key),
+    onChange: () => {
+      setFocus(s.on ? null : def.key);
+      setOpen(null);
+      deck.toggleFx(def.key);
+    },
     title: `${s.on ? 'Switch off' : 'Switch on'} ${def.name}`
   }), React.createElement("button", {
     type: "button",
@@ -414,6 +458,10 @@ function FxRow({
     onChange: v => deck.setFxParam(def.key, p.k, v),
     lfo: s.lfo[p.k],
     onLfo: () => deck.cycleLfo('fx', def.key, p.k),
+    live: d => {
+      const it = d.liveFx && d.liveFx.find(x => x.key === def.key);
+      return it ? it.values[p.k] : undefined;
+    },
     onArm: () => deck.armMidi({
       t: 'fx',
       key: def.key,
@@ -434,6 +482,7 @@ function FxPanel() {
     FX_CATS
   } = D4R;
   const active = FX_DEFS.filter(d => deck.look.fx[d.key].on);
+  const [focus, setFocus] = React.useState(null);
   return React.createElement("div", {
     className: "panel-body"
   }, React.createElement("div", {
@@ -448,8 +497,8 @@ function FxPanel() {
     small: true,
     kind: "ghost",
     onClick: () => deck.reset(),
-    title: "Back to factory settings"
-  }, "RESET ALL")), React.createElement(Section, {
+    title: "All effects and the LFO back to factory settings (the generator is kept; can be undone)"
+  }, "RESET FX")), React.createElement(Section, {
     title: "LFO",
     hint: "The ~ button beside a slider makes it wobble. These set the speed and range for all of them."
   }, React.createElement(Param, {
@@ -475,7 +524,9 @@ function FxPanel() {
     title: cat
   }, FX_DEFS.filter(d => d.cat === cat).map(d => React.createElement(FxRow, {
     key: d.key,
-    def: d
+    def: d,
+    focus: focus,
+    setFocus: setFocus
   })))));
 }
 function Spectrum() {
@@ -520,8 +571,12 @@ function BeatDot({
   band
 }) {
   const ref = React.useRef(null);
+  const last = React.useRef(-1);
   useFrame(d => {
-    if (ref.current) ref.current.style.opacity = 0.15 + d.audio.env[band] * 0.85;
+    const v = Math.round((0.15 + d.audio.env[band] * 0.85) * 20) / 20;
+    if (v === last.current || !ref.current) return;
+    last.current = v;
+    ref.current.style.opacity = v;
   });
   return React.createElement("span", {
     ref: ref,
@@ -655,7 +710,11 @@ function HeadBars() {
     pitch: React.useRef(null),
     roll: React.useRef(null)
   };
+  const lastT = React.useRef(0);
   useFrame(d => {
+    const now = performance.now();
+    if (now - lastT.current < 150) return;
+    lastT.current = now;
     for (const k of ['yaw', 'pitch', 'roll']) {
       const v = d.human[k] || 0;
       if (refs[k].current) {
@@ -664,7 +723,7 @@ function HeadBars() {
       }
       if (txt[k].current) txt[k].current.textContent = `${Math.round(d.human[k + 'Deg'] || 0)}°`;
     }
-  }, 3);
+  });
   return ['yaw', 'pitch', 'roll'].map(k => React.createElement("div", {
     className: "meter",
     key: k
@@ -761,7 +820,9 @@ function AiPanel() {
     on: deck.faceDrive,
     onChange: () => deck.toggleFaceDrive(),
     title: "Head turn steers the generator camera; your expression tints its palette"
-  })), React.createElement("div", {
+  })), deck.faceDrive && deck.look.gen.mode === 'OFF' && React.createElement("p", {
+    className: "hint warn"
+  }, "FACE DRIVE steers the generator \u2014 pick one in the GEN tab."), React.createElement("div", {
     className: "param param-opts"
   }, React.createElement("span", {
     className: "param-label"
@@ -1112,7 +1173,7 @@ Object.assign(window, {
 });
 
 // ── ui/app.jsx ──
-const TABS = [['gen', 'SCENE', GenPanel], ['fx', 'FX', FxPanel], ['audio', 'AUDIO', AudioPanel], ['ai', 'TRACK', AiPanel], ['media', 'MEDIA', MediaPanel], ['out', 'OUTPUT', OutputPanel]];
+const TABS = [['gen', 'GEN', GenPanel], ['fx', 'FX', FxPanel], ['audio', 'AUDIO', AudioPanel], ['ai', 'TRACK', AiPanel], ['media', 'MEDIA', MediaPanel], ['out', 'OUTPUT', OutputPanel]];
 const SHORTCUTS = [['1 – 8', 'Fire scene (morph)'], ['Shift + 1 – 8', 'Save / overwrite a scene with the current look'], ['R', 'Random look'], ['A', 'Autopilot on / off'], ['G / Shift + G', 'Next / previous generator'], ['H', 'Hide / show all controls'], ['D', 'Hide / show the side panel'], ['F', 'Fullscreen'], ['P', 'Snapshot (PNG)'], ['V', 'Record video'], ['?', 'This help'], ['Esc', 'Close overlays']];
 function Boot({
   onStart
@@ -1194,14 +1255,19 @@ function Hud({
   setDockOpen,
   setHidden,
   setHelp,
-  setSander
+  setSander,
+  openTab
 }) {
   const deck = useDeck();
   const fpsRef = React.useRef(null);
   const lvlRef = React.useRef(null);
   const recRef = React.useRef(null);
+  const lvlLast = React.useRef(-1);
   useFrame(d => {
-    if (lvlRef.current) lvlRef.current.style.transform = `scaleX(${d.audio.running ? Math.max(d.audio.level.BASS, d.audio.level.MID) : 0})`;
+    const v = d.audio.running ? Math.round(Math.max(d.audio.level.BASS, d.audio.level.MID) * 50) / 50 : 0;
+    if (v === lvlLast.current || !lvlRef.current) return;
+    lvlLast.current = v;
+    lvlRef.current.style.transform = `scaleX(${v})`;
   }, 3);
   useFrame(d => {
     if (fpsRef.current) {
@@ -1221,6 +1287,13 @@ function Hud({
   }, React.createElement("span", {
     className: "hud-brand"
   }, "D4R"), React.createElement("span", {
+    className: "hud-dots",
+    title: `Camera ${deck.camera.on ? 'on' : 'off'} · audio ${a.kind}`
+  }, React.createElement("i", {
+    className: cx(deck.camera.on && 'on')
+  }), React.createElement("i", {
+    className: cx(a.running && 'on')
+  })), React.createElement("span", {
     ref: fpsRef,
     className: "hud-chip",
     title: `Frames per second · render resolution (quality: ${deck.view.quality})`
@@ -1229,9 +1302,11 @@ function Hud({
     className: cx('hud-chip', deck.camera.on && 'live'),
     onClick: () => deck.toggleCamera(),
     title: "Camera on/off"
-  }, "CAM ", deck.camera.on ? 'ON' : 'OFF'), React.createElement("span", {
+  }, "CAM ", deck.camera.on ? 'ON' : 'OFF'), React.createElement("button", {
+    type: "button",
     className: cx('hud-chip', a.running && 'live'),
-    title: "Audio input"
+    title: "Audio input \u2014 open the AUDIO tab",
+    onClick: () => openTab('audio')
   }, a.kind === 'off' ? 'AUDIO OFF' : a.kind === 'mic' ? 'MIC' : 'FILE', React.createElement("span", {
     className: "hud-level"
   }, React.createElement("span", {
@@ -1297,34 +1372,105 @@ function Dock({
   setTab
 }) {
   const Panel = (TABS.find(t => t[0] === tab) || TABS[0])[2];
+  const onKey = e => {
+    const i = Math.max(0, TABS.findIndex(t => `tab-${t[0]}` === e.target.id));
+    const j = e.key === 'ArrowRight' ? i + 1 : e.key === 'ArrowLeft' ? i - 1 : e.key === 'Home' ? 0 : e.key === 'End' ? TABS.length - 1 : null;
+    if (j === null) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const next = TABS[(j + TABS.length) % TABS.length][0];
+    setTab(next);
+    const el = document.getElementById(`tab-${next}`);
+    el && el.focus();
+  };
   return React.createElement("aside", {
     className: "dock",
     "aria-label": "Controls"
   }, React.createElement("nav", {
     className: "tabs",
-    role: "tablist"
+    role: "tablist",
+    "aria-label": "Control panels",
+    onKeyDown: onKey
   }, TABS.map(([id, label]) => React.createElement("button", {
     type: "button",
     key: id,
+    id: `tab-${id}`,
     role: "tab",
     "aria-selected": tab === id,
+    "aria-controls": "dock-panel",
+    tabIndex: tab === id ? 0 : -1,
     className: cx('tab', tab === id && 'on'),
     onClick: () => setTab(id)
   }, label))), React.createElement("div", {
     className: "dock-scroll",
-    role: "tabpanel"
+    id: "dock-panel",
+    role: "tabpanel",
+    "aria-labelledby": `tab-${tab}`
   }, React.createElement(Panel, null)));
 }
 function SceneBar() {
   const deck = useDeck();
   const slots = deck.scenes.slots;
   const [editing, setEditing] = React.useState(-1);
+  const [menu, setMenu] = React.useState(-1);
   const cancelRename = React.useRef(false);
   const morphS = deck.morphMs / 1000;
   return React.createElement("footer", {
     className: "scenebar",
     "aria-label": "Scenes"
-  }, React.createElement("div", {
+  }, slots[menu] ? React.createElement("div", {
+    className: "slot-bar",
+    role: "group",
+    "aria-label": `Scene ${menu + 1} options`,
+    onBlur: e => {
+      if (!e.currentTarget.contains(e.relatedTarget)) setMenu(-1);
+    },
+    onKeyDown: e => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        setMenu(-1);
+      }
+    }
+  }, React.createElement("span", {
+    className: "slot-bar-name"
+  }, React.createElement("b", null, menu + 1), " ", slots[menu].name), React.createElement("button", {
+    type: "button",
+    className: "btn btn-sm",
+    autoFocus: true,
+    onClick: () => {
+      setEditing(menu);
+      setMenu(-1);
+    }
+  }, "\u270E", React.createElement("span", {
+    className: "sb-txt"
+  }, " RENAME")), React.createElement("button", {
+    type: "button",
+    className: "btn btn-sm",
+    title: "Overwrite with the current look",
+    onClick: () => {
+      deck.storeScene(menu);
+      setMenu(-1);
+    }
+  }, "\u2913", React.createElement("span", {
+    className: "sb-txt"
+  }, " OVERWRITE")), React.createElement("button", {
+    type: "button",
+    className: "btn btn-sm danger",
+    title: "Clear (can be undone)",
+    onClick: () => {
+      deck.clearScene(menu);
+      setMenu(-1);
+    }
+  }, "\u2715", React.createElement("span", {
+    className: "sb-txt"
+  }, " CLEAR")), React.createElement("button", {
+    type: "button",
+    className: "btn btn-sm btn-ghost",
+    onClick: () => setMenu(-1),
+    "aria-label": "Back to scenes"
+  }, "\u2039", React.createElement("span", {
+    className: "sb-txt"
+  }, " BACK"))) : React.createElement("div", {
     className: "scene-slots"
   }, slots.map((s, i) => React.createElement("div", {
     key: i,
@@ -1365,21 +1511,14 @@ function SceneBar() {
     className: "slot-n"
   }, i + 1), React.createElement("span", {
     className: "slot-name"
-  }, "+ SAVE")), s && editing !== i && React.createElement("span", {
-    className: "slot-tools"
-  }, React.createElement("button", {
+  }, "+ SAVE")), s && editing !== i && React.createElement("button", {
     type: "button",
-    className: "slot-tool",
-    "aria-label": `Rename scene ${i + 1}`,
-    title: "Rename",
-    onClick: () => setEditing(i)
-  }, "\u270E"), React.createElement("button", {
-    type: "button",
-    className: "slot-tool",
-    "aria-label": `Clear scene ${i + 1}`,
-    title: "Clear (can be undone)",
-    onClick: () => deck.clearScene(i)
-  }, "\u2715"))))), React.createElement("div", {
+    className: "slot-more",
+    "aria-label": `Scene ${i + 1} options`,
+    "aria-haspopup": "true",
+    title: "Rename, overwrite or clear",
+    onClick: () => setMenu(i)
+  }, "\u22EF")))), React.createElement("div", {
     className: "scene-tools"
   }, React.createElement("label", {
     className: "morph",
@@ -1440,7 +1579,7 @@ function Help({
     key: k
   }, React.createElement("dt", null, React.createElement("kbd", null, k)), React.createElement("dd", null, v)))), React.createElement("p", {
     className: "hint"
-  }, "Scenes: the bar at the bottom holds 8 saved looks. Click an empty slot to save, a full one to morph to it, Shift+click to overwrite. Hover a slot for rename \u270E and clear \u2715. AUTO steps through them."), React.createElement("button", {
+  }, "Scenes: the bar at the bottom holds 8 saved looks. Click an empty slot to save, a full one to morph to it, Shift+click to overwrite. The \u22EF corner of a slot renames \u270E, overwrites \u2913 or clears \u2715 it. AUTO steps through them."), React.createElement("button", {
     type: "button",
     ref: close,
     className: "btn",
@@ -1613,7 +1752,11 @@ function App() {
     setDockOpen: setDockOpen,
     setHidden: setHidden,
     setHelp: setHelp,
-    setSander: setSander
+    setSander: setSander,
+    openTab: t => {
+      setTab(t);
+      setDockOpen(true);
+    }
   }), dockOpen && React.createElement(Dock, {
     tab: tab,
     setTab: setTab

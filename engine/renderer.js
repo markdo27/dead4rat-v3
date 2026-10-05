@@ -45,7 +45,7 @@ uniform vec2 u_camScale, u_camOffset, u_maskScale, u_maskOffset;
 uniform float u_camOn, u_camKey, u_genOn;
 uniform float u_flipH, u_flipV, u_rotation;
 uniform vec2 u_palm;
-uniform float u_pinch, u_span, u_shockT;
+uniform float u_pinch, u_span, u_shockT, u_gfade;
 ${GLSL_COMMON}
 vec2 fboUV(vec2 uv) { return vec2(uv.x, 1.0 - uv.y); }
 vec2 viewUV(vec2 uv) {
@@ -73,8 +73,10 @@ vec3 src(vec2 uv) {
   #ifdef HAS_MASK
     return mix(g, cam, m);
   #else
-    // CAMERA MIX: 0 = generator only; higher lets darker camera areas through.
-    return mix(g, cam, clamp((luma(cam) - (1.0 - u_camKey)) * 4.0, 0.0, 1.0));
+    // CAMERA MIX: 0 = generator only, 1 = camera only. In between it is a soft
+    // luma key: bright camera areas come through first, then darker ones.
+    float key = 1.0 - u_camKey * 1.25;
+    return mix(g, cam, smoothstep(key - 0.25, key + 0.25, luma(cam)) * min(1.0, u_camKey * 10.0));
   #endif
 #else
   #ifdef HAS_MASK
@@ -586,8 +588,9 @@ class Renderer {
             gl.bindTexture(gl.TEXTURE_2D, t.tex);
             if (plan.needsPrevBase && !this._prevBaseValid) { gl.activeTexture(gl.TEXTURE5); gl.bindTexture(gl.TEXTURE_2D, t.tex); }
             if (plan.needsPrevBase) { this._baseIndex ^= 1; this._prevBaseValid = true; }
-            else this._prevBaseValid = false;
         }
+        // Any frame without MOTION makes the stored previous frame stale.
+        if (!plan.needsPrevBase) this._prevBaseValid = false;
 
         // B pass
         const B = plan.B;
@@ -605,6 +608,7 @@ class Renderer {
         this._u1(B, 'u_pinch', f.pinch);
         this._u1(B, 'u_span', f.span);
         this._u1(B, 'u_shockT', f.shockT);
+        this._u1(B, 'u_gfade', f.gfade);
         this._draw(B);
 
         if (out) {
@@ -618,6 +622,7 @@ class Renderer {
             this._u2(C, 'u_palm', f.palm[0], f.palm[1]);
             this._u1(C, 'u_pinch', f.pinch);
             this._u1(C, 'u_span', f.span);
+            this._u1(C, 'u_gfade', f.gfade);
             this._draw(C);
             this._outIndex ^= 1;
             this._prevValid = true;

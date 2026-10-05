@@ -70,19 +70,41 @@ const LFO_GLYPH = { sin: '∿', tri: '⋀', saw: '⩘', rnd: '⁝' };
 const LFO_NAME = { sin: 'sine', tri: 'triangle', saw: 'saw', rnd: 'random steps' };
 
 // Slider row: LABEL [——o——] value [LFO]
-function Param({ spec, value, onChange, lfo, onLfo, onArm, disabled }) {
+// A tick on the slider track showing the value after LFO / audio modulation.
+function LiveTick({ spec, value, read }) {
+    const ref = React.useRef(null);
+    const last = React.useRef(-1);
+    useFrame((d) => {
+        const el = ref.current;
+        if (!el) return;
+        const v = read(d);
+        const range = spec.max - spec.min;
+        let pct = -1;
+        if (v !== undefined && Math.abs(v - value) > range * 0.005) pct = Math.round(Math.max(0, Math.min(1, (v - spec.min) / range)) * 400) / 4;
+        if (pct === last.current) return;
+        last.current = pct;
+        el.style.display = pct < 0 ? 'none' : '';
+        el.style.left = `${pct}%`;
+    }, 2);
+    return <span ref={ref} className="param-live" style={{ display: 'none' }} aria-hidden="true" />;
+}
+
+function Param({ spec, value, onChange, lfo, onLfo, onArm, disabled, live }) {
     const id = React.useId();
     const pct = ((value - spec.min) / (spec.max - spec.min)) * 100;
     return (
         <div className={cx('param', disabled && 'disabled')}>
             <label htmlFor={id} className="param-label">{spec.label}</label>
-            <input
-                id={id} type="range" className="slider" min={spec.min} max={spec.max} step={spec.step} value={value}
-                style={{ '--pct': `${pct}%` }}
-                disabled={disabled}
-                onPointerDown={onArm}
-                onChange={(e) => onChange(parseFloat(e.target.value))}
-            />
+            <span className="slider-wrap">
+                <input
+                    id={id} type="range" className="slider" min={spec.min} max={spec.max} step={spec.step} value={value}
+                    style={{ '--pct': `${pct}%` }}
+                    disabled={disabled}
+                    onPointerDown={onArm}
+                    onChange={(e) => onChange(parseFloat(e.target.value))}
+                />
+                {live && <LiveTick spec={spec} value={value} read={live} />}
+            </span>
             <span className="param-value">{fmt(value, spec.step)}</span>
             {onLfo && (
                 <button type="button" className={cx('lfo', lfo && 'on')} onClick={onLfo}
@@ -147,9 +169,17 @@ function LiveMeter({ read, color = 'var(--accent)', label, every = 1 }) {
 }
 
 // Text that updates live (e.g. fps); read(deck) → string
-function LiveText({ read, every = 10, className }) {
+// Text that updates live; refreshed about every 150 ms whatever the frame rate.
+function LiveText({ read, className, ms = 150 }) {
     const ref = React.useRef(null);
-    useFrame((d) => { if (ref.current) { const s = read(d); if (ref.current.textContent !== s) ref.current.textContent = s; } }, every);
+    const last = React.useRef(0);
+    useFrame((d) => {
+        const now = performance.now();
+        if (!ref.current || now - last.current < ms) return;
+        last.current = now;
+        const s = read(d);
+        if (ref.current.textContent !== s) ref.current.textContent = s;
+    });
     return <span ref={ref} className={className} />;
 }
 

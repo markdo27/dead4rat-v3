@@ -36,7 +36,7 @@ function defaultLook() {
     fx.crt.on = true; // the signature scan-line look, as before
     return {
         fx,
-        gen: { mode: 'OFF', band: 'MID', camKey: 0.35, params: Object.fromEntries(GEN_PARAMS.map(p => [p.k, p.def])), lfo: {} },
+        gen: { mode: 'OFF', band: 'MID', camKey: 0.55, params: Object.fromEntries(GEN_PARAMS.map(p => [p.k, p.def])), lfo: {} },
         mod: { rate: 1.0, depth: 0.5 },
     };
 }

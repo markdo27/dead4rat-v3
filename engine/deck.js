@@ -115,11 +115,17 @@ class Deck {
         if (camera && !demo && !(await this.camera.start())) warnings.push(`${this.camera.error} — running without camera`);
         if (mic && !demo && !(await this.audio.startMic())) warnings.push(this.audio.error);
         if (this.sharedLinkBroken) warnings.push('That shared link could not be read — starting fresh');
-        if (warnings.length) this.notify(warnings.join(' · '), 'warn');
+        // One start-up toast (a later one would replace an earlier one).
+        const notes = [];
+        if (this.sharedLook) notes.push('Shared look loaded');
+        if (this.scenes.imported) {
+            notes.push(`${this.scenes.imported} presets from the old version are in the scene bar` +
+                (this.scenes.importedStrobe ? ' (STROBE starts switched off — turn it on in FX)' : ''));
+        }
+        if (warnings.length || notes.length) this.notify(warnings.concat(notes).join(' · '), warnings.length ? 'warn' : 'info');
         if (this.sharedLook) {
             this._applyLook(this.sharedLook);
             this.sharedLook = null;
-            this.notify('Shared look loaded');
         } else if (demo || !this.camera.on) {
             const L = D.defaultLook();
             L.gen.mode = 'GYROID';
@@ -137,7 +143,7 @@ class Deck {
         this.emit();
     }
 
-    setPaused(p) { this.paused = p; this.emit(); }
+    setPaused(p) { this.paused = p; this.human.paused = p; this.emit(); }
 
     // ── Look editing ───────────────────────────────────────────────────────
     _edit() { if (this.morph) this._finishMorph(); this.activeScene = -1; }
@@ -208,7 +214,12 @@ class Deck {
             const s = L.fx[d.key];
             s.on = true;
             for (const p of d.params) {
-                if (p.k === 'blend') { s.params.blend = Math.random() < 0.7 ? 0 : [1, 3, 5][Math.floor(Math.random() * 3)]; continue; }
+                if (p.k === 'blend') {
+                    // EDGES alone is black wherever the picture is flat: always lay it over the image.
+                    s.params.blend = d.key === 'edges' ? [1, 3][Math.floor(Math.random() * 2)]
+                        : Math.random() < 0.7 ? 0 : [1, 3, 5][Math.floor(Math.random() * 3)];
+                    continue;
+                }
                 if (d.key === 'edges' && p.k === 'mode') { s.params.mode = 1; continue; }
                 if (p.opts) { s.params[p.k] = Math.floor(Math.random() * p.opts.length); continue; }
                 const v = p.min + (p.max - p.min) * (0.15 + Math.random() * 0.55);
@@ -225,11 +236,15 @@ class Deck {
         this.emit();
     }
 
+    // Effects and LFO back to factory settings; the generator is left alone.
     reset() {
+        if (this.morph) this._finishMorph();
+        const before = clone(this.look), scene = this.activeScene;
         const L = D.defaultLook();
-        L.gen.mode = this.look.gen.mode;
+        L.gen = clone(this.look.gen);
         this.activeScene = -1;
         this._startMorph(L, 400);
+        this.notify('Effects reset', 'info', { label: 'UNDO', run: () => { this.activeScene = scene; this._startMorph(before, 400); this.emit(); } });
         this.emit();
     }
 
@@ -298,7 +313,8 @@ class Deck {
             const a = m.from.fx[d.key], b = m.to.fx[d.key], s = L.fx[d.key];
             s.on = a.on || b.on;
             for (const p of d.params) {
-                s.params[p.k] = p.opts ? (e < 0.5 ? a.params[p.k] : b.params[p.k]) : a.params[p.k] + (b.params[p.k] - a.params[p.k]) * e;
+                const v = p.opts ? (e < 0.5 ? a.params[p.k] : b.params[p.k]) : a.params[p.k] + (b.params[p.k] - a.params[p.k]) * e;
+                s.params[p.k] = p.step >= 1 ? Math.round(v) : v; // whole-number settings stay whole
             }
             s.lfo = e < 0.5 ? a.lfo : b.lfo;
             s.band = e < 0.5 ? a.band : b.band;
@@ -390,7 +406,14 @@ class Deck {
 
     // ── Audio ──────────────────────────────────────────────────────────────
     async useMic() { if (!(await this.audio.startMic())) this.notify(this.audio.error, 'warn'); this.emit(); }
-    async useFile(file) { if (!(await this.audio.startFile(file))) this.notify(this.audio.error, 'warn'); this.emit(); }
+    async useFile(file) {
+        if (!(await this.audio.startFile(file))) {
+            this.notify(this.audio.error, 'warn');
+            clearTimeout(this._audioErrT);
+            this._audioErrT = setTimeout(() => { this.audio.error = ''; this.emit(); }, 6000);
+        }
+        this.emit();
+    }
     audioOff() { this.audio.stop(); this.emit(); }
     setAudio(patch) {
         for (const [k, v] of Object.entries(patch)) {
@@ -445,11 +468,12 @@ class Deck {
     removeLayer(id) { this.media.remove(id); this.emit(); }
 
     // ── Capture ────────────────────────────────────────────────────────────
-    _compose(src) {
+    _compose(src, w = src.width, h = src.height) {
         const out = document.createElement('canvas');
-        out.width = src.width; out.height = src.height;
+        out.width = w; out.height = h;
         const ctx = out.getContext('2d');
-        ctx.drawImage(src, 0, 0);
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(src, 0, 0, w, h);
         if (this.overlay.visible) ctx.drawImage(this.overlay.canvas, 0, 0, out.width, out.height);
         return out;
     }
@@ -458,11 +482,14 @@ class Deck {
         if (!this.started) return;
         if (this.paused) { this.notify('Close SANDER to take a snapshot', 'warn'); return; }
         this.renderer.snapshot((c) => {
-            const w = c.width, h = c.height, full = this.renderScale >= 1;
-            this._compose(c).toBlob((blob) => {
+            // Saved at the size it is shown; below full quality the frame is scaled up.
+            const { w, h } = this.renderer.disp;
+            const full = c.width >= w;
+            this._compose(c, full ? c.width : w, full ? c.height : h).toBlob((blob) => {
                 if (!blob) return;
                 download(blob, `dead4rat_${stamp()}.png`);
-                this.notify(full ? `Snapshot saved (${w}×${h})` : `Snapshot saved (${w}×${h}) — set QUALITY to HIGH for full size`);
+                this.notify(full ? `Snapshot saved (${c.width}×${c.height})`
+                    : `Snapshot saved (${w}×${h}, rendered at ${c.width}×${c.height}) — QUALITY HIGH gives full detail`);
             }, 'image/png');
         });
     }
@@ -556,7 +583,8 @@ class Deck {
     // ── Frame loop ─────────────────────────────────────────────────────────
     _loop(t) {
         requestAnimationFrame(this._loop);
-        const dt = Math.min(250, t - (this._lastT || t));
+        this._rawDt = t - (this._lastT || t);
+        const dt = Math.min(250, this._rawDt);
         this._lastT = t;
         if (this.paused || !this.renderer.ok) return;
 
@@ -597,8 +625,15 @@ class Deck {
         }
 
         const handReady = this.human.state === 'on' && this.human.modules.hands;
-        this.blobs.enabled = this.blobTrack || (this.gesture.on && this.gesture.source !== 'HAND' && !(handReady && this.human.hands > 0));
-        if (!cam.ready && !this.media.active && this.blobs.blobs.length) this.blobs.reset();
+        const g0 = this.gesture;
+        const blobsOn = this.blobTrack || (g0.on && (g0.source === 'MOTION' || (g0.source === 'AUTO' && !(handReady && this.human.hands > 0))));
+        // Coming back on (e.g. AUTO after the hand is lost): start from a fresh
+        // frame, not the stale one from when it was paused.
+        if (blobsOn && !this.blobs.enabled) this.blobs.reset();
+        this.blobs.enabled = blobsOn;
+        if (fresh || this.media.active) this._lastFresh = t;
+        const stalled = !this.media.active && (!cam.ready || t - (this._lastFresh || t) > 1500);
+        if (stalled && this.blobs.blobs.length) this.blobs.reset();
         if (this.blobs.enabled && (fresh || this.media.active)) {
             this.blobs.process((ctx, W, H) => {
                 if (this.media.active) ctx.drawImage(this.media.canvas, 0, 0, W, H);
@@ -645,7 +680,9 @@ class Deck {
         const pinched = g.pinch > 0.7;
         if (pinched && !g._pinched) g.shockT = 0.001;
         g._pinched = pinched;
-        if (g.shockT > 0) { g.shockT += dt / 1000; if (g.shockT >= 1) g.shockT = 0; }
+        if (g.shockT > 0) { g.shockT += (this._rawDt || dt) / 1000; if (g.shockT >= 1) g.shockT = 0; }
+        // Glow-type gestures fade out over ~0.3 s instead of vanishing when the hand is lost.
+        g.fade = Math.max(0, Math.min(1, (g.fade || 0) + (g.present ? 1 : -1) * dt / 300));
     }
 
     _frame(t, camMap, maskOn) {
@@ -685,11 +722,14 @@ class Deck {
                 level: this.genLevel,
             };
         }
+        // What the sliders actually resolve to this frame (LFO + audio), for the UI.
+        this.liveFx = fx;
+        this.liveGen = gen && gen.values;
         const g = this.gesture;
         return {
             time, fx, gen, camKey: L.gen.camKey,
-            gestures: g.on && g.present ? g.fx : [],
-            palm: g.palm, pinch: g.pinch, span: g.span, shockT: g.shockT,
+            gestures: g.on && (g.present || g.fade > 0.01) ? g.fx : [],
+            palm: g.palm, pinch: g.pinch, span: g.span, shockT: g.shockT, gfade: g.fade || 0,
             cam: camMap, mask: maskOn,
             maskMap: maskOn ? this.camera.mapping(this.renderer.disp.w, this.renderer.disp.h) : null,
             transform: { flipH: this.view.flipH, flipV: this.view.flipV, rotation: this.view.rotation },
