@@ -150,7 +150,13 @@ function Spectrum() {
 
 function BeatDot({ band }) {
     const ref = React.useRef(null);
-    useFrame((d) => { if (ref.current) ref.current.style.opacity = 0.15 + d.audio.env[band] * 0.85; });
+    const last = React.useRef(-1);
+    useFrame((d) => {
+        const v = Math.round((0.15 + d.audio.env[band] * 0.85) * 20) / 20;
+        if (v === last.current || !ref.current) return; // no DOM write when nothing changed
+        last.current = v;
+        ref.current.style.opacity = v;
+    });
     return <span ref={ref} className="beat-dot" style={{ background: BAND_COLORS[band] }} />;
 }
 
@@ -195,13 +201,17 @@ function AudioPanel() {
 function HeadBars() {
     const refs = { yaw: React.useRef(null), pitch: React.useRef(null), roll: React.useRef(null) };
     const txt = { yaw: React.useRef(null), pitch: React.useRef(null), roll: React.useRef(null) };
+    const lastT = React.useRef(0);
     useFrame((d) => {
+        const now = performance.now();
+        if (now - lastT.current < 150) return; // by time, like the other live text
+        lastT.current = now;
         for (const k of ['yaw', 'pitch', 'roll']) {
             const v = d.human[k] || 0;
             if (refs[k].current) { refs[k].current.style.left = `${50 + Math.min(0, v) * 50}%`; refs[k].current.style.width = `${Math.abs(v) * 50}%`; }
             if (txt[k].current) txt[k].current.textContent = `${Math.round(d.human[k + 'Deg'] || 0)}°`;
         }
-    }, 3);
+    });
     return ['yaw', 'pitch', 'roll'].map(k => (
         <div className="meter" key={k}>
             <span className="meter-label">{k.toUpperCase()}</span>

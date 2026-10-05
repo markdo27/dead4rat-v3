@@ -118,7 +118,7 @@ a { color: var(--accent-2); }
 .param-live { position: absolute; top: 4px; bottom: 4px; width: 2px; margin-left: -1px; background: var(--ok); pointer-events: none; opacity: 0.85; }
 .param.disabled { opacity: 0.45; }
 .param-opts { grid-template-columns: 86px 1fr auto; margin: 3px 0; }
-.param-label { color: var(--dim); font-size: 10.5px; letter-spacing: 0.06em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.param-label { color: var(--dim); font-size: 11px; letter-spacing: 0.06em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .param-value { text-align: right; font-variant-numeric: tabular-nums; color: var(--text); font-size: 11px; }
 .lfo {
     width: 24px; height: 22px; padding: 0; background: transparent; border: 1px solid var(--line); color: var(--muted); font-size: 13px; line-height: 1;
@@ -131,7 +131,7 @@ a { color: var(--accent-2); }
 .section-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 26px; }
 .section-head h3 { margin: 0; font-size: 11px; font-weight: 400; letter-spacing: 0.18em; color: var(--accent); }
 .section-right { display: flex; align-items: center; gap: 6px; }
-.hint { margin: 5px 0; color: var(--muted); font-size: 10.5px; line-height: 1.5; letter-spacing: 0.02em; }
+.hint { margin: 5px 0; color: var(--muted); font-size: 11px; line-height: 1.5; letter-spacing: 0.02em; }
 .hint.accent { color: var(--accent-2); }
 .hint.warn { color: var(--warn); }
 .hint.center { text-align: center; }
@@ -142,12 +142,12 @@ a { color: var(--accent-2); }
 
 /* ── Meters ──────────────────────────────────────────────────────────────── */
 .meter { display: grid; grid-template-columns: 46px 1fr 34px; align-items: center; gap: 6px; min-height: 18px; }
-.meter-label { color: var(--dim); font-size: 10.5px; }
+.meter-label { color: var(--dim); font-size: 11px; }
 .meter-track { height: 6px; background: #1f1812; position: relative; overflow: hidden; }
 .meter-fill { position: absolute; inset: 0; transform-origin: left; transform: scaleX(0); background: var(--accent); }
 .meter-track.centered::before { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--line-hi); }
 .meter-fill.abs { inset: 0 auto 0 50%; width: 0; transform: none; }
-.meter-value { text-align: right; font-size: 10.5px; color: var(--dim); font-variant-numeric: tabular-nums; }
+.meter-value { text-align: right; font-size: 11px; color: var(--dim); font-variant-numeric: tabular-nums; }
 .band-line { display: grid; grid-template-columns: 12px 1fr; align-items: center; gap: 4px; }
 .beat-dot { width: 8px; height: 8px; opacity: 0.15; }
 .spectrum { width: 100%; height: 64px; display: block; background: #050403; border: 1px solid var(--line); margin: 6px 0; }
@@ -158,7 +158,7 @@ a { color: var(--accent-2); }
 .bands-label { color: var(--muted); font-size: 11px; margin-right: 4px; letter-spacing: 0.08em; }
 .band {
     width: 22px; height: 22px; padding: 0; background: transparent; border: 1px solid var(--line); color: var(--muted);
-    font-size: 10.5px;
+    font-size: 11px;
 }
 .band:hover { border-color: var(--band); color: var(--band); }
 .band.on { border-color: var(--band); color: #000; background: var(--band); }
@@ -198,7 +198,7 @@ button.hud-chip:hover { border-color: var(--line-hi); color: #fff; }
 .tabs { display: grid; grid-template-columns: repeat(6, 1fr); border-bottom: 1px solid var(--line); flex: none; }
 .tab {
     min-height: 36px; padding: 0 2px; background: transparent; border: 0; border-bottom: 2px solid transparent;
-    color: var(--dim); font-size: 10.5px; letter-spacing: 0.08em;
+    color: var(--dim); font-size: 11px; letter-spacing: 0.08em;
 }
 .tab:hover { color: #fff; }
 .tab.on { color: var(--accent); border-bottom-color: var(--accent); background: var(--panel-2); }
@@ -232,7 +232,7 @@ button.hud-chip:hover { border-color: var(--line-hi); color: #fff; }
 
 /* Chips (multi-select) */
 .chip-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin: 8px 0; }
-.chip { min-height: 28px; padding: 3px 4px; background: transparent; border: 1px solid var(--line); color: var(--dim); font-size: 10.5px; letter-spacing: 0.05em; }
+.chip { min-height: 28px; padding: 3px 4px; background: transparent; border: 1px solid var(--line); color: var(--dim); font-size: 11px; letter-spacing: 0.05em; }
 .chip:hover { border-color: var(--line-hi); color: #fff; }
 .chip.on { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
 
@@ -264,9 +264,9 @@ button.hud-chip:hover { border-color: var(--line-hi); color: #fff; }
 /* ⋯ sits in the top-right corner only, so the middle of a slot always fires it. */
 .slot-more {
     position: absolute; top: 0; right: 0; width: 22px; height: 22px; padding: 0;
-    background: none; border: 0; color: var(--muted); font-size: 13px; line-height: 1; opacity: 0.6;
+    background: none; border: 0; color: var(--muted); font-size: 13px; line-height: 1;
 }
-.slot:hover .slot-more, .slot-more:focus-visible { opacity: 1; }
+.slot-more:focus-visible { outline-offset: -2px; }
 .slot-more:hover { color: var(--accent-3); }
 /* Slot options replace the slot row while open, so every button is full size. */
 .slot-bar { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; }
@@ -277,7 +277,7 @@ button.hud-chip:hover { border-color: var(--line-hi); color: #fff; }
 .toast-act { margin-left: 12px; background: none; border: 1px solid currentColor; color: var(--accent-3); padding: 2px 8px; font-size: 11px; letter-spacing: 0.08em; }
 .slot-rename { width: 100%; height: 100%; background: #000; border: 0; color: #fff; padding: 0 8px; }
 .scene-tools { display: flex; align-items: center; gap: 6px; flex: none; }
-.morph { display: flex; align-items: center; gap: 6px; color: var(--dim); font-size: 10.5px; }
+.morph { display: flex; align-items: center; gap: 6px; color: var(--dim); font-size: 11px; }
 .morph .slider { width: 90px; }
 .morph b { font-weight: 400; color: var(--text); width: 34px; font-variant-numeric: tabular-nums; }
 
@@ -353,7 +353,13 @@ body.idle .unhide { opacity: 0; }
     .param { grid-template-columns: 80px 1fr 40px 32px; min-height: 34px; }
     .slider { height: 30px; }
     .switch { padding: 6px 0; }
-    .slot-more { width: 28px; height: 28px; opacity: 1; }
+    .slot-more { width: 28px; height: 28px; }
+    .band { min-width: 32px; min-height: 32px; }
+    .fx-head { min-height: 44px; }
+    .fx-name { align-self: stretch; }
+    .switch-track { width: 36px; height: 20px; }
+    .switch-knob { width: 14px; height: 14px; }
+    .switch.on .switch-knob { transform: translateX(16px); }
     .slot-bar .btn { min-width: 40px; }
     .tab { min-height: 42px; }
 }

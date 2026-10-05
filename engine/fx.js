@@ -190,7 +190,7 @@ const FX_DEFS = [
     },
     {
         key: 'motion', name: 'MOTION', cat: 'TIME', stage: 'color', prevBase: true,
-        desc: 'Only what moved lights up (difference from the last frame)',
+        desc: 'Moving areas glow with HEAT colour; still areas keep the picture (difference from the last frame)',
         params: [
             { k: 'threshold', label: 'THRESHOLD', min: 1, max: 255, step: 1, def: 25 },
             { k: 'tint', label: 'HEAT', min: 0, max: 1, step: 0.01, def: 0.5 },
@@ -317,7 +317,7 @@ const FX_DEFS = [
         key: 'pixelsort', name: 'PIXEL SORT', cat: 'TEXTURE', stage: 'color', taps: true,
         desc: 'Bright pixels smear into streaks; SCATTER sprays them like particles',
         params: [
-            { k: 'threshold', label: 'THRESHOLD', min: 0, max: 1, step: 0.01, def: 0.5 },
+            { k: 'threshold', label: 'THRESHOLD', min: 0, max: 1, step: 0.01, def: 0.4 },
             { k: 'length', label: 'LENGTH', min: 0, max: 1, step: 0.01, def: 0.6 },
             { k: 'angle', label: 'ANGLE', min: 0, max: 360, step: 1, def: 0 },
             { k: 'scatter', label: 'SCATTER', min: 0, max: 1, step: 0.01, def: 0 },

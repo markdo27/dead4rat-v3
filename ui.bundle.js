@@ -571,8 +571,12 @@ function BeatDot({
   band
 }) {
   const ref = React.useRef(null);
+  const last = React.useRef(-1);
   useFrame(d => {
-    if (ref.current) ref.current.style.opacity = 0.15 + d.audio.env[band] * 0.85;
+    const v = Math.round((0.15 + d.audio.env[band] * 0.85) * 20) / 20;
+    if (v === last.current || !ref.current) return;
+    last.current = v;
+    ref.current.style.opacity = v;
   });
   return React.createElement("span", {
     ref: ref,
@@ -706,7 +710,11 @@ function HeadBars() {
     pitch: React.useRef(null),
     roll: React.useRef(null)
   };
+  const lastT = React.useRef(0);
   useFrame(d => {
+    const now = performance.now();
+    if (now - lastT.current < 150) return;
+    lastT.current = now;
     for (const k of ['yaw', 'pitch', 'roll']) {
       const v = d.human[k] || 0;
       if (refs[k].current) {
@@ -715,7 +723,7 @@ function HeadBars() {
       }
       if (txt[k].current) txt[k].current.textContent = `${Math.round(d.human[k + 'Deg'] || 0)}°`;
     }
-  }, 3);
+  });
   return ['yaw', 'pitch', 'roll'].map(k => React.createElement("div", {
     className: "meter",
     key: k

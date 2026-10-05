@@ -94,15 +94,20 @@ const GEN_DEFS = [
             // neighbouring cell, whose rotated cube this cell can't see.
             vec3 cw = cell * 0.5 - abs(p);
             float wall = min(cw.x, min(cw.y, cw.z)) + max(0.3, cell * 0.5 - 1.8);
+            // The cube always fits in a sphere of radius ~1.72: away from it the
+            // sphere is a cheap, safe bound and the fractal is skipped.
+            float rb = length(p);
+            if (rb > 2.3) return min(wall, rb - 1.75);
             p.xy *= rot(u_time * 0.6 + ABnd * u_genWarp * 1.2);
             p.xz *= rot(u_time * 0.4 + u_transient * 0.8);
             vec3 qm = p; float msc = 1.0;
+            mat2 fr = rot(0.35 + u_time * 0.04 + u_transient * 0.3);
+            float k = 1.6 + u_transient * u_genWarp * 0.4;
             for (int i = 0; i < 4; i++) {
                 qm = abs(qm);
                 qm = mengerSort(qm);
                 qm.z -= 0.5 * (1.2 + u_genIter * 0.6) / msc;
-                qm.xy *= rot(0.35 + u_time * 0.04 + u_transient * 0.3);
-                float k = 1.6 + u_transient * u_genWarp * 0.4;
+                qm.xy *= fr;
                 qm *= k;
                 msc *= k;
             }
@@ -184,7 +189,7 @@ const GEN_DEFS = [
             return min(b1, mix(b1 + 1.0, b2, u_genIter * 2.0));`,
     },
     {
-        key: 'FLOW FIELD', group: 'FIELDS', fog: [0.02, 0.02, 0.08],
+        key: 'FLOW FIELD', group: 'FIELDS', fog: [0.02, 0.02, 0.08], steps: 56,
         glsl: `
             p.z -= u_time * u_genSpeed * 6.0;
             // Streamlines bent by a smooth analytic swirl (a noise curl cost 4x more
@@ -282,7 +287,7 @@ void main() {
     vec3 ro = vec3(0.0, 0.0, -3.0);
     vec3 rd = normalize(vec3(p, max(0.1, u_genScale)));  // higher ZOOM = narrower view
     const float MAX_DIST = 25.0;
-    const int MAX_STEPS = 40;
+    const int MAX_STEPS = ${def.steps || 40};   // FLOW gets more: its rays graze the tubes
     float t = 0.01 + rand(v_uv + fract(u_time * 0.1)) * 0.008;
     float colAccum = 0.0;
     vec3 colorAccum = vec3(0.0);
@@ -295,7 +300,7 @@ void main() {
             float tVal = fract(t * 0.18 + length(pos.xy) * 0.14 + u_time * 0.04 + u_genColor1);
             vec3 albedo = cospal(tVal, u_genColor1);
             float light = 0.2 + clamp(0.4 + 0.6 * (1.0 - t / MAX_DIST), 0.0, 1.0) * (0.7 + u_genWarp * 0.2) + u_transient * 0.4 * u_genWarp;
-            float ao = 1.0 - clamp(float(i) / float(MAX_STEPS) * 1.5, 0.0, 0.5);
+            float ao = 1.0 - clamp(float(i) / 40.0 * 1.5, 0.0, 0.5);
             float contrib = 0.08 * depthFog * ao;
             colAccum += contrib;
             colorAccum += contrib * mix(albedo * light, u_fog, 1.0 - depthFog * 0.8);
@@ -306,9 +311,8 @@ void main() {
         t += d;
         if (t > MAX_DIST || colAccum > 1.2) break;
     }
-    // Stopping once the pixel is opaque saves ~10 steps per hit pixel. The
-    // samples we skip sit just behind the surface and would add the same
-    // colour, so scale up to the brightness a typical full run reached.
+    // An opaque pixel stops early; scale it to the brightness a typical full
+    // run reached.
     if (colAccum > 1.2) colorAccum *= 1.5 / colAccum;
     colAccum = clamp(colAccum, 0.0, 1.0);
     vec3 col = u_fog * 0.3;

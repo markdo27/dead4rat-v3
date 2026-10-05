@@ -115,15 +115,17 @@ class Deck {
         if (camera && !demo && !(await this.camera.start())) warnings.push(`${this.camera.error} — running without camera`);
         if (mic && !demo && !(await this.audio.startMic())) warnings.push(this.audio.error);
         if (this.sharedLinkBroken) warnings.push('That shared link could not be read — starting fresh');
-        if (warnings.length) this.notify(warnings.join(' · '), 'warn');
-        else if (this.scenes.imported) {
-            this.notify(`${this.scenes.imported} presets from the old version are in the scene bar` +
+        // One start-up toast (a later one would replace an earlier one).
+        const notes = [];
+        if (this.sharedLook) notes.push('Shared look loaded');
+        if (this.scenes.imported) {
+            notes.push(`${this.scenes.imported} presets from the old version are in the scene bar` +
                 (this.scenes.importedStrobe ? ' (STROBE starts switched off — turn it on in FX)' : ''));
         }
+        if (warnings.length || notes.length) this.notify(warnings.concat(notes).join(' · '), warnings.length ? 'warn' : 'info');
         if (this.sharedLook) {
             this._applyLook(this.sharedLook);
             this.sharedLook = null;
-            this.notify('Shared look loaded');
         } else if (demo || !this.camera.on) {
             const L = D.defaultLook();
             L.gen.mode = 'GYROID';
@@ -212,7 +214,12 @@ class Deck {
             const s = L.fx[d.key];
             s.on = true;
             for (const p of d.params) {
-                if (p.k === 'blend') { s.params.blend = Math.random() < 0.7 ? 0 : [1, 3, 5][Math.floor(Math.random() * 3)]; continue; }
+                if (p.k === 'blend') {
+                    // EDGES alone is black wherever the picture is flat: always lay it over the image.
+                    s.params.blend = d.key === 'edges' ? [1, 3][Math.floor(Math.random() * 2)]
+                        : Math.random() < 0.7 ? 0 : [1, 3, 5][Math.floor(Math.random() * 3)];
+                    continue;
+                }
                 if (d.key === 'edges' && p.k === 'mode') { s.params.mode = 1; continue; }
                 if (p.opts) { s.params[p.k] = Math.floor(Math.random() * p.opts.length); continue; }
                 const v = p.min + (p.max - p.min) * (0.15 + Math.random() * 0.55);
@@ -619,7 +626,11 @@ class Deck {
 
         const handReady = this.human.state === 'on' && this.human.modules.hands;
         const g0 = this.gesture;
-        this.blobs.enabled = this.blobTrack || (g0.on && (g0.source === 'MOTION' || (g0.source === 'AUTO' && !(handReady && this.human.hands > 0))));
+        const blobsOn = this.blobTrack || (g0.on && (g0.source === 'MOTION' || (g0.source === 'AUTO' && !(handReady && this.human.hands > 0))));
+        // Coming back on (e.g. AUTO after the hand is lost): start from a fresh
+        // frame, not the stale one from when it was paused.
+        if (blobsOn && !this.blobs.enabled) this.blobs.reset();
+        this.blobs.enabled = blobsOn;
         if (fresh || this.media.active) this._lastFresh = t;
         const stalled = !this.media.active && (!cam.ready || t - (this._lastFresh || t) > 1500);
         if (stalled && this.blobs.blobs.length) this.blobs.reset();
