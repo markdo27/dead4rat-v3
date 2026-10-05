@@ -216,7 +216,7 @@ class AudioEngine {
         const k = Math.pow(this.smoothing, dt * 60);
         const envDecay = Math.pow(0.001, dt / 0.35);
         const avgK = Math.pow(0.5, dt / 0.5);
-        const rise = 1.6 - this.sensitivity * 0.5;       // must jump 1.1-1.6× above its average
+        const rise = 1.6 - this.sensitivity * 0.4;       // must jump 1.2-1.6× above its average (noise swings ~1.1×)
         const floor = 0.05 - this.sensitivity * 0.035;
         let beat = 0;
         for (const b of BAND_NAMES) {
