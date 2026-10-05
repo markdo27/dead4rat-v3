@@ -37,6 +37,16 @@ html = await replaceAsync(html, /((?:src|href)=["']|s\.src = ')([\w./-]+\.(?:js|
 await fs.writeFile('index.html', html);
 console.log(`index.html: ${stamped.size} files stamped`);
 
+// `--site`: also copy exactly what the app serves into _site/ (used by the
+// GitHub Pages workflow and by Vercel), leaving out tooling and prototypes.
+if (process.argv.includes('--site')) {
+    const SITE = ['index.html', 'style.css', 'sander.html', 'ui.bundle.js', '.nojekyll', 'engine', 'ui'];
+    await fs.rm('_site', { recursive: true, force: true });
+    await fs.mkdir('_site');
+    for (const f of SITE) await fs.cp(f, `_site/${f}`, { recursive: true });
+    console.log(`_site/ assembled (${SITE.length} entries)`);
+}
+
 async function replaceAsync(str, re, fn) {
     const jobs = [];
     str.replace(re, (...a) => { jobs.push(fn(...a)); return ''; });

@@ -80,8 +80,9 @@ Then open the printed localhost address.
   the build by adding `?dev` to the URL, which compiles the JSX in the browser.
 - `sander.html` — the SANDER Chladni sand overlay, a standalone page.
 
-GitHub Pages deploys from `main`: the workflow rebuilds the bundle and
-publishes only the app files.
+Deploys: `npm run build:site` rebuilds the bundle and copies only the app
+files into `_site/`. GitHub Pages (from `main`, via the workflow) and Vercel
+(`vercel.json`) both publish that folder.
 
 ### How it stays fast
 
